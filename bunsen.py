@@ -1161,11 +1161,11 @@ class Bunsen:
         argv = argv[1:] # XXX Removes sys.argv[0].
         if not nargs:
             return argv
-        assert len(defaults) <= nargs
+        assert defaults is None or len(defaults) <= nargs
         if defaults is not None and len(argv) == 0 and len(defaults) == nargs:
             if len(defaults) == 1: return defaults[0]
             return tuple(defaults)
-        minargs = nargs - len(defaults)
+        minargs = nargs - (0 if defaults is None else len(defaults))
         if defaults is not None and len(argv) < nargs and len(argv) >= minargs:
             delta = len(argv) - minargs + 1
             for i in range(len(argv),nargs):

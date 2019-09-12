@@ -47,7 +47,7 @@ To list which commits in the `binutils-gdb` repo were tested:
 
 Viewing test results:
 - `+list_runs [<project>]` lists all testruns (or all testruns under `project`).
-- `+list_commits <source_repo> <project>` lists the testruns (or the testruns under `project`) for each commit in the `master` branch of the Git repo `source_repo`.
+- `+list_commits <source_repo> [<project>]` lists the testruns (or the testruns under `project`) for each commit in the `master` branch of the Git repo `source_repo`.
 
 Comparing test results:
 - `+diff_runs <baseline_id> <testrun_id>` compares the testrun `testrun_id` against the baseline testrun `baseline_id`. (Testruns are identified by their `bunsen` commit id.)

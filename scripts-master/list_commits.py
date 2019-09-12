@@ -1,9 +1,7 @@
 #! /usr/bin/env python3
 # List the testruns under <project> for each commit in the master
 # branch of the Git repo <source_repo>.
-usage = "list_commits.py <source_repo> <project>"
-#usage = "list_commits.py <source_repo> [<project>]"
-# TODO: Support optional second argument.
+usage = "list_commits.py <source_repo> [<project>]"
 
 # TODO: Suggested options:
 # - increase/decrease verbosity, pretty-print or show JSON
