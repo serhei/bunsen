@@ -1,0 +1,6 @@
+.bunsen
+bunsen-data
+__pycache__
+private-*
+wd-*
+*~
