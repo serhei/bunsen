@@ -51,6 +51,7 @@ Viewing test results:
 
 Comparing test results:
 - `+diff_runs <baseline_id> <testrun_id>` compares the testrun `testrun_id` against the baseline testrun `baseline_id`. (Testruns are identified by their `bunsen` commit id.)
+- (*Work in progress.*) `+diff_commits <source_repo> <baseline_commit> <commit>` compares testruns for `commit` in `source_repo` against testruns for the baseline commit `baseline_commit` and summarizes regressions.
 
 (*Work in progress.*) Examples of other analyses:
 - `+when_failed <source_repo> <project> <key>` walks the history of the `master` branch of the Git repo `source_repo`. For every commit, `+when_failed` compares testruns under <project> with testruns for the parent commit, then prints a summary of how test results changed for test cases whose name contains `key`.

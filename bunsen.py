@@ -362,11 +362,14 @@ class Testrun(dict):
             serialized_testcases.append(self._serialize_testcase(testcase))
         return serialized_testcases
 
-    def testcase_to_json(self, testcase):
+    def testcase_to_json(self, testcase, pretty=False):
         '''
         Serialize a single Testcase to a JSON string.
         '''
-        return json.dumps(self._serialize_testcase(testcase))
+        if pretty:
+            return json.dumps(self._serialize_testcase(testcase), indent=4)
+        else:
+            return json.dumps(self._serialize_testcase(testcase))
 
     def _serialize_testcase(self, testcase):
         serialized_testcase = {}
