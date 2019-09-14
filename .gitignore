@@ -1,5 +1,6 @@
 .bunsen
 bunsen-data
+binutils-gdb
 __pycache__
 private-*
 wd-*
