@@ -809,6 +809,7 @@ class Bunsen:
         '''
         if isinstance(testlog_or_path, Testlog):
             testlog = testlog_or_path
+            assert testlog.path is not None
         else:
             testlog = Testlog(self, testlog_or_path, commit_id=None)
         self._staging_testlogs.append(testlog)

@@ -11,11 +11,6 @@ usage = "commit_logs.py <local_path>"
 # mark the testrun as committed. By default, testruns with an already
 # existing BUNSEN_COMMIT are skipped (see 'rebuild' option below).
 
-# TODO: You *probably* want to run unxz on the log files before adding
-# them to the repo. Adding xz'ed log files still works but will cause
-# the Git deduplication to be less efficient. This is high on my list
-# of things to fix.
-
 # TODO: Suppress spurious progress bar and printing when used for cron jobs.
 
 # TODO: Suggested options:
@@ -53,6 +48,9 @@ profiler = cProfile.Profile()
 #profiler = None
 
 import os
+import shutil
+import subprocess
+import tempfile
 
 from gdb.parse_dejagnu import parse_README, parse_dejagnu_sum, annotate_dejagnu_log
 
@@ -70,6 +68,47 @@ def find_file_or_xz(testdir, name):
     if os.path.isfile(os.path.join(testdir, name+'.xz')):
         return os.path.join(testdir, name+'.xz')
     return None
+
+def remove_existing(path):
+    if os.path.isfile(path):
+        os.remove(path)
+
+def add_testlog_or_xz(b, tmpdir, logpath):
+    '''Uncompress if xz or gz, then add to Bunsen commit.
+
+    Note: an uncompressed file is stored in tmpdir.
+    Later, files in tmpdir should be deleted.
+    '''
+    if logpath.endswith('.xz'):
+        assert os.path.isfile(logpath)
+        subprocess.run(['xz', '--decompress', '--keep', '--force', logpath])
+        logpath_unxz = logpath[:-len('.xz')]
+        logname = os.path.basename(logpath_unxz)
+        destination_path = os.path.join(tmpdir, logname)
+        remove_existing(destination_path)
+        shutil.move(logpath_unxz, tmpdir)
+        logpath_unxz = destination_path
+    elif logpath.endswith('.gz'): # XXX xfail tables
+        assert os.path.isfile(logpath)
+        subprocess.run(['gunzip', '--keep', '--force', logpath])
+        logpath_unxz = logpath[:-len('.gz')]
+        logname = os.path.basename(logpath_unxz)
+        destination_path = os.path.join(tmpdir, logname)
+        remove_existing(destination_path)
+        shutil.move(logpath_unxz, tmpdir)
+        logpath_unxz = destination_path
+    else:
+        logpath_unxz = logpath
+    b.add_testlog(logpath_unxz)
+    return logpath_unxz
+
+def pick_testlog(testdir, tmpdir, name):
+    # '''Prefer already-uncompressed version of the file in tmpdir.'''
+    # testlog_path = os.path.join(tmpdir, name)
+    # if os.path.isfile(testlog_path):
+    #     return testlog_path
+    testlog_path = os.path.join(testdir, name)
+    return testlog_path
 
 def is_testdir(testdir):
     if not os.path.isfile(os.path.join(testdir,'README.txt')):
@@ -92,6 +131,9 @@ def commit_logs(b, log_src):
     # Allows us to commit in small slices when we want to babysit the process.
     #restrict = "CentOS"
     restrict = None
+
+    # for uncompressed logfiles:
+    tmpdir = tempfile.mkdtemp()
 
     # XXX Purely to have a progress bar:
     n_logdirs = 0
@@ -190,19 +232,14 @@ def commit_logs(b, log_src):
                     if logfile == 'BUNSEN_COMMIT': continue # don't add to commit
                     if logfile == 'year_month.txt': continue # don't add to commit
                     if logfile.startswith('index.html'): continue # don't add to commit
-                    # TODO: Consider excluding xfail.gz, xfail.table.gz
                     logpath = os.path.join(testdir, logfile)
                     if os.path.isdir(logpath): continue # don't add to commit
-                    # TODO (IMPORTANT!): uncompress xz,gz files? -- git
-                    # deduplication chewing on .xz may be a big source
-                    # of slowdown and the resulting repo format is
-                    # inconvenient:
-                    b.add_testlog(logpath)
+                    add_testlog_or_xz(b, tmpdir, logpath)
                 testrun = Testrun()
                 all_cases = []
-                gdb_README = os.path.join(testdir, 'README.txt')
-                gdb_sum = os.path.join(testdir, 'gdb.sum') # XXX parser autodetects .xz
-                gdb_log = os.path.join(testdir, 'gdb.log') # XXX parser autodetects .xz
+                gdb_README = pick_testlog(testdir, tmpdir, 'README.txt')
+                gdb_sum = pick_testlog(testdir, tmpdir, 'gdb.sum') # XXX parser autodetects .xz
+                gdb_log = pick_testlog(testdir, tmpdir, 'gdb.log') # XXX parser autodetects .xz
                 testrun = parse_README(testrun, gdb_README)
                 testrun = parse_dejagnu_sum(testrun, gdb_sum, all_cases=all_cases)
                 testrun = annotate_dejagnu_log(testrun, gdb_log, all_cases)
@@ -242,6 +279,10 @@ def commit_logs(b, log_src):
                 progress.update(n=1)
                 total_dirs += 1; new_dirs += 1
 
+                # XXX Paranoia to ensure tempfiles don't accumulate.
+                #shutil.rmtree(tmpdir)
+                #tmpdir = tempfile.mkdtemp()
+
                 # XXX Incremental pushing support
                 if push_every is not None and new_runs % push_every == 0:
                     wd.push_all()
@@ -265,6 +306,8 @@ def commit_logs(b, log_src):
     #wd_index.push_all()
     #wd_testruns.push_all() # XXX this failed requring manual fixup
     #wd.destroy() # TODO: enable, control with a command line option
+
+    shutil.rmtree(tmpdir)
 
     progress.close()
     print("Added {} new testruns from {} directories of {} total" \
