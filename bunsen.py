@@ -1067,22 +1067,33 @@ class Bunsen:
 
         # TODO Perform this search procedure in advance to find triggers?
         scripts_found = []
-        for parent_dir in self.scripts_search_path:
-            for candidate_dir in os.listdir(parent_dir):
-                candidate_path = os.path.join(parent_dir, candidate_dir)
-                # TODO Prefer 'scripts-master' over others.
-                if candidate_dir == 'scripts' \
-                   or candidate_dir.startswith('scripts-'):
-                    # XXX Allow script_name to be a relative path
-                    # e.g. scripts-host/examples/hello-shell.sh
-                    # invoked as +examples/hello-shell.
-                    candidate_path = os.path.join(candidate_path, script_name)
-                    candidate_paths = [candidate_path,
-                                       candidate_path + '.sh',
-                                       candidate_path + '.py']
-                    for candidate_path in candidate_paths:
-                        if os.path.isfile(candidate_path):
-                            scripts_found.append(candidate_path)
+        search_dirs = self.scripts_search_path
+        while len(search_dirs) > 0:
+            next_search_dirs = []
+            for parent_dir in search_dirs:
+                for candidate_dir in os.listdir(parent_dir):
+                    candidate_path = os.path.join(parent_dir, candidate_dir)
+                    if not os.path.isdir(candidate_path):
+                        continue
+
+                    # TODO Prefer 'scripts-master' over others.
+                    if candidate_dir == 'scripts' \
+                       or candidate_dir.startswith('scripts-'):
+                        # XXX Search recursively e.g. in
+                        # .bunsen/scripts-internal/scripts-master
+                        next_search_dirs.append(candidate_path)
+
+                        # XXX Allow script_name to be a relative path
+                        # e.g. scripts-host/examples/hello-shell.sh
+                        # invoked as +examples/hello-shell.
+                        candidate_path = os.path.join(candidate_path, script_name)
+                        candidate_paths = [candidate_path,
+                                           candidate_path + '.sh',
+                                           candidate_path + '.py']
+                        for candidate_path in candidate_paths:
+                            if os.path.isfile(candidate_path):
+                                scripts_found.append(candidate_path)
+            search_dirs = next_search_dirs
         assert len(scripts_found) > 0 # TODO Signal error properly.
 
         # Prioritize among scripts_found:
