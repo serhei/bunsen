@@ -1069,6 +1069,7 @@ class Bunsen:
         # TODO Perform this search procedure in advance to find triggers?
         scripts_found = []
         search_dirs = self.scripts_search_path
+        all_search_dirs = []; all_search_dirs += search_dirs
         while len(search_dirs) > 0:
             next_search_dirs = []
             for parent_dir in search_dirs:
@@ -1095,7 +1096,11 @@ class Bunsen:
                             if os.path.isfile(candidate_path):
                                 scripts_found.append(candidate_path)
             search_dirs = next_search_dirs
-        assert len(scripts_found) > 0 # TODO Signal error properly.
+            all_search_dirs += next_search_dirs
+        if len(scripts_found) == 0:
+            print("ERROR: Could not find script +{}".format(script_name))
+            print("Search paths: {}".format(all_search_dirs))
+            assert False # TODO Throw exception properly.
 
         # Prioritize among scripts_found:
         fallback_script_path = scripts_found[0]
