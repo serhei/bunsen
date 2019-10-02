@@ -119,6 +119,33 @@ def is_testdir(testdir):
         return False
     return True
 
+def traverse_logs(log_src, restrict=None):
+    '''
+    Iterates the following logs:
+    - <log_src>/<vm_name>/<hexsha_prefix>/<hexsha>/{README.txt,gdb.log,gdb.sum}
+    '''
+
+    for logdir in os.listdir(log_src):
+        if restrict is not None and not logdir.startswith(restrict): continue
+        osver = logdir
+        logdir = os.path.join(log_src, logdir)
+        if not os.path.isdir(logdir): continue
+        for bigdir in os.listdir(logdir):
+            big_sha = bigdir
+            bigdir = os.path.join(logdir, bigdir)
+            if not os.path.isdir(bigdir): continue
+            # TODO: bigdir is also a valid testdir -- allows
+            # specifying logs one level down? but osver must be
+            # configured correctly / detected from log_src
+            #if is_testdir(bigdir):
+            #    yield osver, big_sha, bigdir
+            for testdir in os.listdir(bigdir):
+                test_sha = testdir
+                testdir = os.path.join(bigdir, testdir)
+                if not os.path.isdir(testdir): continue
+                if not is_testdir(testdir): continue
+                yield osver, test_sha, testdir
+
 def commit_logs(b, log_src):
     '''
     Commit logs from local path log_src. Scans for the following logs:
@@ -138,33 +165,21 @@ def commit_logs(b, log_src):
     # XXX Purely to have a progress bar:
     n_logdirs = 0
     skipping = skip_until is not None
-    for logdir in os.listdir(log_src):
-        if restrict is not None and not logdir.startswith(restrict): continue
-        logdir = os.path.join(log_src, logdir)
-        if not os.path.isdir(logdir): continue
-        for bigdir in os.listdir(logdir):
-            bigdir = os.path.join(logdir, bigdir)
-            if not os.path.isdir(bigdir): continue
-            # TODO: also check if bigdir is a testdir
-            for testdir in os.listdir(bigdir):
-                test_sha = testdir
-                testdir = os.path.join(bigdir, testdir)
-                if skipping and testdir.endswith(skip_until):
-                    skipping = False
-                if skipping: continue
-                if not os.path.isdir(testdir): continue
-                if not is_testdir(testdir): continue
+    for osver, test_sha, testdir in traverse_logs(log_src, restrict=restrict):
+        if skipping and testdir.endswith(skip_until):
+            skipping = False
+        if skipping: continue
 
-                year_month = None
-                if timeslice is not None and os.path.isfile(os.path.join(testdir,'year_month.txt')):
-                    with open(os.path.join(testdir,'year_month.txt'),'r') as f:
-                        year_month = f.read().strip()
-                if timeslice is not None and year_month not in timeslice:
-                    continue # won't be processed
-                if not rebuild and \
-                   os.path.isfile(os.path.join(testdir,'BUNSEN_COMMIT')):
-                    continue # won't be processed
-                n_logdirs += 1
+        year_month = None
+        if timeslice is not None and os.path.isfile(os.path.join(testdir,'year_month.txt')):
+            with open(os.path.join(testdir,'year_month.txt'),'r') as f:
+                year_month = f.read().strip()
+        if timeslice is not None and year_month not in timeslice:
+            continue # won't be processed
+        if not rebuild and \
+           os.path.isfile(os.path.join(testdir,'BUNSEN_COMMIT')):
+            continue # won't be processed
+        n_logdirs += 1
 
     progress = tqdm(iterable=None, desc="Committing GDB testlogs",
                     total=n_logdirs, leave=False, unit='dir')
@@ -178,123 +193,107 @@ def commit_logs(b, log_src):
     #wd_index = b.checkout_wd(postfix="index")
     #wd_testruns = b.checkout_wd(postfix="testruns")
     skipping = skip_until is not None
-    for logdir in os.listdir(log_src):
-        osver = logdir # name of toplevel logdir
-        if restrict is not None and not osver.startswith(restrict): continue
-        if not is_osver(osver):
-            print("WARNING: unknown osver directory '{}'".format(osver), file=sys.stderr)
-        # if rebuild:
-        #     wd.git.gc() # XXX attempt to clean up frequently
-        #     wd.push_all() # XXX attempt to clean up frequently
-        print("Now processing:", osver)
-        logdir = os.path.join(log_src, logdir)
-        if not os.path.isdir(logdir): continue
-        for bigdir in os.listdir(logdir):
-            # if rebuild:
-            #     wd.git.gc() # XXX more aggressive attempt to clean up
-            #     wd.push_all() # XXX more aggressive attempt to clean up
-            bigdir = os.path.join(logdir, bigdir)
-            if not os.path.isdir(bigdir): continue
-            # TODO: also check if bigdir is a testdir
-            for testdir in os.listdir(bigdir):
-                test_sha = testdir
-                testdir = os.path.join(bigdir, testdir)
-                if skipping and testdir.endswith(skip_until):
-                    skipping = False
-                if skipping: continue
-                if not os.path.isdir(testdir): continue
-                if not is_testdir(testdir): continue
+    last_osver = None
+    for osver, test_sha, testdir in traverse_logs(log_src, restrict=restrict):
+        if osver != last_osver:
+            if not is_osver(osver):
+                print("WARNING: unknown osver directory '{}'".format(osver), file=sys.stderr)
+            print("Now processing:", osver)
+            last_osver = osver
 
-                # XXX Check log directory for a BUNSEN_COMMIT file as a quick
-                # way to avoid making duplicate commits that doesn't require
-                # hashing files:
-                if not rebuild and \
-                   os.path.isfile(os.path.join(testdir,'BUNSEN_COMMIT')):
-                    # don't update progress
-                    total_dirs += 1
-                    continue
+        if skipping and testdir.endswith(skip_until):
+            skipping = False
+        if skipping: continue
 
-                # XXX Check log directory for a year_month.txt file as
-                # a hack to speed up committing slices of the buildbot
-                # history (avoid parsing logs that won't be
-                # committed). These year_month.txt files are generated
-                # by a separate script.
-                year_month = None
-                if os.path.isfile(os.path.join(testdir,'year_month.txt')):
-                    with open(os.path.join(testdir,'year_month.txt'),'r') as f:
-                        year_month = f.read().strip()
-                if timeslice is not None and year_month not in timeslice:
-                    # don't update progress
-                    total_dirs += 1
-                    continue
+        # XXX Check log directory for a BUNSEN_COMMIT file as a quick
+        # way to avoid making duplicate commits that doesn't require
+        # hashing files:
+        if not rebuild and \
+           os.path.isfile(os.path.join(testdir,'BUNSEN_COMMIT')):
+            # don't update progress
+            total_dirs += 1
+            continue
 
-                for logfile in os.listdir(testdir):
-                    if logfile == 'BUNSEN_COMMIT': continue # don't add to commit
-                    if logfile == 'year_month.txt': continue # don't add to commit
-                    if logfile.startswith('index.html'): continue # don't add to commit
-                    logpath = os.path.join(testdir, logfile)
-                    if os.path.isdir(logpath): continue # don't add to commit
-                    add_testlog_or_xz(b, tmpdir, logpath)
-                testrun = Testrun()
-                all_cases = []
-                gdb_README = pick_testlog(testdir, tmpdir, 'README.txt')
-                gdb_sum = pick_testlog(testdir, tmpdir, 'gdb.sum') # XXX parser autodetects .xz
-                gdb_log = pick_testlog(testdir, tmpdir, 'gdb.log') # XXX parser autodetects .xz
-                testrun = parse_README(testrun, gdb_README)
-                testrun = parse_dejagnu_sum(testrun, gdb_sum, all_cases=all_cases)
-                testrun = annotate_dejagnu_log(testrun, gdb_log, all_cases)
-                if testrun is None:
-                    b.reset_all()
-                    total_dirs += 1
-                    continue
-                testrun.osver = osver
+        # XXX Check log directory for a year_month.txt file as
+        # a hack to speed up committing slices of the buildbot
+        # history (avoid parsing logs that won't be
+        # committed). These year_month.txt files are generated
+        # by a separate script.
+        year_month = None
+        if os.path.isfile(os.path.join(testdir,'year_month.txt')):
+            with open(os.path.join(testdir,'year_month.txt'),'r') as f:
+                year_month = f.read().strip()
+        if timeslice is not None and year_month not in timeslice:
+            # don't update progress
+            total_dirs += 1
+            continue
 
-                b.add_testrun(testrun)
+        for logfile in os.listdir(testdir):
+            if logfile == 'BUNSEN_COMMIT': continue # don't add to commit
+            if logfile == 'year_month.txt': continue # don't add to commit
+            if logfile.startswith('index.html'): continue # don't add to commit
+            logpath = os.path.join(testdir, logfile)
+            if os.path.isdir(logpath): continue # don't add to commit
+            add_testlog_or_xz(b, tmpdir, logpath)
+        testrun = Testrun()
+        all_cases = []
+        gdb_README = pick_testlog(testdir, tmpdir, 'README.txt')
+        gdb_sum = pick_testlog(testdir, tmpdir, 'gdb.sum') # XXX parser autodetects .xz
+        gdb_log = pick_testlog(testdir, tmpdir, 'gdb.log') # XXX parser autodetects .xz
+        testrun = parse_README(testrun, gdb_README)
+        testrun = parse_dejagnu_sum(testrun, gdb_sum, all_cases=all_cases)
+        testrun = annotate_dejagnu_log(testrun, gdb_log, all_cases)
+        if testrun is None:
+            b.reset_all()
+            total_dirs += 1
+            continue
+        testrun.osver = osver
 
-                if testrun.year_month is None:
-                    print("WARNING: skipped {} due to missing year_month"\
-                          .format(testdir))
-                    b.reset_all()
-                    progress.update(n=1) # XXX was included in n_logdirs
-                    total_dirs += 1
-                    continue
+        b.add_testrun(testrun)
 
-                # XXX To avoid huge working copies, use branch_extra to split testruns branches by source buildbot:
-                commit_id = b.commit(tag, wd=wd, push=False, allow_duplicates=False, branch_extra=testrun.osver)
-                #commit_id = b.commit(tag, wd=wd, push=False, allow_duplicates=True, wd_index=wd_index, wd_testruns=wd_testruns)
+        if testrun.year_month is None:
+            print("WARNING: skipped {} due to missing year_month"\
+                  .format(testdir))
+            b.reset_all()
+            progress.update(n=1) # XXX was included in n_logdirs
+            total_dirs += 1
+            continue
 
-                # XXX Create BUNSEN_COMMIT file to mark logs as committed:
-                with open(os.path.join(testdir,"BUNSEN_COMMIT"), 'w') as f:
-                    f.write(commit_id)
+        # XXX To avoid huge working copies, use branch_extra to split testruns branches by source buildbot:
+        commit_id = b.commit(tag, wd=wd, push=False, allow_duplicates=False, branch_extra=testrun.osver)
+        #commit_id = b.commit(tag, wd=wd, push=False, allow_duplicates=True, wd_index=wd_index, wd_testruns=wd_testruns)
 
-                if profiler is not None:
-                    profiler.disable()
-                    s = io.StringIO()
-                    ps = pstats.Stats(profiler, stream=s).sort_stats('cumulative')
-                    ps.print_stats(10)
-                    print(s.getvalue())
-                    profiler.enable()
-                # XXX The counting here is not as complex as with SystemTap:
-                new_runs += 1
-                progress.update(n=1)
-                total_dirs += 1; new_dirs += 1
+        # XXX Create BUNSEN_COMMIT file to mark logs as committed:
+        with open(os.path.join(testdir,"BUNSEN_COMMIT"), 'w') as f:
+            f.write(commit_id)
 
-                # XXX Paranoia to ensure tempfiles don't accumulate.
-                #shutil.rmtree(tmpdir)
-                #tmpdir = tempfile.mkdtemp()
+        if profiler is not None:
+            profiler.disable()
+            s = io.StringIO()
+            ps = pstats.Stats(profiler, stream=s).sort_stats('cumulative')
+            ps.print_stats(10)
+            print(s.getvalue())
+            profiler.enable()
+        # XXX The counting here is not as complex as with SystemTap:
+        new_runs += 1
+        progress.update(n=1)
+        total_dirs += 1; new_dirs += 1
 
-                # XXX Incremental pushing support
-                if push_every is not None and new_runs % push_every == 0:
-                    wd.push_all()
-                    #wd_index.push_all()
-                    #wd_testruns.push_all()
-                    wd.destroy()
-                    #wd_index.destroy()
-                    #wd_testruns.destroy()
-                    wd = b.checkout_wd()
-                    #wd_index = b.checkout_wd(postfix="index")
-                    #wd_testruns = b.checkout_wd(postfix="testruns")
+        # XXX Paranoia to ensure tempfiles don't accumulate.
+        #shutil.rmtree(tmpdir)
+        #tmpdir = tempfile.mkdtemp()
 
+        # XXX Incremental pushing support
+        if push_every is not None and new_runs % push_every == 0:
+            wd.push_all()
+            #wd_index.push_all()
+            #wd_testruns.push_all()
+            wd.destroy()
+            #wd_index.destroy()
+            #wd_testruns.destroy()
+            wd = b.checkout_wd()
+            #wd_index = b.checkout_wd(postfix="index")
+            #wd_testruns = b.checkout_wd(postfix="testruns")
 
     if profiler is not None:
         profiler.disable()
