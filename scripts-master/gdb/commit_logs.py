@@ -316,9 +316,4 @@ def commit_logs(b, log_src):
 b = Bunsen()
 if __name__=='__main__':
     log_src = b.cmdline_args(sys.argv, 1, usage=usage)
-    if ':' in log_src:
-        host, _sep, log_src = log_src.partition(':')
-        print("Log repo downloading is currently not supported!")
-        exit(1)
-
     commit_logs(b, log_src)
