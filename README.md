@@ -33,7 +33,7 @@ configurations.
 Use the following commands to clone a pre-constructed sample
 collection of test results from the GDB project:
 
-    $ git clone https://github.com/serhei/bunsen.git bunsen-gdb-demo
+    $ git clone git://sourceware.org/git/bunsen.git bunsen-gdb-demo
     $ cd bunsen-gdb-demo
     $ git clone --bare https://github.com/serhei/bunsen-gdb-sample-data .bunsen/bunsen.git
     $ ./bunsen.py init
