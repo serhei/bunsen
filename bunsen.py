@@ -42,6 +42,9 @@ INDEX_SEPARATOR = '\n---\n' # XXX YAML separator between JSON objects in index
 # XXX Format for cursor:
 cursor_regex = re.compile(r"(?:(?P<commit_id>[0-9A-Fa-f]+):)?(?P<path>.*):(?P<start>\d+)(?:-(?P<end>\d+))?")
 
+# XXX Format for command line args:
+cmdline_regex = re.compile(r"(?:(?P<keyword>[0-9A-Za-z_]+)=)?(?P<arg>.*)")
+
 # One level up from os.path.basename:
 def basedirname(path):
     dir = os.path.dirname(path)
@@ -1171,8 +1174,60 @@ class Bunsen:
             print("TODO: Need to support remote script execution.")
             assert False
 
-    # TODO: Add required_args option for optional later args.
-    # TODOXXX Add a more flexible var=value arguments scheme.
+    # TODO: Replace old cmdline_args with this new parser.
+    def cmdline_args2(self, argv, usage=None, required_args=[],
+                      optional_args=[], defaults={}):
+        argv = argv[1:] # Removes sys.argv[0].
+        opts = BunsenOpts()
+        unnamed_args = []
+        for i in range(len(argv)):
+            m = cmdline_regex.fullmatch(argv[i])
+            if m.group('keyword') is None:
+                unnamed_args.append(m.group('arg'))
+            else:
+                key = m.group('keyword')
+                if key not in defaults:
+                    print("WARNING: Unknown keyword argument '{}'".format(key))
+                opts.__dict__[key] = m.group('arg')
+        j = 0
+        for i in range(len(required_args)):
+            if j >= len(unnamed_args):
+                print("Missing required argument '{}'".format(required_args[i]))
+                print("USAGE:", usage)
+                exit(1)
+            opts.__dict__[required_args[i]] = unnamed_args[j]
+            j += 1
+        for i in range(len(optional_args)):
+            if j >= len(unnamed_args):
+                break
+            opts.__dict__[optional_args[i]] = unnamed_args[j]
+            j += 1
+        if j < len(unnamed_args):
+            print("Unexpected extra (unnamed) argument '{}'".format(unnamed_args[j]))
+            print("USAGE:", usage)
+            exit(1)
+
+        # Normalize types and set defaults:
+        for key, default_val in defaults.items():
+            if key not in opts.__dict__:
+                opts.__dict__[key] = default_val
+                continue
+            if isinstance(default_val, bool):
+                val = opts.__dict__[key]
+                if val in {'True','true','yes'}:
+                    val = True
+                elif val in {'False','false','no'}:
+                    val = False
+                else:
+                    print("WARNING: Unknown boolean argument '{}={}'".format(key, val))
+                    val = False
+                opts.__dict__[key] = val
+            elif isinstance(default_val, int):
+                val = opts.__dict__[key]
+                opts.__dict__[key] = int(val)
+
+        return opts
+
     def cmdline_args(self, argv, nargs=None, usage=None, defaults=None):
         '''Verify number of command line arguments and return them as a list
            (if nargs=None) or a tuple (otherwise). Exit if the number of
@@ -1195,6 +1250,10 @@ class Bunsen:
             exit(1)
         if len(argv) == 1: return argv[0]
         return tuple(argv)
+
+# XXX For cmdline_args():
+class BunsenOpts:
+    pass
 
 # Subcommand 'init'
 
