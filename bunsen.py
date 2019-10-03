@@ -461,10 +461,19 @@ class Workdir(Repo):
         if branch_names is None:
             # XXX Could also use self.branches
             branch_names = [b.name for b in self._bunsen.git_repo.branches]
-        # TODOXXX: Doing separate push operations is risky as it may
-        # result in incomplete data. Figure out something better.
-        # Is a git push --all with multiple branches even atomic?
-        # Perhaps index branches should be updated last of all.
+        # TODOXXX: Doing separate push operations at the end of a long
+        # parsing run is risky as it may result in incomplete data
+        # when interrupted. Figure out something better. Is a git
+        # push --all with multiple branches even atomic? Or perhaps
+        # index branches should be updated last of all.
+        #
+        # TODO: For now, perhaps implement the following suggestion:
+        # - delete the .bunsen_workdir file so the workdir data isn't lost
+        # - print a warning about how to recover if the operation is interrupted
+        # - push */testlogs-* in any order
+        # - push */testruns-* in any order (refers to already pushed testlogs)
+        # - push index (refers to already pushed testlogs+testruns)
+        # Alternatively, if branch_names is None: git push --all origin.
         for candidate_branch in branch_names:
             try:
                 self.push_branch(candidate_branch)
