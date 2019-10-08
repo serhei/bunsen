@@ -28,6 +28,14 @@ configurations.
     $ pip3 install --user GitPython # see https://github.com/gitpython-developers/GitPython
     $ pip3 install --user dateparser # see https://github.com/scrapinghub/dateparser
 
+## Development
+
+`bunsen` is now hosted on sourceware.org:
+
+- git: http://www.sourceware.org/git/?p=bunsen.git;a=summary (+ GitHub repo kept as a mirror)
+- bugzilla: https://sourceware.org/bugzilla/buglist.cgi?product=bunsen
+- mailing list: bunsen@sourceware.org
+
 ## Getting Started -- Demo on GDB Test Result Data
 
 Use the following commands to clone a pre-constructed sample
