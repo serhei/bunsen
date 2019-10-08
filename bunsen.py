@@ -21,10 +21,12 @@ from tqdm import tqdm
 # Requires Python 3.
 assert sys.version_info[0] >= 3
 
-# TODO Replace DEBUG prints with dbug_print():
+def warn_print(*args, **kwargs):
+    print("WARNING: ", file=sys.stderr, *args, **kwargs)
+
 def dbug_print(*args, **kwargs):
     if False:
-        print('DEBUG: ', file=sys.stderr, *args, **kwargs)
+        print("DEBUG: ", file=sys.stderr, *args, **kwargs)
 
 # XXX For now, hardcode Bunsen data to live in the git checkout directory:
 bunsen_repo_dir = os.path.dirname(os.path.realpath(__file__))
@@ -77,6 +79,7 @@ class Testlog:
         self.commit_id = commit_id
         self.blob = blob
         self._input_file = input_file
+        self._input_file_cleanup = False
 
         # XXX Populate on demand:
         self._tag = None
@@ -95,21 +98,26 @@ class Testlog:
             self._tag, self._year_month = self._bunsen.commit_tag(self.commit_id)
         return self._year_month
 
+    # Keep private to ensure open fds are cleaned up correctly:
     @property
-    def data_stream(self):
+    def _data_stream(self):
+        if self._bunsen is None:
+            self._input_file_cleanup = True
+            self._input_file = open(self.path, 'r')
         if self._input_file is not None:
             self._input_file.seek(0)
             return self._input_file
-        if self._bunsen is None:
-            # TODO: What about closing the data stream?
-            return open(self.path, 'r')
         return self.blob.data_stream
+
+    def __del__(self):
+        if self._input_file_cleanup:
+            self._input_file.close()
 
     def _data_stream_readlines(self):
         try:
-            return self.data_stream.readlines()
+            return self._data_stream.readlines()
         except UnicodeDecodeError: # yes, it happens
-            print("WARNING: UnicodeDecodeError in TestLog, path={}".format(self.path), file=sys.stderr)
+            warn_print("UnicodeDecodeError in TestLog, path={}".format(self.path))
             return [""]
 
     def line(self, line_no):
@@ -176,9 +184,11 @@ class Cursor:
             assert isinstance(start, Cursor) and isinstance(end, Cursor)
             assert source is None and from_str is None and commit_id is None
 
-            # TODO: Validate that start and end refer to the same Testlog.
             if not self.name:
                 self.name = start.name
+            if self.name != end.name:
+                warn_print("combining cursors from different files: {} vs {}" \
+                           .format(start.to_str(), end.to_str()))
 
             testlog = start.testlog
             if input_file is not None:
@@ -215,7 +225,7 @@ class Cursor:
         if self.testlog.commit_id is not None:
             repr += self.testlog.commit_id + ':'
         repr += self.name if self.name else \
-                self.testlog.path if self.testlog.path else '<unknown>' # TODOXXX avoid <unknown> -- should signal a warning
+                self.testlog.path if self.testlog.path else '<unknown>' # TODOXXX avoid <unknown> -- should signal a warning when serializing
         repr += ':' + str(self.line_start)
         if self.line_end is not None and self.line_end != self.line_start:
             repr += '-' + str(self.line_end)
@@ -480,7 +490,7 @@ class Workdir(Repo):
             except Exception: # XXX except git.exc.GitCommandError ??
                 # XXX This is most typically the result of a partial commit.
                 # May want to assemble branch names from self.branches.
-                print("WARNING: could not push branch {}".format(candidate_branch), file=sys.stderr)
+                warn_print("could not push branch {}".format(candidate_branch))
 
     def push_branch(self, branch_name=None):
         '''
@@ -537,7 +547,7 @@ class Workdir(Repo):
         keep_files = ['.git', '.gitignore', '.bunsen_workdir']
         if len(self.index.entries) > 0:
             remove_files = [k for k, v in self.index.entries if k not in keep_files]
-            #print("DEBUG removing", remove_files, file=sys.stderr)
+            #dbug_print("removing", remove_files)
             self.index.remove(remove_files)
         # Be sure to remove any non-index files:
         for path in os.listdir(self.working_tree_dir):
@@ -568,13 +578,13 @@ class Workdir(Repo):
             #if index_tree.hexsha in _bunsen._known_hexshas:
             #    # XXX If this takes too much memory, store just the hexsha
             #    commit = _bunsen._known_hexshas[index_tree.hexsha]
-            #    print("WARNING: proposed commit {}\n.. is a duplicate of already existing commit {} ({})".format(commit_msg, commit.summary, commit.hexsha), file=sys.stderr)
+            #    warn_print("proposed commit {}\n.. is a duplicate of already existing commit {} ({})".format(commit_msg, commit.summary, commit.hexsha))
             #    return commit.hexsha
             for commit in self.iter_commits(): # XXX iters tiny branch (~1month)
-                #print("DEBUG should be active branch (not many) --", commit.hexsha, file=sys.stderr)
+                #dbug_print("should be active branch (not many) --", commit.hexsha)
                 #_bunsen._known_hexshas[commit.tree.hexsha] = commit
                 if commit.tree.hexsha == index_tree.hexsha:
-                    print("WARNING: proposed commit {}\n.. is a duplicate of already existing commit {} ({})".format(commit_msg, commit.summary, commit.hexsha))
+                    warn_print("proposed commit {}\n.. is a duplicate of already existing commit {} ({})".format(commit_msg, commit.summary, commit.hexsha))
                     return commit.hexsha
         commit = self.index.commit(commit_msg)
         return commit.hexsha
@@ -589,8 +599,8 @@ class Workdir(Repo):
         if '.git' in files and '.bunsen_workdir' in files:
             shutil.rmtree(self.working_tree_dir)
             return
-        print(("WARNING: {} doesn't look like a Bunsen workdir, "
-               "skip destroying it").format(self.working_tree_dir), file=sys.stderr)
+        warn_print(("{} doesn't look like a Bunsen workdir, " \
+                    "skip destroying it").format(self.working_tree_dir))
 
 class Bunsen:
     def __init__(self, bunsen_dir=None, alternate_cookie=None):
@@ -703,18 +713,18 @@ class Bunsen:
             if tag in found_testlogs:
                 # Check for a master index file in index branch:
                 commit = self.git_repo.commit('index')
-                #print("DEBUG found index commit", commit.hexsha, commit.summary, file=sys.stderr) # check for HEAD in index
+                #dbug_print("found index commit", commit.hexsha, commit.summary) # check for HEAD in index
                 found_index = False
                 for blob in commit.tree:
                     m = indexfile_regex.fullmatch(blob.path)
                     if m is not None and m.group('tag') == tag:
-                        #print("DEBUG found indexfile", blob.path, file=sys.stderr)
+                        #dbug_print("found indexfile", blob.path)
                         found_index = True
                 if found_index:
                     found_tags.append(tag)
                 elif not warned_indexfiles:
-                    print(("WARNING: found tag {} but no indexfiles "
-                           "in branch index").format(tag), file=sys.stderr)
+                    warn_print(("found tag {} but no indexfiles "
+                                "in branch index").format(tag))
                     warned_indexfiles = True
 
         return found_tags
@@ -726,7 +736,7 @@ class Bunsen:
         if commit is None:
             assert commit_id is not None
             commit = self.git_repo.commit(commit_id)
-            #print("DEBUG found commit_tag commit", commit.hexsha, commit.summary, file=sys.stderr)
+            #dbug_print("found commit_tag commit", commit.hexsha, commit.summary)
         m = commitmsg_regex.fullmatch(commit.summary)
         tag = m.group('tag')
         year_month = m.group('year_month')
@@ -754,7 +764,7 @@ class Bunsen:
 
         commit = self.git_repo.commit(commit_id)
         testlog_hexsha = commit.hexsha
-        #print("DEBUG found testlog commit", testlog_hexsha, commit.summary, file=sys.stderr)
+        #dbug_print("found testlog commit", testlog_hexsha, commit.summary)
         alt_tag, year_month = self.commit_tag(commit=commit)
         tag = tag or alt_tag
 
@@ -777,7 +787,7 @@ class Bunsen:
                 commit = self.git_repo.commit(branch_name)
             except Exception: # XXX except gitdb.exc.BadName
                 continue
-            #print("DEBUG found testrun commit", commit.hexsha, commit.summary, file=sys.stderr) # check for HEAD in branch_name
+            #dbug_print("found testrun commit", commit.hexsha, commit.summary) # check for HEAD in branch_name
             try:
                 blob = commit.tree[tag + '-' + testlog_hexsha + '.json']
                 break
@@ -802,7 +812,7 @@ class Bunsen:
             return Testlog(self, path=testlog_id)
 
         commit = self.git_repo.commit(commit_id)
-        #print("DEBUG found testlog commit", commit.hexsha, commit.summary, file=sys.stderr)
+        #dbug_print("found testlog commit", commit.hexsha, commit.summary)
         blob = commit.tree[testlog_path]
         return Testlog(self, path=testlog_path, commit_id=commit_id, blob=blob)
 
@@ -1196,7 +1206,7 @@ class Bunsen:
             else:
                 key = m.group('keyword')
                 if key not in defaults:
-                    print("WARNING: Unknown keyword argument '{}'".format(key))
+                    warn_print("Unknown keyword argument '{}'".format(key))
                 opts.__dict__[key] = m.group('arg')
         j = 0
         for i in range(len(required_args)):
@@ -1228,7 +1238,7 @@ class Bunsen:
                 elif val in {'False','false','no'}:
                     val = False
                 else:
-                    print("WARNING: Unknown boolean argument '{}={}'".format(key, val))
+                    warn_print("Unknown boolean argument '{}={}'".format(key, val))
                     val = False
                 opts.__dict__[key] = val
             elif isinstance(default_val, int):

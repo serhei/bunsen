@@ -47,7 +47,8 @@ def index_source_commits(b, tags):
         for testrun in b.testruns(tag):
             hexsha = get_source_commit(testrun)
             if hexsha is None:
-                print("WARNING: could not find a source commit for testrun:\n{}".format(testrun.to_json(summary=True)), file=sys.stderr)
+                print("WARNING: could not find a source commit for testrun:\n{}" \
+                      .format(testrun.to_json(summary=True)), file=sys.stderr)
                 continue
             hexsha_lens.add(len(hexsha)) # add for subsequent lookup
             append_map(testruns_map, hexsha, testrun)    

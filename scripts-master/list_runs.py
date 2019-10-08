@@ -23,7 +23,6 @@ if __name__=='__main__':
 
     # TODO: Could take a default value from b.config.
     tags = b.tags if opts.project is None else [opts.project]
-
     suppress = uninteresting_fields if not opts.verbose else None
 
     first = True
