@@ -1,7 +1,11 @@
 .bunsen
 bunsen-data
-binutils-gdb
 __pycache__
 private-*
 wd-*
 *~
+
+# example projects
+binutils-gdb
+systemtap
+gcc
