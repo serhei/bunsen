@@ -3,7 +3,7 @@
 # <source_repo>. For every commit, compare testruns under <project>
 # with testruns for the parent commit.  Print a summary of how test
 # results changed for test cases whose name contains <key>.
-usage = "when_fail.py <source_repo> <project> <key>"
+usage = "when_failed.py <source_repo> <project> <key>"
 
 # TODO: Suggested options:
 # - increase/decrease verbosity

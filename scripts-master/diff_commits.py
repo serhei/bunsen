@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # WIP -- Compare testruns for <commit> in <source_repo> against testruns for
 # the baseline commit <baseline_commit> and summarize regressions.
-usage = "diff_commits.py <source_repo> <baseline_commit> <upstream_commit>"
+usage = "diff_commits.py <source_repo> <baseline_commit> <commit>"
 
 # TODO: Suggested options:
 # - increase/decrease verbosity, pretty-print or show JSON
