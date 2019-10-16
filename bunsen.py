@@ -1237,6 +1237,8 @@ class Bunsen:
                     val = True
                 elif val in {'False','false','no'}:
                     val = False
+                elif key == 'pretty' and val == 'html':
+                    pass # XXX special case
                 else:
                     warn_print("Unknown boolean argument '{}={}'".format(key, val))
                     val = False
