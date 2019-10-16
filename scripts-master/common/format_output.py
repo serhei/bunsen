@@ -1,5 +1,7 @@
 # Library for pretty-printing and HTML-formatting Bunsen test results.
 
+import html
+
 uninteresting_fields = {'year_month',
                         'bunsen_testruns_branch',
                         'bunsen_testlogs_branch'}
@@ -61,7 +63,6 @@ class PrettyPrinter:
     def finish(self):
         pass # no footer
 
-# TODOXXX sanitize html in string values, use a proper templating kit
 # Inspired by Martin Cermak's logproc script:
 class HTMLFormatter:
     def __init__(self, b, opts):
@@ -101,7 +102,7 @@ function details(s) {
         print("<table border=0 bgcolor=gray border=1 cellspacing=1 cellpadding=0>")
         row = "<tr>"
         for h in header:
-            row += "<th class=h>{}</th>".format(h)
+            row += "<th class=h>{}</th>".format(html.escape(h))
         row += "</tr>"
         print(row)
 
@@ -115,13 +116,13 @@ function details(s) {
 
         s = "<p>"
         for arg in args:
-            s += arg
+            s += html.escape(arg)
         for k,v in kwargs.items():
             if k in {'sep','end','file','flush'}:
                 # XXX ignore any print() arguments
                 continue
             if len(s) > 0: s += " "
-            s += "{}={}".format(k,v)
+            s += "{}={}".format(html.escape(k),html.escape(v))
         s += "</p>"
         print(s)
         self.has_output = True
@@ -150,8 +151,10 @@ function details(s) {
             short_commit_id = short_commit_id[:7] + '...'
         # TODO: Additional fields (e.g. source commit).
         print("<tr><td>{}</td><td>{}{}</td><td>{}</td><td>{}</td></tr>" \
-              .format(testrun.year_month, short_commit_id, details,
-                      testrun.pass_count, testrun.fail_count))
+              .format(html.escape(testrun.year_month),
+                      html.escape(short_commit_id), html.escape(details),
+                      html.escape(testrun.pass_count),
+                      html.escape(testrun.fail_count)))
 
     def finish(self):
         if self.has_header:
