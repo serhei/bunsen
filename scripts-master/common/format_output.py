@@ -1,4 +1,5 @@
 # Library for pretty-printing and HTML-formatting Bunsen test results.
+# TODO: Support output to a file (opts.output_file).
 
 import html
 
@@ -37,7 +38,7 @@ class PrettyPrinter:
             print() # blank line
         self.has_output = False
 
-    def show_testrun(self, testrun):
+    def show_testrun(self, testrun, **kwargs):
         self.has_output = True
 
         # header
@@ -58,6 +59,10 @@ class PrettyPrinter:
             suppress = suppress.union(uninteresting_fields)
         testrun = suppress_fields(testrun, suppress)
         for k, v in testrun.items():
+            if k in kwargs:
+                continue # override by user
+            print('  - {}: {}'.format(k, v))
+        for k, v in kwargs.items():
             print('  - {}: {}'.format(k, v))
 
     def finish(self):
@@ -135,26 +140,28 @@ function details(s) {
             print("<hr/>")
         self.has_output = False
 
-    def show_testrun(self, testrun):
+    def show_testrun(self, testrun, **kwargs):
         testrun_header = ["year_month", "bunsen_commit_id", "pass_count", "fail_count"]
-        if self.has_header and self._header != testrun_header:
+        if self.has_header and self._header != testrun_header + list(kwargs.keys()):
             self._close_table()
         if not self.has_header:
-            self._open_table(testrun_header)
+            self._open_table(testrun_header + list(kwargs.keys()))
 
-        # TODOXXX details (click on short_commit_id)
+        # TODOXXX details (click on the row?)
         details = ""
 
         # header
         short_commit_id = testrun.bunsen_commit_id
         if len(short_commit_id) > 7:
-            short_commit_id = short_commit_id[:7] + '...'
-        # TODO: Additional fields (e.g. source commit).
-        print("<tr><td>{}</td><td>{}{}</td><td>{}</td><td>{}</td></tr>" \
-              .format(html.escape(testrun.year_month),
-                      html.escape(short_commit_id), html.escape(details),
-                      html.escape(testrun.pass_count),
-                      html.escape(testrun.fail_count)))
+            short_commit_id = short_commit_id[:7]
+        row = "<tr>"
+        for val in [testrun.year_month, short_commit_id,
+                    testrun.pass_count, testrun.fail_count]:
+            row += "<td>{}</td>".format(html.escape(str(val)))
+        for k,val in kwargs.items():
+            row += "<td>{}</td>".format(html.escape(str(val)))
+        row += "</tr>"
+        print(row)
 
     def finish(self):
         if self.has_header:
