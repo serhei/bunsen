@@ -1360,14 +1360,14 @@ def bunsen_run(b, hostname, scriptname, invocation_args):
         wd_branch_name = 'index' # TODOXXX need to pick a reasonable branch
 
         print("Using branch {}, checkout name {}" \
-              .format(wd_branch_name, wd_name))
+              .format(wd_branch_name, wd_name), file=sys.stderr)
 
     # TODO Better formatting for invocation_args.
     print("Running", scriptname if hostname == 'localhost' \
                                 else scriptname+"@"+hostname, \
           ("at " + wd_path + " from") if wd_path else "from",
-          script_path, "with", invocation_args)
-    print("===")
+          script_path, "with", invocation_args, file=sys.stderr)
+    print("===", file=sys.stderr)
     b.run_script(hostname, script_path, invocation_args,
                  wd_path=wd_path, wd_branch_name=wd_branch_name,
                  wd_cookie='') # XXX empty cookie defaults to PID
@@ -1430,7 +1430,7 @@ def sub_run(parser, args):
             hostname = arg
         elif invocation is None:
             # TODO Signal error properly through parser:
-            print("Unexpected argument","'"+arg+"'")
+            print("Unexpected argument","'"+arg+"'", file=sys.stderr)
             exit(1)
         else:
             invocation.append(arg)
@@ -1440,7 +1440,8 @@ def sub_run(parser, args):
     if not invocations:
         # TODO Use parser to signal error.
         print("No invocations found " + \
-              "(hint: 'bunsen run +script' not 'bunsen run script').")
+              "(hint: 'bunsen run +script' not 'bunsen run script').",
+              file=sys.stderr)
         exit(1)
     b = Bunsen()
     for invocation in invocations:
