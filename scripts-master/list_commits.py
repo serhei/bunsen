@@ -1,17 +1,23 @@
 #! /usr/bin/env python3
-# List the testruns under <project> for each commit in the master
-# branch of the Git repo <source_repo>.
-usage = "list_commits.py <source_repo> [<project>]"
-
-# TODO: Suggested options:
-# - increase/decrease verbosity, pretty-print or show JSON
-# - sort commits by most-recent/least-recent first
-# - restrict to N most recent commits
-# - list commits for a different branch
+# List the testruns in the Bunsen repo for each commit in a specified
+# branch (default master) of the Git repo source_repo.
+usage = "list_commits.py [source_repo=]<path> [branch=<name>] [project=<tag>]\n" \
+        "                       [verbose=yes|no] [pretty=yes|no]\n" \
+        "                       [sort=[least]_recent] [restrict=<num>]"
+default_args = {'source_repo':None, # scan commits from source_repo
+                'branch':'master',  # scan commits in branch <name>
+                'project':None,     # restrict to testruns under <tag>
+                'verbose':False,    # show info for each testrun
+                'pretty':True,      # pretty-print info instead of showing JSON
+                # TODO 'sort':None, # sort by date added to Bunsen repo
+                'restrict':-1,      # restrict output to N commits
+               }
 
 import sys
 import bunsen
 from git import Repo
+
+from common.format_output import get_formatter
 
 import re
 
@@ -66,26 +72,28 @@ def iter_history(b, repo, testruns_map=None, hexsha_lens=None,
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
-    # TODO: source_repo_path, tag could take default values from b.config
-    source_repo_path, tag = b.cmdline_args(sys.argv, 2, usage=usage,
-                                           defaults=[None])
-    tags = b.tags if tag is None else [tag]
-    repo = Repo(source_repo_path)
+    # TODO Replace with cmdline_args():
+    opts = b.cmdline_args2(sys.argv, usage=usage, required_args=['source_repo'],
+                           optional_args=['project'], defaults=default_args)
+    out = get_formatter(b, opts)
 
+    # TODO: Take default tags + repo values from b.config:
+    tags = b.tags if opts.project is None else [opts.project]
+    repo = Repo(opts.source_repo)
+
+    # TODO: Add option to show a more compact table by configuration.
     testruns_map, hexsha_lens = index_source_commits(b, tags)
     n_commits, n_testruns = 0, 0
     for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens):
-        print(commit.hexsha[:7], commit.summary)
-        # XXX: Note commit.summary gets weird near the start of
-        # SystemTap history many years ago. Maybe a bug, but not
-        # relevant because we never tested that far back in time.
-        for testrun in testruns:
-            print("* {} {} {} pass {} fail" \
-                  .format(testrun.year_month, testrun.bunsen_commit_id,
-                          testrun.pass_count, testrun.fail_count))
-            print(testrun.to_json())
+        out.section()
+        out.message(commit_id=commit.hexsha[:7]+'...',
+                    summary=commit.summary)
+        # XXX: Note commit.summary was observed to get weird near the
+        # start of SystemTap history many years ago. Maybe a bug, but
+        # not relevant because we never tested that far back in time.
+        for testrun in testruns: # TODO: Add sorting option here?
+            out.show_testrun(testrun)
             n_testruns += 1
-        print()
         n_commits += 1
-
-    print(n_commits, "commits,", n_testruns, "testruns for branch master")
+    out.message(n_commits, "commits,", n_testruns, "testruns for branch master")
+    out.finish()
