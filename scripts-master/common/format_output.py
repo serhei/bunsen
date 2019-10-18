@@ -107,7 +107,7 @@ function details(s) {
         print("<table border=0 bgcolor=gray border=1 cellspacing=1 cellpadding=0>")
         row = "<tr>"
         for h in header:
-            row += "<th class=h>{}</th>".format(html.escape(h))
+            row += "<th class=h>{}</th>".format(html.escape(str(h)))
         row += "</tr>"
         print(row)
 
@@ -121,13 +121,13 @@ function details(s) {
 
         s = "<p>"
         for arg in args:
-            s += html.escape(arg)
+            s += html.escape(str(arg))
         for k,v in kwargs.items():
             if k in {'sep','end','file','flush'}:
                 # XXX ignore any print() arguments
                 continue
             if len(s) > 0: s += " "
-            s += "{}={}".format(html.escape(k),html.escape(v))
+            s += "{}={}".format(html.escape(str(k)),html.escape(str(v)))
         s += "</p>"
         print(s)
         self.has_output = True
@@ -153,7 +153,7 @@ function details(s) {
         # header
         short_commit_id = testrun.bunsen_commit_id
         if len(short_commit_id) > 7:
-            short_commit_id = short_commit_id[:7]
+            short_commit_id = short_commit_id[:7] + '...'
         row = "<tr>"
         for val in [testrun.year_month, short_commit_id,
                     testrun.pass_count, testrun.fail_count]:
