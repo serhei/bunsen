@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 
-# TODO Redirect certain prints to stderr, show git command output / progress.
+# TODO Show git command output / progress.
 
 import os
 import sys
@@ -21,12 +21,18 @@ from tqdm import tqdm
 # Requires Python 3.
 assert sys.version_info[0] >= 3
 
-def warn_print(*args, **kwargs):
-    print("WARNING: ", file=sys.stderr, *args, **kwargs)
+# TODO: Control with bunsen verbose/non-verbose option.
+def log_print(*args, **kwargs):
+    # XXX For now, consider as part of the script output.
+    print(*args, **kwargs)
 
-def dbug_print(*args, **kwargs):
+def warn_print(prefix="WARNING:", *args, **kwargs):
+    print(prefix, file=sys.stderr, *args, **kwargs)
+
+# TODO: Control with bunsen debug option.
+def dbug_print(prefix="DEBUG:", *args, **kwargs):
     if False:
-        print("DEBUG: ", file=sys.stderr, *args, **kwargs)
+        print(prefix, file=sys.stderr, *args, **kwargs)
 
 # XXX For now, hardcode Bunsen data to live in the git checkout directory:
 bunsen_repo_dir = os.path.dirname(os.path.realpath(__file__))
@@ -500,7 +506,7 @@ class Workdir(Repo):
             branch_name = self.head.reference.name
         # TODO: Need to show progress for large updates.
         # TODO: Need to find the 'proper' GitPython equivalent for this:
-        print("Pushing branch {}...".format(branch_name))
+        log_print("Pushing branch {}...".format(branch_name))
         self.git.push('origin', branch_name)
 
     def checkout_branch(self, branch_name, skip_redundant_checkout=False):
@@ -516,7 +522,7 @@ class Workdir(Repo):
 
         # if necessary, create appropriate branch based on master
         if branch is None:
-            print("Created new branch", branch_name, file=sys.stderr)
+            log_print("Created new branch", branch_name, file=sys.stderr)
             branch = self.create_head(branch_name)
             branch.commit = 'master'
             #branch = self.create_head(branch_name, self.git_repo.refs.master)
@@ -532,7 +538,7 @@ class Workdir(Repo):
         # checkout appropriate branch
         if skip_redundant_checkout and self.head.reference == branch:
             return
-        # XXX print("Checked out existing branch", branch_name)
+        # XXX log_print("Checked out existing branch", branch_name)
 
         self.head.reference = branch
         self.head.reset(index=True, working_tree=True) # XXX destroys changes
@@ -1120,8 +1126,8 @@ class Bunsen:
             search_dirs = next_search_dirs
             all_search_dirs += next_search_dirs
         if len(scripts_found) == 0:
-            print("ERROR: Could not find script +{}".format(script_name))
-            print("Search paths: {}".format(all_search_dirs))
+            warn_print("Could not find script +{}\nSearch paths: {}" \
+                       .format(script_name, all_search_dirs), prefix="ERROR:")
             assert False # TODO Throw exception properly.
 
         # Prioritize among scripts_found:
@@ -1190,7 +1196,7 @@ class Bunsen:
             # TODO Check rc and signal errors properly.
         else:
             # TODO Start by hardcoding some hosts in config?
-            print("TODO: Need to support remote script execution.")
+            warn_print("Support remote script execution.", prefix="TODO:")
             assert False
 
     # TODO: Replace old cmdline_args with this new parser.
@@ -1211,8 +1217,8 @@ class Bunsen:
         j = 0
         for i in range(len(required_args)):
             if j >= len(unnamed_args):
-                print("Missing required argument '{}'".format(required_args[i]))
-                print("USAGE:", usage)
+                warn_print("Missing required argument '{}'\nUSAGE: {}" \
+                           .format(required_args[i], usage), prefix="")
                 exit(1)
             opts.__dict__[required_args[i]] = unnamed_args[j]
             j += 1
@@ -1222,8 +1228,8 @@ class Bunsen:
             opts.__dict__[optional_args[i]] = unnamed_args[j]
             j += 1
         if j < len(unnamed_args):
-            print("Unexpected extra (unnamed) argument '{}'".format(unnamed_args[j]))
-            print("USAGE:", usage)
+            warn_print("Unexpected extra (unnamed) argument '{}'\nUSAGE: {}" \
+                       .format(unnamed_args[j], usage), prefix="")
             exit(1)
 
         # Normalize types and set defaults:
@@ -1267,7 +1273,7 @@ class Bunsen:
             for i in range(len(argv),nargs):
                 argv.append(defaults[i-delta])
         if len(argv) != nargs:
-            print("USAGE:", usage)
+            warn_print("USAGE:", usage, prefix="")
             exit(1)
         if len(argv) == 1: return argv[0]
         return tuple(argv)
@@ -1281,9 +1287,9 @@ class BunsenOpts:
 def bunsen_init(b):
     found_existing = b.init_repo()
     if found_existing:
-        print("Reinitialized existing Bunsen repository in", b.base_dir)
+        log_print("Reinitialized existing Bunsen repository in", b.base_dir)
     else:
-        print("Initialized empty Bunsen repository in", b.base_dir)
+        log_print("Initialized empty Bunsen repository in", b.base_dir)
 
 # Subcommand 'checkout-wd'
 
@@ -1331,7 +1337,8 @@ def bunsen_run(b, hostname, scriptname, invocation_args):
             hostname = 'localhost'
         elif script_dirname == "scripts-guest":
             # TODO Signal error properly;
-            printf("Hostname not specified for guest script", script_path)
+            warn_print("Hostname not specified for guest script", script_path,
+                       prefix="ERROR:")
             assert False
         else:
             # If hostname is not specified, default to running locally:
@@ -1430,7 +1437,7 @@ def sub_run(parser, args):
             hostname = arg
         elif invocation is None:
             # TODO Signal error properly through parser:
-            print("Unexpected argument","'"+arg+"'", file=sys.stderr)
+            warn_print("Unexpected argument","'"+arg+"'", prefix="ERROR:")
             exit(1)
         else:
             invocation.append(arg)
@@ -1439,9 +1446,9 @@ def sub_run(parser, args):
 
     if not invocations:
         # TODO Use parser to signal error.
-        print("No invocations found " + \
-              "(hint: 'bunsen run +script' not 'bunsen run script').",
-              file=sys.stderr)
+        warn_print("No invocations found " + \
+                   "(hint: 'bunsen run +script' not 'bunsen run script').",
+                   prefix="ERROR:")
         exit(1)
     b = Bunsen()
     for invocation in invocations:
