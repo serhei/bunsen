@@ -26,11 +26,19 @@ def log_print(*args, **kwargs):
     # XXX For now, consider as part of the script output.
     print(*args, **kwargs)
 
-def warn_print(prefix="WARNING:", *args, **kwargs):
+def warn_print(*args, **kwargs):
+    prefix = "WARNING:"
+    if 'prefix' in kwargs:
+        prefix = kwargs['prefix']
+        del kwargs['prefix']
     print(prefix, file=sys.stderr, *args, **kwargs)
 
 # TODO: Control with bunsen debug option.
-def dbug_print(prefix="DEBUG:", *args, **kwargs):
+def dbug_print(*args, **kwargs):
+    prefix = "DEBUG:"
+    if 'prefix' in kwargs:
+        prefix = kwargs['prefix']
+        del kwargs['prefix']
     if False:
         print(prefix, file=sys.stderr, *args, **kwargs)
 
