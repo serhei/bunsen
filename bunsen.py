@@ -261,15 +261,17 @@ _testrun_field_types = {'testcases':'testcases'}
 _testcase_field_types = {'origin_log':'cursor',
                          'origin_sum':'cursor',
                          'baseline_log':'cursor',
-                         'baseline_sum':'cursor'}
-# TODOXXX Fields to handle 2nd-order diffs -- origins, baseline_origins. Can be handled by adding a 'metadata' type that applies the top-level rules recursively.
+                         'baseline_sum':'cursor',
+                         'origins': 'metadata',          # XXX used in 2or diff
+                         'baseline_origins': 'metadata'} # XXX used in 2or diff
 
-# Toplevel fields that identify the commit_id of a Cursor:
+# Toplevel-only fields that identify the commit_id of a Cursor:
 _cursor_commits = {'origin_log':'bunsen_commit_id',
                    'origin_sum':'bunsen_commit_id',
-                   'baseline_log':'baseline_bunsen_commit_id', # TODOXXX populate in diff_runs.py
-                   'baseline_sum':'baseline_bunsen_commit_id'} # TODOXXX populate in diff_runs.py
-# TODOXXX Fields to handle 2nd-order diffs -- commit_ids, baseline_commit_ids
+                   'baseline_log':'baseline_bunsen_commit_id',
+                   'baseline_sum':'baseline_bunsen_commit_id'}
+# XXX in 2or diff, bunsen_commit_ids,baseline_commit_ids are [baseline,latest] tuples.
+# Not (yet?) handled by the deserialization logic since we don't serialize 2or diffs.
 
 # XXX Valid _testrun_field_types, _testcase_field_types:
 _valid_field_types = {
@@ -277,6 +279,7 @@ _valid_field_types = {
     'cursor',    # Cursor object
     'hexsha',    # string -- git commit id
     'str',       # string
+    'metadata',  # subordinate map with the same field types as parent
 }
 
 # TODOXXX Validate required metadata e.g. bunsen_branch, bunsen_commit_id, year_month? before committing a testcase.
@@ -338,17 +341,8 @@ class Testrun(dict):
                     cursor_commit_ids[field] = value
                 self[field] = value
             for field in defer_fields:
-                if self._field_types[field] == 'testcases':
-                    self[field] = self._deserialize_testcases(self[field],
+                self[field] = self._deserialize_testrun_field(field, self[field],
                                                               cursor_commit_ids)
-                elif self._field_types[field] == 'cursor':
-                    commit_id = None
-                    if field in _cursor_commits:
-                        commit_id_field = _cursor_commits[field]
-                        commit_id = cursor_commit_ids[commit_id_field]
-                    self[field] = Cursor(source=self._bunsen,
-                                         commit_id=commit_id,
-                                         from_str=self[field])
 
             # XXX Set summary=False if JSON was missing testcases.
             self.summary = self.summary and 'testcases' in json_data
@@ -366,40 +360,60 @@ class Testrun(dict):
         self.testcases.append(testcase)
         return testcase
 
+    def _deserialize_testrun_field(self, field, value, cursor_commit_ids):
+        if self._field_types[field] == 'testcases':
+            value = self._deserialize_testcases(value, cursor_commit_ids)
+        elif self._field_types[field] == 'metadata':
+            # Nested Testrun metadata contains Testrun fields:
+            value = self._deserialize_testrun_metadata(value, cursor_commit_ids)
+        elif self._field_types[field] == 'cursor':
+            commit_id = None
+            if field in _cursor_commits:
+                commit_id_field = _cursor_commits[field]
+                commit_id = cursor_commit_ids[commit_id_field]
+            self[field] = Cursor(source=self._bunsen,
+                                 commit_id=commit_id,
+                                 from_str=self[field])
+        return value
+
+    def _deserialize_testrun_metadata(self, metadata, cursor_commit_ids):
+        '''
+        Deserialize nested Testrun metadata. Don't gather cursor_commit_ids.
+        '''
+        deserialized_testrun = {}
+        for field, value in metadata.items():
+            value = self._deserialize_testrun_field(field, value,
+                                                    cursor_commit_ids)
+            deserialized_testrun[field] = value
+        return deserialized_testrun
+
+    def _deserialize_testcase(self, testcase, cursor_commit_ids):
+        deserialized_testcase = {}
+        for field, value in testcase.items():
+            if field not in self._testcase_field_types:
+                pass
+            elif self._testcase_field_types[field] == 'testcases':
+                value = self._deserialize_testcases(value, cursor_commit_ids)
+            elif self._testcase_field_types[field] == 'metadata':
+                # Nested Testcase metadata contains Testcase fields:
+                value = self._deserialize_testcase(value, cursor_commit_ids)
+            elif self._testcase_field_types[field] == 'cursor':
+                value = Cursor(source=self._bunsen,
+                               commit_id=self.bunsen_commit_id,
+                               from_str=value)
+            else:
+                assert self._testcase_field_types[field] == 'str' \
+                    or self._testcase_field_types[field] == 'hexsha'
+            deserialized_testcase[field] = value
+        return deserialized_testcase
+
     def _deserialize_testcases(self, testcases, cursor_commit_ids):
         deserialized_testcases = []
         for testcase in testcases:
-            deserialized_testcase = {}
-            for field, value in testcase.items():
-                if field not in self._testcase_field_types:
-                    pass
-                elif self._testcase_field_types[field] == 'testcases':
-                    value = self._deserialize_testcases(value, cursor_commit_ids)
-                elif self._testcase_field_types[field] == 'cursor':
-                    value = Cursor(source=self._bunsen,
-                                   commit_id=self.bunsen_commit_id,
-                                   from_str=value)
-                else:
-                    assert self._testcase_field_types[field] == 'str' \
-                        or self._testcase_field_types[field] == 'hexsha'
-                deserialized_testcase[field] = value
+            deserialized_testcase = self._deserialize_testcase(testcase,
+                                                               cursor_commit_ids)
             deserialized_testcases.append(deserialized_testcase)
         return deserialized_testcases
-
-    def _serialize_testcases(self, testcases):
-        serialized_testcases = []
-        for testcase in testcases:
-            serialized_testcases.append(self._serialize_testcase(testcase))
-        return serialized_testcases
-
-    def testcase_to_json(self, testcase, pretty=False):
-        '''
-        Serialize a single Testcase to a JSON string.
-        '''
-        if pretty:
-            return json.dumps(self._serialize_testcase(testcase), indent=4)
-        else:
-            return json.dumps(self._serialize_testcase(testcase))
 
     def _serialize_testcase(self, testcase):
         serialized_testcase = {}
@@ -417,6 +431,21 @@ class Testrun(dict):
                     or self._testcase_field_types[field] == 'cursor' # XXX can be given as str
             serialized_testcase[field] = value
         return serialized_testcase
+
+    def _serialize_testcases(self, testcases):
+        serialized_testcases = []
+        for testcase in testcases:
+            serialized_testcases.append(self._serialize_testcase(testcase))
+        return serialized_testcases
+
+    def testcase_to_json(self, testcase, pretty=False):
+        '''
+        Serialize a single Testcase to a JSON string.
+        '''
+        if pretty:
+            return json.dumps(self._serialize_testcase(testcase), indent=4)
+        else:
+            return json.dumps(self._serialize_testcase(testcase))
 
     def to_json(self, summary=False, pretty=False):
         '''

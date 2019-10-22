@@ -37,7 +37,6 @@ def diff_testcases(outdiff, baseline_testcases, latest_tc):
                 tc2['baseline_sum'] = tc1['origin_sum']
             if 'origin_log' in tc1:
                 tc2['baseline_log'] = tc1['origin_log']
-            # TODO: Consider copying other baseline metadata.
             outdiff.testcases.append(tc2)
 
 def diff_testruns(baseline, latest):
@@ -46,8 +45,9 @@ def diff_testruns(baseline, latest):
     differ from baseline.
     '''
     # XXX Only writes 'testcases' field -- caller decides how to diff metadata.
-    # TODO: Also populate bunsen_commit_id, baseline_bunsen_commit_id.
     diff = Testrun()
+    diff['bunsen_commit_id'] = latest['bunsen_commit_id']
+    diff['baseline_bunsen_commit_id'] = baseline['bunsen_commit_id']
 
     # XXX The logic on how to handle identically-named testcases can get tricky.
     #
@@ -112,9 +112,8 @@ def add_2or_origins(tc, key, source_tc, cleanup=True):
         origins['origin_sum'] = source_tc['origin_sum']
     if 'origin_log' in source_tc:
         origins['origin_log'] = source_tc['origin_log']
-    # TODO: Need to add recursive deserialization logic in bunsen.py.
-    #if len(origins) > 0:
-    #    tc[key] = origins
+    if len(origins) > 0:
+        tc[key] = origins
 
     # XXX Also remove regular origin data:
     if cleanup:
@@ -139,7 +138,6 @@ def diff_2or_testcases(outdiff2, baseline_testcases, latest_tc):
             tc2['baseline_outcome'] = outcome1
             add_2or_origins(tc2, 'origins', tc2)
             add_2or_origins(tc2, 'baseline_origins', tc1)
-            # TODO: Consider copying other baseline metadata.
             outdiff2.testcases.append(tc2)
 
 def diff_2or(diff_baseline, diff_latest):
@@ -148,8 +146,11 @@ def diff_2or(diff_baseline, diff_latest):
     don't also appear in diff_baseline.
     '''
     # XXX Only writes 'testcases' field -- caller decides how to diff metadata.
-    # TODO: Also populate bunsen_commit_ids, baseline_bunsen_commit_ids.
     diff2 = Testrun()
+    diff2['bunsen_commit_ids'] = [diff_latest['baseline_bunsen_commit_id'],
+                                  diff_latest['bunsen_commit_id']]
+    diff2['baseline_commit_ids'] = [diff_baseline['baseline_bunsen_commit_id'],
+                                    diff_baseline['bunsen_commit_id']]
 
     tc1_map = {} # name -> lst of testcase
     tc1_name_map = {} # name -> lst of testcase (only if subtest missing)
