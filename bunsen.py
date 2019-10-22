@@ -226,15 +226,18 @@ class Cursor:
         assert self.line_start == self.line_end
         return self.testlog.line(self.line_start)
 
-    def to_str(self):
+    def to_str(self, serialize=False):
         repr = ''
         if self.testlog.commit_id is not None:
             repr += self.testlog.commit_id + ':'
         repr += self.name if self.name else \
-                self.testlog.path if self.testlog.path else '<unknown>' # TODOXXX avoid <unknown> -- should signal a warning when serializing
+                self.testlog.path if self.testlog.path else '<unknown>'
         repr += ':' + str(self.line_start)
         if self.line_end is not None and self.line_end != self.line_start:
             repr += '-' + str(self.line_end)
+        if serialize and not self.name and not self.testlog.path:
+            warn_print("serializing an incomplete cursor {}" \
+                       .format(repr))
         return repr
 
 # Testrun fields that should not be added to JSON:
@@ -395,7 +398,7 @@ class Testrun(dict):
         for field, value in testcase.items():
             if isinstance(value, Cursor):
                 # XXX serialize regardless of self._testcase_field_types
-                value = value.to_str()
+                value = value.to_str(serialize=True)
             elif field not in self._testcase_field_types:
                 pass
             elif self._testcase_field_types[field] == 'testcases':
@@ -415,7 +418,7 @@ class Testrun(dict):
         for field, value in self.items():
             if isinstance(value, Cursor):
                 # XXX serialize regardless of self._field_types
-                value = value.to_str()
+                value = value.to_str(serialize=True)
             elif field not in self._field_types:
                 pass
             elif self._field_types[field] == 'testcases' \
