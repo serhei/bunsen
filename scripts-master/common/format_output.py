@@ -38,7 +38,7 @@ class PrettyPrinter:
             print() # blank line
         self.has_output = False
 
-    def show_testrun(self, testrun, **kwargs):
+    def show_testrun(self, testrun, show_details=True, **kwargs):
         self.has_output = True
 
         # header
@@ -54,6 +54,9 @@ class PrettyPrinter:
             return
 
         # details
+        if not show_details:
+            # TODO: Print summary of metadata on prev line?
+            return
         suppress = {'year_month', 'bunsen_commit_id', 'pass_count', 'fail_count'}
         if not self.opts.verbose:
             suppress = suppress.union(uninteresting_fields)

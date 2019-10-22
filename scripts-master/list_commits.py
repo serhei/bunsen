@@ -7,8 +7,8 @@ usage = "list_commits.py [source_repo=]<path> [branch=<name>] [project=<tag>]\n"
 default_args = {'source_repo':None, # scan commits from source_repo
                 'branch':'master',  # scan commits in branch <name>
                 'project':None,     # restrict to testruns under <tag>
-                'verbose':False,    # show info for each testrun
-                'pretty':True,      # pretty-print info instead of showing JSON
+                'verbose':True,     # TODO show info for each testrun
+                'pretty':False,     # TODO pretty-print info instead of showing JSON
                 # TODO 'sort':None, # sort by date added to Bunsen repo
                 'restrict':-1,      # restrict output to N commits
                }
@@ -92,8 +92,9 @@ if __name__=='__main__':
         # start of SystemTap history many years ago. Maybe a bug, but
         # not relevant because we never tested that far back in time.
         for testrun in testruns: # TODO: Add sorting option here?
-            out.show_testrun(testrun)
+            out.show_testrun(testrun, show_details=opts.verbose)
             n_testruns += 1
         n_commits += 1
+    out.section()
     out.message(n_commits, "commits,", n_testruns, "testruns for branch master")
     out.finish()
