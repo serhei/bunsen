@@ -19,9 +19,8 @@ from common.format_output import get_formatter
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
-    # TODO: Replace with cmdline_args()
-    opts = b.cmdline_args2(sys.argv, usage=usage, optional_args=['project'],
-                           defaults=default_args)
+    opts = b.cmdline_args(sys.argv, usage=usage, optional_args=['project'],
+                          defaults=default_args)
     out = get_formatter(b, opts)
 
     # TODO: Take default tags + repo values from b.config.

@@ -148,7 +148,7 @@ def testcase_to_json(tc):
 b = bunsen.Bunsen()
 if __name__=='__main__':
     # TODO: source_repo_path could take a default value from b.config
-    source_repo_path, baseline_hexsha, hexsha = b.cmdline_args(sys.argv, 3, usage=usage)
+    source_repo_path, baseline_hexsha, hexsha = b.cmdline_argsOLD(sys.argv, 3, usage=usage)
     repo = Repo(source_repo_path)
 
     # (1a) find all testruns for specified commits

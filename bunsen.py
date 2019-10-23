@@ -1240,7 +1240,7 @@ class Bunsen:
             assert False
 
     # TODO: Replace old cmdline_args with this new parser.
-    def cmdline_args2(self, argv, usage=None, required_args=[],
+    def cmdline_args(self, argv, usage=None, required_args=[],
                       optional_args=[], defaults={}):
         argv = argv[1:] # Removes sys.argv[0].
         opts = BunsenOpts()
@@ -1295,7 +1295,7 @@ class Bunsen:
 
         return opts
 
-    def cmdline_args(self, argv, nargs=None, usage=None, defaults=None):
+    def cmdline_argsOLD(self, argv, nargs=None, usage=None, defaults=None):
         '''Verify number of command line arguments and return them as a list
            (if nargs=None) or a tuple (otherwise). Exit if the number of
            arguments fails to match nargs, unless no arguments are provided

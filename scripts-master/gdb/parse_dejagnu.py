@@ -373,7 +373,7 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[], handle_reordering=F
 b = Bunsen()
 if __name__ == '__main__':
     # TODO: enable cwd as the default command line argument
-    logdir = b.cmdline_args(sys.argv, 1, usage=usage)
+    logdir = b.cmdline_argsOLD(sys.argv, 1, usage=usage)
 
     # TODO: use Bunsen library to load testlogs
     # TODO: support reading testlogs from script's cwd or Bunsen repo

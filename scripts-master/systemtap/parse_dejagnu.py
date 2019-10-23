@@ -420,7 +420,7 @@ b = Bunsen()
 if __name__ == '__main__':
     # TODO: enable the following default command line arguments
     #wd_defaults = ['systemtap.log', 'systemtap.sum']
-    logfile, sumfile = b.cmdline_args(sys.argv, 2, usage=usage)
+    logfile, sumfile = b.cmdline_argsOLD(sys.argv, 2, usage=usage)
     # TODO: use Bunsen library to load testlogs
     # TODO: support reading testlogs from script's cwd or Bunsen repo
     #logfile = b.logfile(logfile)

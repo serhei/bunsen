@@ -314,5 +314,5 @@ def commit_logs(b, log_src):
 
 b = Bunsen()
 if __name__=='__main__':
-    log_src = b.cmdline_args(sys.argv, 1, usage=usage)
+    log_src = b.cmdline_argsOLD(sys.argv, 1, usage=usage)
     commit_logs(b, log_src)

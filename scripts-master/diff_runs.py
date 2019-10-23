@@ -191,7 +191,7 @@ def diff_2or(diff_baseline, diff_latest):
 b = Bunsen()
 if __name__=='__main__':
     # TODO: Handle tag:commit format for baseline_id, testrun_id in b.testrun().
-    baseline_id, testrun_id = b.cmdline_args(sys.argv, 2, usage=usage)
+    baseline_id, testrun_id = b.cmdline_argsOLD(sys.argv, 2, usage=usage)
     baseline = b.testrun(baseline_id)
     testrun = b.testrun(testrun_id)
     testdiff = diff_testruns(baseline, testrun)

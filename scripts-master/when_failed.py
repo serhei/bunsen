@@ -61,7 +61,7 @@ class Totals:
 b = bunsen.Bunsen()
 if __name__=='__main__':
     # TODO: source_repo_path, tag could take default values from b.config
-    source_repo_path, tag, key = b.cmdline_args(sys.argv, 3, usage=usage)
+    source_repo_path, tag, key = b.cmdline_argsOLD(sys.argv, 3, usage=usage)
     tags = b.tags if tag is None else [tag]
     repo = Repo(source_repo_path)
 
