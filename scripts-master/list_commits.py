@@ -76,7 +76,6 @@ if __name__=='__main__':
                           optional_args=['project'], defaults=default_args)
     out = get_formatter(b, opts)
 
-    # TODO: Take default tags + repo values from b.config:
     tags = b.tags if opts.project is None else [opts.project]
     repo = Repo(opts.source_repo)
     reverse = True if opts.sort == 'least_recent' else False

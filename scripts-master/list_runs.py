@@ -23,7 +23,6 @@ if __name__=='__main__':
                           defaults=default_args)
     out = get_formatter(b, opts)
 
-    # TODO: Take default tags + repo values from b.config.
     tags = b.tags if opts.project is None else [opts.project]
     repo = None if opts.source_repo is None else Repo(opts.source_repo)
 
@@ -33,7 +32,7 @@ if __name__=='__main__':
         out.section()
         out.message(project=tag)
         n_testruns = 0
-        for testrun in b.testruns(tag): # TODO: Add sorting option here, including group-by-commit.
+        for testrun in b.testruns(tag): # TODO: Add sorting option here, including group-by-commit for HTML table.
             if opts.restrict >= 0 and n_testruns >= opts.restrict:
                 out.message("... restricted to {} testruns per project ..." \
                             .format(n_testruns))

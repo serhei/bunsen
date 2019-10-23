@@ -1060,7 +1060,7 @@ class Bunsen:
             found_existing = True
         if not os.path.isfile(self._config_path):
             open(self._config_path, mode="a").close() # XXX touch
-            # TODO Write some default config values -- _init_config() method?
+            # TODO Write any default config values here.
         else:
             found_existing = True
         if not os.path.isdir(self._scripts_path):
@@ -1241,10 +1241,11 @@ class Bunsen:
 
     # TODO: Replace old cmdline_args with this new parser.
     def cmdline_args(self, argv, usage=None, required_args=[],
-                      optional_args=[], defaults={}):
+                      optional_args=[], defaults={}, use_config=True):
         argv = argv[1:] # Removes sys.argv[0].
-        opts = BunsenOpts()
+        opts = BunsenOpts(self, defaults)
         unnamed_args = []
+        check_required = False
         for i in range(len(argv)):
             m = cmdline_regex.fullmatch(argv[i])
             if m.group('keyword') is None:
@@ -1257,9 +1258,8 @@ class Bunsen:
         j = 0
         for i in range(len(required_args)):
             if j >= len(unnamed_args):
-                warn_print("Missing required argument '{}'\nUSAGE: {}" \
-                           .format(required_args[i], usage), prefix="")
-                exit(1)
+                check_required = True
+                break
             opts.__dict__[required_args[i]] = unnamed_args[j]
             j += 1
         for i in range(len(optional_args)):
@@ -1271,6 +1271,20 @@ class Bunsen:
             warn_print("Unexpected extra (unnamed) argument '{}'\nUSAGE: {}" \
                        .format(unnamed_args[j], usage), prefix="")
             exit(1)
+
+        # Set any options from self.config:
+        if use_config:
+            opts.add_config('core')
+            if 'project' in opts.__dict__:
+                opts.add_config(opts.project, is_project=True)
+
+        # Check if missing required arguments were filled from config:
+        if check_required:
+            for i in range(len(required_args)):
+                if required_args[i] not in opts.__dict__:
+                    warn_print("Missing required argument '{}'\nUSAGE: {}" \
+                           .format(required_args[i], usage), prefix="")
+                    exit(1)
 
         # Normalize types and set defaults:
         for key, default_val in defaults.items():
@@ -1318,9 +1332,20 @@ class Bunsen:
         if len(argv) == 1: return argv[0]
         return tuple(argv)
 
-# XXX For cmdline_args():
+# Returned from cmdline_args():
 class BunsenOpts:
-    pass
+    def __init__(self, bunsen, defaults):
+        self._bunsen = bunsen
+        self._defaults = defaults
+
+    def add_config(self, config_section, is_project=False):
+        if is_project:
+            config_section = 'project "{}"'.format(config_section)
+        if config_section not in self._bunsen.config:
+            return
+        for key, val in self._bunsen.config[config_section].items():
+            if key in self._defaults:
+                self.__dict__[key] = val
 
 # Subcommand 'init'
 
