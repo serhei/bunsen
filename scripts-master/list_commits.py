@@ -9,7 +9,7 @@ default_args = {'source_repo':None, # scan commits from source_repo
                 'project':None,     # restrict to testruns under <tag>
                 'verbose':True,     # TODO show info for each testrun
                 'pretty':False,     # TODO pretty-print info instead of showing JSON
-                # TODO 'sort':None, # sort by date added to Bunsen repo
+                'sort':'recent',    # sort by date of commit
                 'restrict':-1,      # restrict output to N commits
                }
 
@@ -61,8 +61,8 @@ def index_source_commits(b, tags):
     return testruns_map, hexsha_lens
 
 def iter_history(b, repo, testruns_map=None, hexsha_lens=None,
-                 include_empty_commits=False):
-    for commit in repo.iter_commits('master'):
+                 reverse=False, include_empty_commits=False):
+    for commit in repo.iter_commits('master', reverse=reverse):
         testruns = find_testruns(commit.hexsha, testruns_map, hexsha_lens)
         if testruns is None:
             if include_empty_commits:
@@ -80,18 +80,19 @@ if __name__=='__main__':
     # TODO: Take default tags + repo values from b.config:
     tags = b.tags if opts.project is None else [opts.project]
     repo = Repo(opts.source_repo)
+    reverse = True if opts.sort == 'least_recent' else False
 
-    # TODO: Add option to show a more compact table by configuration.
+    # TODO: For HTML, add option to show a more compact table by configuration.
     testruns_map, hexsha_lens = index_source_commits(b, tags)
     n_commits, n_testruns = 0, 0
-    for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens):
+    for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens, reverse):
         out.section()
         out.message(commit_id=commit.hexsha[:7]+'...',
                     summary=commit.summary)
         # XXX: Note commit.summary was observed to get weird near the
         # start of SystemTap history many years ago. Maybe a bug, but
         # not relevant because we never tested that far back in time.
-        for testrun in testruns: # TODO: Add sorting option here?
+        for testrun in testruns:
             out.show_testrun(testrun, show_details=opts.verbose)
             n_testruns += 1
         n_commits += 1
