@@ -85,6 +85,10 @@ if __name__=='__main__':
     testruns_map, hexsha_lens = index_source_commits(b, tags)
     n_commits, n_testruns = 0, 0
     for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens, reverse):
+        if opts.restrict >= 0 and n_commits >= opts.restrict:
+            out.message("... restricted to {} commits, {} testruns ..." \
+                        .format(n_commits, n_testruns))
+            break
         out.section()
         out.message(commit_id=commit.hexsha[:7]+'...',
                     summary=commit.summary)
@@ -96,5 +100,6 @@ if __name__=='__main__':
             n_testruns += 1
         n_commits += 1
     out.section()
-    out.message(n_commits, "commits,", n_testruns, "testruns for branch master")
+    if opts.restrict < 0 or n_commits < opts.restrict:
+        out.message(n_commits, "commits,", n_testruns, "testruns for branch master")
     out.finish()
