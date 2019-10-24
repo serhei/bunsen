@@ -43,6 +43,7 @@ collection of test results from the GDB project:
 
     $ git clone git://sourceware.org/git/bunsen.git bunsen-gdb-demo
     $ cd bunsen-gdb-demo
+    $ git checkout cauldron2019-demo
     $ git clone --bare https://github.com/serhei/bunsen-gdb-sample-data .bunsen/bunsen.git
     $ ./bunsen.py init
 
