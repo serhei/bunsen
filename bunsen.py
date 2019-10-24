@@ -67,9 +67,11 @@ def basedirname(path):
     return os.path.basename(dir)
 
 class Index:
-    def __init__(self, bunsen, tag):
+    def __init__(self, bunsen, tag, key_function=None, reverse=False):
         self._bunsen = bunsen
         self.tag = tag
+        self._key_function = key_function
+        self._reverse = reverse
 
     def _indexfiles(self):
         commit = self._bunsen.git_repo.commit('index')
@@ -78,13 +80,26 @@ class Index:
             if m is not None and m.group('tag') == self.tag:
                 yield (blob.path, commit.tree[blob.path])
 
-    def __iter__(self):
+    def _iter_basic(self):
         for path, blob in self._indexfiles():
             data = blob.data_stream.read().decode('utf-8')
             for json_str in data.split(INDEX_SEPARATOR):
                 json_str = json_str.strip()
                 if json_str == '': continue
                 yield Testrun(self._bunsen, from_json=json_str, summary=True)
+
+    def __iter__(self):
+        if self._key_function is None:
+            for testrun in self._iter_basic():
+                yield testrun
+            #return self._iter_basic()
+            return
+        testruns = []
+        for testrun in self._iter_basic():
+            testruns.append(testrun)
+        testruns.sort(key=self._key_function, reverse=self._reverse)
+        for testrun in testruns:
+            yield testrun
 
 class Testlog:
     def __init__(self, bunsen, path=None, commit_id=None, blob=None, input_file=None):
@@ -788,11 +803,11 @@ class Bunsen:
         year_month = m.group('year_month')
         return tag, year_month
 
-    def testruns(self, tag):
+    def testruns(self, tag, key_function=None, reverse=False):
         '''
         Create an Index object for a log category in the repo.
         '''
-        return Index(self, tag)
+        return Index(self, tag, key_function=key_function, reverse=reverse)
 
     def full_testrun(self, testrun_or_commit_id, tag=None, summary=False):
         return self.testrun(testrun_or_commit_id, tag, summary)
