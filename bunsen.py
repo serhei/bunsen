@@ -695,6 +695,7 @@ class Bunsen:
 
         self.cache_dir = os.path.join(self.base_dir, "cache")
 
+        # TODO: Remove common config options from script cmdlines, document separately.
         self._config_path = os.path.join(self.base_dir, "config")
         self.config = ConfigParser()
         if os.path.isfile(self._config_path):
