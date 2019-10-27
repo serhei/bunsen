@@ -2,22 +2,25 @@
 # List the testruns in the Bunsen repo for each commit in a specified
 # branch (default master) of the Git repo source_repo.
 usage = "list_commits.py [source_repo=]<path> [branch=<name>] [project=<tag>]\n" \
-        "                       [verbose=yes|no] [pretty=yes|no]\n" \
-        "                       [sort=[least]_recent] [restrict=<num>]"
-default_args = {'source_repo':None, # scan commits from source_repo
-                'branch':'master',  # scan commits in branch <name>
-                'project':None,     # restrict to testruns under <tag>
-                'verbose':True,     # TODO show info for each testrun
-                'pretty':False,     # TODO pretty-print info instead of showing JSON
-                'sort':'recent',    # sort by date of commit
-                'restrict':-1,      # restrict output to N commits
+        "                       [verbose=yes|no] [compact=yes|no] [pretty=yes|no|html]\n" \
+        "                       [sort=[least]_recent] [restrict=<num>]" \
+        "                       [header_fields=<field1>,<field2>,...]"
+default_args = {'source_repo':None,   # scan commits from source_repo
+                'branch':'master',    # scan commits in branch <name>
+                'project':None,       # restrict to testruns under <tag>
+                'verbose':False,      # show info for each testrun
+                'compact':False,      # for pretty=html only -- show one row per commit
+                'pretty':True,        # pretty-print info instead of showing JSON
+                'sort':'recent',      # sort by date of commit
+                'restrict':-1,        # restrict output to N commits
+                'header_fields':None, # fields to use for testrun header / compact view config
                }
 
 import sys
 import bunsen
 from git import Repo
 
-from common.format_output import get_formatter
+from common.format_output import get_formatter, html_field_summary
 
 import re
 
@@ -79,8 +82,8 @@ if __name__=='__main__':
     tags = b.tags if opts.project is None else [opts.project]
     repo = Repo(opts.source_repo)
     reverse = True if opts.sort == 'least_recent' else False
+    header_fields = opts.get_list('header_fields', default=['arch', 'osver'])
 
-    # TODO: For HTML, add option to show a more compact table by configuration.
     testruns_map, hexsha_lens = index_source_commits(b, tags)
     n_commits, n_testruns = 0, 0
     for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens, reverse):
@@ -88,14 +91,31 @@ if __name__=='__main__':
             out.message("... restricted to {} commits, {} testruns ..." \
                         .format(n_commits, n_testruns))
             break
+
+        info = dict()
+        info['commit_id'] = commit.hexsha[:7]+'...'
+        info['summary'] = commit.summary
+
+        # compact output (HTML only) -- one line per commit
+        if opts.compact and opts.pretty == 'html':
+            out.table_row(info, order=['commit_id','summary'], merge_header=True)
+            for testrun in testruns:
+                config = html_field_summary(testrun, header_fields, separator="<br/>")
+                out.testrun_cell(config, testrun)
+                n_testruns += 1
+            n_commits += 1
+            continue
+
+        # regular output -- one line per testrun, one section per commit
         out.section()
-        out.message(commit_id=commit.hexsha[:7]+'...',
-                    summary=commit.summary)
+        out.message(commit_id=info['commit_id'],
+                    summary=info['summary'])
         # XXX: Note commit.summary was observed to get weird near the
         # start of SystemTap history many years ago. Maybe a bug, but
         # not relevant because we never tested that far back in time.
         for testrun in testruns:
-            out.show_testrun(testrun, show_details=opts.verbose)
+            out.show_testrun(testrun, header_fields=header_fields,
+                             show_all_details=opts.verbose)
             n_testruns += 1
         n_commits += 1
     out.section()

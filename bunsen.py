@@ -1362,6 +1362,15 @@ class BunsenOpts:
             if key in self._defaults:
                 self.__dict__[key] = val
 
+    def get_list(self, key, default=None):
+        '''Parse a comma-separated list.'''
+        if key not in self.__dict__ or self.__dict__[key] is None:
+            return default
+        items = []
+        for val in self.__dict__[key].split(","):
+            lst.append(val.strip())
+        return items
+
 # Subcommand 'init'
 
 def bunsen_init(b):
