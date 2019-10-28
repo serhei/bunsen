@@ -333,6 +333,7 @@ function details(s) {
             if len(s) > len("<p>"): s += " "
             s += "<b>{}=</b>{}".format(html_sanitize(k),html_sanitize(v))
         s += "</p>"
+        print(s)
         self._section_has_output = True
 
     def show_testrun(self, testrun, header_fields=[],
