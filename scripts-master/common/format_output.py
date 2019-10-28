@@ -1,7 +1,7 @@
 # Library for pretty-printing and HTML-formatting Bunsen analysis results.
 # Based on some HTML table generation code written in C++ by Martin Cermak.
 # TODO: Support output to a file (opts.output_file).
-# TODO: Add ASCII colors.
+# TODO: Add ASCII/HTML colors.
 
 import html
 
@@ -63,9 +63,11 @@ class PrettyPrinter:
         print(*args, **kwargs2)
         self._section_has_output = True
 
-    def show_testrun(self, testrun, header_fields=[], show_all_details=True, **kwargs):
+    def show_testrun(self, testrun, header_fields=[],
+                     show_all_details=True, **kwargs):
         self._section_has_output = True
         if not self.opts.pretty:
+            # TODOXXX add kwargs?
             print(testrun.to_json())
             return
 
@@ -87,15 +89,48 @@ class PrettyPrinter:
         if not show_all_details:
             return
         suppress = {'year_month', 'bunsen_commit_id', 'pass_count', 'fail_count'}
+        suppress = suppress.union({'testcases'})
         suppress = suppress.union(header_fields)
         if not self.opts.verbose:
             suppress = suppress.union(uninteresting_fields)
         info = suppress_fields(info, suppress)
-        for k, v in testrun.items():
+        for k, v in info.items():
             print("  - {}: {}".format(k,v))
 
-    def show_testcase(self, testrun, tc, **kwargs):
-        pass # TODOXXX
+    def show_testcase(self, testrun, tc, header_fields=[],
+                      show_all_details=True, **kwargs):
+        self._section_has_output = True
+        if not self.opts.pretty:
+            # TODOXXX add kwargs?
+            print(testrun.testcase_to_json(tc))
+            return
+
+        # TODO: group testcases by exp?
+        # TODO: extend to 2or diffs
+        info = dict(tc)
+        info.update(kwargs)
+        info = testrun.testcase_to_json(info, as_dict=True)
+
+        # header
+        extra = field_summary(info, header_fields)
+        if len(extra) > 0: extra = " " + extra
+        tc_outcome = "null" if 'outcome' not in info else info['outcome']
+        if 'baseline_outcome' in info:
+            tc_baseline = info['baseline_outcome']
+            if tc_baseline is None: tc_baseline = "<none>"
+            tc_outcome = tc_baseline + "=>" + tc_outcome
+        tc_name = "<unknown>" if 'name' not in info else info['name']
+        tc_subtest = "" if 'subtest' not in info else " " + info['subtest'].strip()
+        print("* {} {}{}{}".format(tc_outcome, tc_name, tc_subtest, extra))
+
+        # details
+        if not show_all_details:
+            return
+        suppress = {'name', 'outcome', 'baseline_outcome', 'subtest'}
+        suppress = suppress.union(header_fields)
+        info = suppress_fields(info, suppress)
+        for k, v in info.items():
+            print("  - {}: {}".format(k,v))
 
     def finish(self):
         pass # no buffering or footer
@@ -186,19 +221,39 @@ class HTMLTable:
             _this_row = self.rows[i]
             _this_row_details = self.row_details[i]
 
-            s = "<tr>"
+            s = ""
+            row_id = None
+            if '_ROW' in _this_row_details:
+                row_id = self._formatter.global_div_counter
+                self._formatter.global_div_counter += 1
+                s += "<tr class=clicky onclick='s({0})'>".format(row_id)
+            else:
+                s += "<tr>"
             for field in header:
-                s += "<td>" # TODO: add onclick for row/cell details
+                cell_id = None
+                if field in _this_row_details:
+                    cell_id = self._formatter.global_div_counter
+                    self._formatter.global_div_counter += 1
+                    s += "<td class=clicky onclick='s({0})'>".format(cell_id)
+                else:
+                    s += "<td>"
                 if field in _this_row: # if not, output an empty cell
                     s += _this_row[field]
-                # TODO: add details div + id
+                if field in _this_row_details:
+                    s += "<div id={0} class=detail>".format(cell_id)
+                    s += _this_row_details[field]
+                    s += "</div>"
                 s += "</td>"
             s += "</tr>"
-            print(s)
 
             if '_ROW' in _this_row_details:
-                # TODO: add details tr + id with colspan
-                pass
+                s += "<tr id={0} class=detail>".format(row_id)
+                s += "<td colspan={}>".format(len(header))
+                s += _this_row_details['_ROW']
+                s += "</td>"
+                s += "</tr>"
+
+            print(s)
 
         print("</table>")
 
@@ -226,24 +281,32 @@ class HTMLFormatter:
 .f { background-color: #cc5c53; }
 .p { background-color: #ccff99; }
 .h { writing-mode: tb-rl; width: 20px; font-size: xx-small; }
-td,th {background-color: white; text-align: center; padding: 3px;}
-div { font-size: xx-small; white-space:nowrap; text-align: left; display: none; }
-</style>""") # TODO: increase table width
+td,th { background-color: white; text-align: left;
+        padding: 3px; white-space: nowrap; }
+td.clicky:hover { background-color: azure; }
+tr.clicky:hover > td { background-color: beige; }
+.detail { white-space: nowrap; text-align: left; display: none; }
+tr.detail { font-size: x-small; }
+div.detail { font-size: xx-small; }
+</style>""")
         print("""<script type='text/javascript'>
 function s(i) {
-  document.getElementById(i).style.display='block';
+  elt = document.getElementById(i);
+  disp = elt.tagName.toLowerCase() == 'tr' ? 'table-row' : 'block';
+  elt.style.display = elt.style.display == disp ? 'none' : disp;
 }
 function details(s) {
-  var divs = document.getElementsByTagName('div');
+  var divs = document.getElementsByClassName('detail');
   for (var i = 0; i < divs.length; i++) {
-    divs[i].style.display=(s?'block':'none');
+    disp = divs[i].tagName.toLowerCase() == 'tr' ? 'table-row' : 'block';
+    divs[i].style.display = (s ? disp : 'none');
   }
 }
-</script>""") # TODO: also generalize to show/hide <tr> elements by id
+</script>""")
         print("</head><body>")
 
     def _footer(self):
-        # TODO: <hr/>
+        # TODO: if self._section_has_output: <hr/>
         # TODO: metadata 'Generated <DATE> by Bunsen v<VERSION>'
         # TODO: metadata 'Repo last updated <DATE>'
         # TODO: metadata 'with test results from <LOCATION>'
@@ -251,6 +314,7 @@ function details(s) {
 
     def section(self):
         self.table.close()
+        self.table_reset() # TODO: make configurable?
         if self._section_has_output:
             print("<hr/>")
         self._section_has_output = False
@@ -268,12 +332,15 @@ function details(s) {
         s += "</p>"
         self._section_has_output = True
 
-    def show_testrun(self, testrun, header_fields=[], show_all_details=False, **kwargs):
+    def show_testrun(self, testrun, header_fields=[],
+                     show_all_details=False, **kwargs):
         # XXX show_all_details is ignored -- will always reveal details on click
         self.testrun_row(testrun, header_fields, **kwargs)
 
-    def show_testcase(self, testrun, tc, **kwargs):
-        self.testcase_row(testrun, tc, **kwargs)
+    def show_testcase(self, testrun, tc, header_fields=[],
+                      show_all_details=False, **kwargs):
+        # XXX show_all_details is ignored -- will always reveal details on click
+        self.testcase_row(testrun, tc, header_fields, **kwargs)
 
     def finish(self):
         if self.table.is_open:
@@ -336,6 +403,7 @@ function details(s) {
 
         # details
         suppress = set(order)
+        suppress = suppress.union({'testcases'})
         if not self.opts.verbose:
             suppress = suppress.union(uninteresting_fields)
         info = suppress_fields(info, suppress)
@@ -346,8 +414,37 @@ function details(s) {
     def testcase_cell(self, testrun, tc, **kwargs):
         pass # TODOXXX via table_cell
 
-    def testcase_row(self, testrun, tc, **kwargs):
-        pass # TODOXXX via table_row
+    def testcase_row(self, testrun, tc, header_fields=[], **kwargs):
+        info = dict(tc)
+        info.update(kwargs)
+        info = testrun.testcase_to_json(info, as_dict=True)
+
+        tc_outcome = "null" if 'outcome' not in info else info['outcome']
+        if 'baseline_outcome' in info:
+            tc_baseline = info['baseline_outcome']
+            if tc_baseline is None: tc_baseline = "null"
+            tc_outcome = tc_baseline + "=>" + tc_outcome
+        tc_name = "<unknown>" if 'name' not in info else info['name']
+        tc_subtest = "" if 'subtest' not in info else info['subtest'].strip()
+
+        # header
+        row = dict()
+        row['outcome'] = html_sanitize(tc_outcome)
+        row['name'] = html_sanitize(tc_name)
+        row['subtest'] = html_sanitize(tc_subtest)
+        order = ['outcome', 'name', 'subtest']
+        for k in header_fields:
+            if row in order: continue # avoid duplicates
+            row[k] = html_sanitize(info[k])
+            order.append(k)
+
+        # details
+        suppress = set(order)
+        suppress = suppress.union({'baseline_outcome'})
+        info = suppress_fields(info, suppress)
+        details = html_field_summary(info, separator="<br/>")
+
+        self.table_row(row, details=details, order=order, merge_header=True)
 
 def get_formatter(b, opts):
     pretty = opts.pretty

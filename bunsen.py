@@ -453,16 +453,18 @@ class Testrun(dict):
             serialized_testcases.append(self._serialize_testcase(testcase))
         return serialized_testcases
 
-    def testcase_to_json(self, testcase, pretty=False):
+    def testcase_to_json(self, testcase, pretty=False, as_dict=False):
         '''
         Serialize a single Testcase to a JSON string.
         '''
-        if pretty:
+        if as_dict:
+            return self._serialize_testcase(testcase)
+        elif pretty:
             return json.dumps(self._serialize_testcase(testcase), indent=4)
         else:
             return json.dumps(self._serialize_testcase(testcase))
 
-    def to_json(self, summary=False, pretty=False):
+    def to_json(self, summary=False, pretty=False, as_dict=False):
         '''
         Serialize Testrun data to a JSON string.
         '''
@@ -485,7 +487,9 @@ class Testrun(dict):
                     or self._field_types[field] == 'cursor' # XXX can be given as str
             serialized[field] = value
         # XXX: Could use json.dump instead of json.dumps?
-        if pretty:
+        if as_dict:
+            return serialized
+        elif pretty:
             return json.dumps(serialized, indent=4)
         else:
             return json.dumps(serialized)

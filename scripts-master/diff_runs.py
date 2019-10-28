@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-# Compare the testrun <testrun_id> against the baseline testrun <baseline_id>.
-usage = "diff_runs.py <baseline_id> <testrun_id>"
-
-# TODO: Suggested options:
-# - pretty-print or show JSON
+# Compare the specified testruns.
+usage = "list_commits.py [baseline=]<bunsen_commit> [testrun=]<bunsen_commit>\n" \
+        "                       [pretty=yes|no|html]"
+default_args = {'baseline':None, # baseline testrun to compare against
+                'testrun':None,  # testrun to compare; TODO support multiple testruns?
+                'pretty':True,   # pretty-print info instead of showing JSON
+               }
 
 import sys
 from bunsen import Bunsen, Testrun
+
+from common.format_output import get_formatter
 
 def append_map(m, key, val):
     if key not in m: m[key] = []
@@ -190,9 +194,21 @@ def diff_2or(diff_baseline, diff_latest):
 
 b = Bunsen()
 if __name__=='__main__':
-    # TODO: Handle tag:commit format for baseline_id, testrun_id in b.testrun().
-    baseline_id, testrun_id = b.cmdline_argsOLD(sys.argv, 2, usage=usage)
-    baseline = b.testrun(baseline_id)
-    testrun = b.testrun(testrun_id)
+    opts = b.cmdline_args(sys.argv, usage=usage, required_args=['baseline','testrun'],
+                          defaults=default_args)
+    out = get_formatter(b, opts)
+    baseline = b.testrun(opts.baseline)
+    testrun = b.testrun(opts.testrun)
+
     testdiff = diff_testruns(baseline, testrun)
-    print(testdiff.to_json(pretty=True))
+    if opts.pretty == False:
+        print(testdiff.to_json(pretty=True))
+    else:
+        out.message(baseline=opts.baseline, testrun=opts.testrun)
+        out.show_testrun(baseline, header_fields=['kind'], kind='baseline')
+        out.show_testrun(testrun, header_fields=['kind'], kind='testrun')
+        out.section()
+        # TODO: new section + header for each major .exp? + consolidate simple .exps?
+        for tc in testdiff.testcases:
+            out.show_testcase(testdiff, tc)
+        out.finish()
