@@ -9,15 +9,15 @@ uninteresting_fields = {'year_month',
                         'bunsen_testruns_branch',
                         'bunsen_testlogs_branch'}
 
-def html_sanitize(obj):
-    return html.escape(str(obj))
-
 def suppress_fields(testrun, suppress=set()):
     testrun = dict(testrun)
     for f in suppress:
         if f in testrun:
             del testrun[f]
     return testrun
+
+def html_sanitize(obj):
+    return html.escape(str(obj))
 
 def field_summary(testrun, fields=None, separator=" ", sanitize=False):
     if fields is None:
@@ -31,8 +31,7 @@ def field_summary(testrun, fields=None, separator=" ", sanitize=False):
         first = False
     return s
 
-def html_field_summary(testrun, fields=None, separator=" "):
-    return field_summary(testrun, fields, separator, sanitize=True)
+# ASCII formatting code:
 
 class PrettyPrinter:
     def __init__(self, b, opts):
@@ -137,6 +136,34 @@ class PrettyPrinter:
     def finish(self):
         pass # no buffering or footer
 
+# HTML formatting code:
+
+def html_field_summary(testrun, fields=None, separator=" "):
+    return field_summary(testrun, fields, separator, sanitize=True)
+
+def select_class(field, val):
+    if field == 'outcome':
+        # TODO: needs refinement for diff outcomes
+        if len(val) < 1:
+            return 'n'
+        if val.endswith('PASS') or val.endswith('XFAIL'):
+            return 'p'
+        elif val.endswith('FAIL') \
+             and not val.startswith('FAIL') \
+             and not val[1:].startswith('FAIL'):
+            return 'f'
+        else:
+            return 'n'
+    elif field == 'pass_count':
+        return 'p'
+    elif field == 'fail_count':
+        return 'f'
+    elif field == 'bunsen_commit_id':
+        return 'bcommit'
+    elif field == 'source_commit':
+        return 'scommit'
+    return None
+
 class HTMLTable:
     def __init__(self, formatter):
         self._formatter = formatter
@@ -232,11 +259,19 @@ class HTMLTable:
             else:
                 s += "<tr>"
             for field in header:
+                # TODO: add a way to specify td_class in caller
+                val = "" if field not in _this_row else _this_row[field]
+                td_class = select_class(field, val)
+
                 cell_id = None
                 if field in _this_row_details:
                     cell_id = self._formatter.global_div_counter
                     self._formatter.global_div_counter += 1
-                    s += "<td class=clicky onclick='s({0})'>".format(cell_id)
+                    td_class = "clicky" if td_class is None else \
+                        "'clicky " + td_class + "'"
+                    s += "<td class={1} onclick='s({0})'>".format(cell_id, td_class)
+                elif td_class is not None:
+                    s += "<td class={}>".format(td_class)
                 else:
                     s += "<td>"
                 if field in _this_row: # if not, output an empty cell
@@ -280,8 +315,11 @@ class HTMLFormatter:
     def _header(self):
         print("<html><head>")
         print("""<style type='text/css'>
-.f { background-color: #cc5c53; }
+.f { background-color: darksalmon; }
 .p { background-color: #ccff99; }
+.n { background-color: lavender; }
+.bcommit { font-weight: bold; color: darkslateblue; }
+.scommit { font-weight: bold; color: darkslategray; }
 .h { writing-mode: tb-rl; width: 20px; font-size: xx-small; }
 td,th { background-color: white; text-align: left;
         padding: 3px; white-space: nowrap; }
