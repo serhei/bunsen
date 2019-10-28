@@ -107,7 +107,7 @@ if __name__=='__main__':
             continue
 
         # regular output -- one line per testrun, one section per commit
-        out.section()
+        out.section(minor=True)
         out.message(commit_id=info['commit_id'],
                     summary=info['summary'])
         # XXX: Note commit.summary was observed to get weird near the
@@ -118,7 +118,8 @@ if __name__=='__main__':
                              show_all_details=opts.verbose)
             n_testruns += 1
         n_commits += 1
-    out.section()
     if opts.restrict < 0 or n_commits < opts.restrict:
-        out.message(n_commits, "commits,", n_testruns, "testruns for branch master")
+        out.section()
+        out.message(n_commits, "commits,", n_testruns,
+                    "testruns for branch", opts.branch)
     out.finish()

@@ -45,9 +45,11 @@ class PrettyPrinter:
 
         self._section_has_output = False
 
-    def section(self):
+    def section(self, minor=False):
         if self._section_has_output:
             print() # blank line
+            if not minor:
+                print("* * *\n") # separator
         self._section_has_output = False
 
     def message(self, *args, **kwargs):
@@ -312,9 +314,10 @@ function details(s) {
         # TODO: metadata 'with test results from <LOCATION>'
         print("</html>")
 
-    def section(self):
+    def section(self, minor=False):
         self.table.close()
-        self.table_reset() # TODO: make configurable?
+        if not minor:
+            self.table_reset()
         if self._section_has_output:
             print("<hr/>")
         self._section_has_output = False

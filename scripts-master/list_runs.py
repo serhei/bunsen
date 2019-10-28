@@ -54,5 +54,6 @@ if __name__=='__main__':
             out.show_testrun(testrun, **extra)
             n_testruns += 1
         if opts.restrict < 0 or n_testruns < opts.restrict:
-            out.message("total {} testruns".format(n_testruns))
+            out.message("total {} testruns".format(n_testruns),
+                        "for project", tag)
     out.finish()
