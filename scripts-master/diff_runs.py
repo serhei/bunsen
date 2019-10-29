@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # Compare the specified testruns.
-usage = "list_commits.py [baseline=]<bunsen_commit> [testrun=]<bunsen_commit>\n" \
+usage = "list_commits.py [baseline=]<bunsen_commit> [latest=]<bunsen_commit>\n" \
         "                       [pretty=yes|no|html]"
 default_args = {'baseline':None, # baseline testrun to compare against
-                'testrun':None,  # testrun to compare; TODO support multiple testruns?
+                'latest':None,   # testrun to compare; TODO support multiple testruns?
                 'pretty':True,   # pretty-print info instead of showing JSON
                }
 
@@ -194,19 +194,19 @@ def diff_2or(diff_baseline, diff_latest):
 
 b = Bunsen()
 if __name__=='__main__':
-    opts = b.cmdline_args(sys.argv, usage=usage, required_args=['baseline','testrun'],
+    opts = b.cmdline_args(sys.argv, usage=usage, required_args=['baseline','latest'],
                           defaults=default_args)
     out = get_formatter(b, opts)
     baseline = b.testrun(opts.baseline)
-    testrun = b.testrun(opts.testrun)
+    testrun = b.testrun(opts.latest)
 
     testdiff = diff_testruns(baseline, testrun)
     if opts.pretty == False:
         print(testdiff.to_json(pretty=True))
     else:
-        out.message(baseline=opts.baseline, testrun=opts.testrun)
+        out.message(baseline=opts.baseline, latest=opts.latest)
         out.show_testrun(baseline, header_fields=['kind'], kind='baseline')
-        out.show_testrun(testrun, header_fields=['kind'], kind='testrun')
+        out.show_testrun(testrun, header_fields=['kind'], kind='latest')
         out.section()
         # TODO: new section + header for each major .exp? + consolidate simple .exps?
         for tc in testdiff.testcases:
