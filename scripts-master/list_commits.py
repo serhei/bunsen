@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 # List the testruns in the Bunsen repo for each commit in a specified
 # branch (default master) of the Git repo source_repo.
-usage = "list_commits.py [source_repo=]<path> [branch=<name>] [project=<tag>]\n" \
+usage = "list_commits.py [[source_repo=]<path>] [branch=<name>] [project=<tag>]\n" \
         "                       [verbose=yes|no] [compact=yes|no] [pretty=yes|no|html]\n" \
         "                       [sort=[least]_recent] [restrict=<num>]" \
         "                       [header_fields=<field1>,<field2>,...]"

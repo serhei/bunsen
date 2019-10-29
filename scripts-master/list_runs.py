@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 # List testruns in the Bunsen repo.
-usage = "list_runs [[project=]<tag>] [source_repo=<path>] [verbose=yes|no] [pretty=yes|no|html]\n" \
+usage = "list_runs [[project=]<tag>] [[source_repo=]<path>] [verbose=yes|no] [pretty=yes|no|html]\n" \
         "                 [sort=[least_]recent] [restrict=<num>]"
 default_args = {'project':None,     # restrict to testruns under <tag>
                 'source_repo':None, # add commit messages from source_repo
@@ -19,7 +19,8 @@ from common.format_output import get_formatter
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
-    opts = b.cmdline_args(sys.argv, usage=usage, optional_args=['project'],
+    opts = b.cmdline_args(sys.argv, usage=usage,
+                          optional_args=['project','source_repo'],
                           defaults=default_args)
     out = get_formatter(b, opts)
 
