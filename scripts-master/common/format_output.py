@@ -4,6 +4,7 @@
 # TODO: Add ASCII/HTML colors.
 
 import html
+from bunsen import Testrun
 
 uninteresting_fields = {'year_month',
                         'bunsen_testruns_branch',
@@ -51,7 +52,8 @@ class PrettyPrinter:
                 print("* * *\n") # separator
         self._section_has_output = False
 
-    def message(self, *args, **kwargs):
+    def message(self, *args, raw=True, **kwargs):
+        # XXX raw option ignored in ASCII formatter
         args = list(args)
         kwargs2 = {}
         for k,v in kwargs.items():
@@ -101,6 +103,8 @@ class PrettyPrinter:
     def show_testcase(self, testrun, tc, header_fields=[],
                       show_all_details=True, **kwargs):
         self._section_has_output = True
+        if testrun is None:
+            testrun = Testrun()
         if not self.opts.pretty:
             # TODOXXX add kwargs?
             print(testrun.testcase_to_json(tc))
@@ -360,17 +364,24 @@ function details(s) {
             print("<hr/>")
         self._section_has_output = False
 
-    def message(self, *args, **kwargs):
+    def message(self, *args, raw=False, **kwargs):
         self.table.close()
-        s = "<p>"
-        args = list(args)
+        s = ""
+        prefix_len = 0
+        if not raw:
+            s += "<p>"
+            prefix_len = len(s)
+        for v in args:
+            if len(s) > prefix_len: s += " "
+            s += v
         for k,v in kwargs.items():
             if k in {'sep','end','file','flush'}:
                 # ignore print() arguments
                 continue
-            if len(s) > len("<p>"): s += " "
+            if len(s) > prefix_len: s += " "
             s += "<b>{}=</b>{}".format(html_sanitize(k),html_sanitize(v))
-        s += "</p>"
+        if not raw:
+            s += "</p>"
         print(s)
         self._section_has_output = True
 
@@ -381,6 +392,8 @@ function details(s) {
 
     def show_testcase(self, testrun, tc, header_fields=[],
                       show_all_details=False, **kwargs):
+        if testrun is None:
+            testrun = Testrun()
         # XXX show_all_details is ignored -- will always reveal details on click
         self.testcase_row(testrun, tc, header_fields, **kwargs)
 

@@ -1,25 +1,42 @@
 #!/usr/bin/env python3
-# WIP -- Compare testruns for <commit> in <source_repo> against testruns for
-# the baseline commit <baseline_commit> and summarize regressions.
-usage = "diff_commits.py <source_repo> <baseline_commit> <commit>"
+# Compare all testruns for two commits in the Git repo source_repo
+# and summarize regressions.
+usage = "diff_commits.py [baseline=]<source_commit> [latest=]<source_commit> [[source_repo=]<path>]\n" \
+        "                       [exclude={new,unresolved,f2f}] [pretty=yes|no|html]"
+default_args = {'source_repo':None, # obtain commits from source_repo
+                'baseline':None,    # baseline commit to compare against
+                'latest':None,      # commit to compare
+                'exclude':None,     # list of exclusions (see below)
+                'pretty':True,      # pretty-print info instead of showing JSON
+               }
 
-# TODO: Suggested options:
-# - increase/decrease verbosity, pretty-print or show JSON
-# - filter out specific types of regressions:
-filter_new = True # XXX e.g. null->PASS type of regressions
-filter_unresolved = True # XXX UNRESOLVED type of outcome
-filter_failtofail = True # XXX e.g. KFAIL->XFAIL type of regressions
+# List of exclusions 'new', 'unresolved', 'f2f' (XXX values overridden by opts):
+filter_new = False # XXX e.g. null->PASS type of regressions
+filter_unresolved = False # XXX UNRESOLVED type of outcome
+filter_f2f = False # XXX e.g. KFAIL->FAIL type of regressions
 
 import sys
 import bunsen
 from git import Repo
 
-import tqdm
+import tqdm # for find_testruns()
+
+from common.format_output import get_formatter, field_summary, html_field_summary
 
 from list_commits import get_source_commit
 from diff_runs import append_map, subtest_name, diff_testruns, diff_2or
 
+# XXX Common wisdom around XFAIL is a bit strange, but the dejagnu doc states:
+#
+#   "A test failed, but it was expected to fail.
+#    This result indicates no change in a known bug."
+#
+# So I will tentatively classify this as a fail.
 fail_type_outcomes = {'FAIL', 'KFAIL', 'XFAIL'}
+f2f_type_outcomes = set()
+for f1 in fail_type_outcomes:
+    for f2 in fail_type_outcomes:
+        f2f_type_outcomes.add(f1+'->'+f2)
 
 # XXX global for find_testruns
 num_testruns = None
@@ -34,7 +51,7 @@ def find_testruns(b, source_hexsha, msg='Finding testruns'):
     testruns = []
     for tag in b.tags:
         progress = tqdm.tqdm(iterable=None, desc=msg,
-                             total=num_testruns, leave=False, unit='run')
+                             total=num_testruns, leave=True, unit='run')
         for testrun_summary in b.testruns(tag):
             hexsha = get_source_commit(testrun_summary)
             if hexsha.startswith(source_hexsha) or source_hexsha.startswith(hexsha):
@@ -70,9 +87,6 @@ def summary_tuple(testrun, summary_fields, exclude=set()):
         vals.append(testrun[field])
     return tuple(vals)
 
-def summary_str(testrun, summary_fields):
-    return str(summary_tuple(testrun, summary_fields))
-
 # TODO: change the 'comparison'/'baseline_comparison' format in 2or diffs
 # to match the output of get_comparison() for 1or diffs
 def get_comparison(diff):
@@ -89,30 +103,56 @@ def get_comparison(diff):
     return comp
 
 # XXX for pretty-printing
-def comparison_str(comparison):
+def make_summary_str(opts, summary_tuple, summary_fields):
+    # TODO: Avoid needless opts.pretty == 'html' checking?
+    d = {}
+    summary_fields = list(summary_fields)
+    for i in range(len(summary_fields)):
+        if summary_fields[i] == 'source_commit':
+            continue # XXX this is just clutter
+        d[summary_fields[i]] = summary_tuple[i]
+    if opts.pretty == 'html':
+        return "(" + html_field_summary(d) + ")"
+    else:
+        return "(" + field_summary(d) + ")"
+
+# XXX for pretty-printing
+def make_comparison_str(opts, comparison, summary_fields, single=False):
+    # TODO: Avoid needless opts.pretty == 'html' checking?
     s = ""
-    s += str(tuple(comparison['baseline_summary_tuple']))
-    s += "->" + str(tuple(comparison['summary_tuple']))
+    if not single and opts.pretty == 'html':
+        s += "<li>"
+    elif not single and opts.pretty != 'html':
+        s += "  - "
+    d = {}
+    s += make_summary_str(opts, comparison['baseline_summary_tuple'], summary_fields)
+    s += " -> " + make_summary_str(opts, comparison['summary_tuple'], summary_fields)
     if 'minus_baseline_summary_tuple' in comparison:
         assert 'minus_summary_tuple' in comparison
         s += " minus "
-        s += str(tuple(comparison['minus_baseline_summary_tuple']))
-        s += "->" + str(tuple(comparison['minus_summary_tuple']))
+        s += make_summary_str(opts, comparison['minus_baseline_summary_tuple'], summary_fields)
+        s += " -> " + make_summary_str(opts, comparison['minus_summary_tuple'], summary_fields)
+    if not single and opts.pretty == 'html': s += "</li>"
     return s
 
 # XXX for pretty-printing
-def make_combination_str(combination):
-    assert len(combination) >= 1
-    s = ""
-    if len(combination) > 1:
-        s += "s"
+def show_combination(opts, out, n_regressions, combination, summary_fields):
+    # TODO: Avoid needless opts.pretty == 'html' checking?
+    s = "Found {} regressions for".format(n_regressions)
+    single = len(combination) <= 1
+    if not single:
+        out.message(s+":")
+        s = ""
     else:
         s += " "
-    first = True
+    if opts.pretty == 'html' and not single:
+        out.message("<ul>", raw=True)
     for comparison in combination:
-        if len(combination) > 1: s += "\n    - "
-        s += comparison_str(comparison)
-    return s
+        s += make_comparison_str(opts, comparison, summary_fields, single=single)
+        out.message(s, raw=not single)
+        s = ""
+    if opts.pretty == 'html' and not single:
+        out.message("</ul>", raw=True)
 
 # XXX hack for consistent indexing
 def make_combination_key(combination):
@@ -147,13 +187,23 @@ def testcase_to_json(tc):
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
-    # TODO: source_repo_path could take a default value from b.config
-    source_repo_path, baseline_hexsha, hexsha = b.cmdline_argsOLD(sys.argv, 3, usage=usage)
-    repo = Repo(source_repo_path)
+    opts = b.cmdline_args(sys.argv, usage=usage,
+                          required_args=['baseline','latest'],
+                          optional_args=['source_repo'],
+                          defaults=default_args)
+    out = get_formatter(b, opts)
+    repo = Repo(opts.source_repo)
+
+    exclusions = opts.get_list('exclude', default=['new','unresolved'])
+    filter_new = 'new' in exclusions
+    filter_unresolved = 'unresolved' in exclusions
+    filter_f2f = 'f2f' in exclusions
 
     # (1a) find all testruns for specified commits
-    baseline_runs = find_testruns(b, baseline_hexsha, msg='Finding testruns for baseline {}'.format(baseline_hexsha))
-    latest_runs = find_testruns(b, hexsha, msg='Finding testruns for latest {}'.format(hexsha))
+    baseline_runs = find_testruns(b, opts.baseline,
+        msg='Finding testruns for baseline {}'.format(opts.baseline))
+    latest_runs = find_testruns(b, opts.latest,
+        msg='Finding testruns for latest {}'.format(opts.latest))
 
     # (1b) find summary fields present in all testruns
     summary_fields = set()
@@ -163,24 +213,23 @@ if __name__=='__main__':
     for testrun in latest_runs:
         find_summary_fields(testrun, summary_fields, summary_vals)
 
+    # for displaying testruns:
+    header_fields = list(summary_fields - {'source_branch', 'version'})
+
     # (1c) trim summary fields identical in all testruns
     for field in set(summary_fields):
         if summary_vals[field] is not None:
             summary_fields.discard(field)
 
     if True:
-        print("Baseline runs for commit", baseline_hexsha)
+        out.message(baseline=opts.baseline, latest=opts.latest)
         for testrun in baseline_runs:
-            print("* {} {} {} pass {} fail" \
-                  .format(testrun.year_month, testrun.bunsen_commit_id,
-                          testrun.pass_count, testrun.fail_count))
-            print("  "+summary_str(testrun, summary_fields))
-        print("\nLatest runs for commit", hexsha)
+            out.show_testrun(testrun, header_fields=header_fields, kind='baseline',
+                             show_all_details=False)
+        out.section(minor=True)
         for testrun in latest_runs:
-            print("* {} {} {} pass {} fail" \
-                  .format(testrun.year_month, testrun.bunsen_commit_id,
-                          testrun.pass_count, testrun.fail_count))
-            print("  "+summary_str(testrun, summary_fields))
+            out.show_testrun(testrun, header_fields=header_fields, kind='latest',
+                             show_all_details=False)
 
     # (2a) build maps of metadata->testrun to match testruns with similar configurations
     baseline_map = {} # (summary_values minus source_commit, version) -> testrun
@@ -216,13 +265,12 @@ if __name__=='__main__':
     if best_with_latest is not None:
         best_overall = best_with_latest
 
-    print("\nFound {} baseline, {} latest runs, preferred baseline {}" \
-          .format(len(baseline_runs), len(latest_runs), baseline_hexsha))
-    print("* {} {} {} pass {} fail" \
-          .format(best_overall.year_month, best_overall.bunsen_commit_id,
-                  best_overall.pass_count, best_overall.fail_count))
-    print("  "+summary_str(best_overall, summary_fields))
-    print("\n")
+    out.section()
+    out.message("Found {} baseline, {} latest runs, preferred baseline {}:" \
+                .format(len(baseline_runs), len(latest_runs),
+                        best_overall.bunsen_commit_id))
+    out.show_testrun(best_overall, header_fields=header_fields, kind='baseline',
+                     show_all_details=False)
 
     # (3) Compare relevant baseline & latest logs relative to baseline:
     version_diffs = []    # regressions in latest wrt baseline
@@ -277,11 +325,12 @@ if __name__=='__main__':
         comparison = get_comparison(diff)
         for tc in diff.testcases:
             # XXX: skip clutter
-            if filter_new and tc['baseline_outcome'] is None: continue
+            if filter_new and tc['baseline_outcome'] is None:
+                continue
             if filter_unresolved and (tc['outcome'] == 'UNRESOLVED' \
                or tc['baseline_outcome'] == 'UNRESOLVED'):
                 continue
-            if filter_failtofail and tc['outcome'] in fail_type_outcomes \
+            if filter_f2f and tc['outcome'] in fail_type_outcomes \
                and tc['baseline_outcome'] in fail_type_outcomes:
                 continue
 
@@ -290,14 +339,15 @@ if __name__=='__main__':
     for diff in regression_diffs:
         comparison = get_comparison(diff)
         for tc in diff.testcases:
-            # XXX: skip clutter; TODOXXX the by-configuration filtering is too aggressive?
-            if tc['baseline_outcome'] is None: continue # XXX skip clutter
-            # if filter_unresolved and ('UNRESOLVED' in tc['outcome'] \
-            #    or 'UNRESOLVED' in tc['baseline_outcome']):
-            #     continue
-            # if filter_failtofail and tc['outcome'] in failtofail_type_outcomes \
-            #    and tc['baseline_outcome'] in failtofail_type_outcomes:
-            #     continue # TODO: assemble failtofail_type_outcomes from fail_type_outcomes
+            # XXX: skip clutter
+            if filter_new and tc['baseline_outcome'] is None:
+                continue
+            if filter_unresolved and ('UNRESOLVED' in tc['outcome'] \
+               or 'UNRESOLVED' in tc['baseline_outcome']):
+                continue
+            if filter_f2f and tc['outcome'] in f2f_type_outcomes \
+               and tc['baseline_outcome'] in f2f_type_outcomes:
+                continue
 
             tc_key = get_tc_key(tc)
             append_map(regression_tcs_map, tc_key, (tc, comparison))
@@ -343,19 +393,25 @@ if __name__=='__main__':
         append_map(regression_testcases, combination_key, base_tc)
 
     # (5) For each combination of comparisons, print the regressions:
-    print("\n===\nRegressions by version:")
+    out.section()
+    out.message("Regressions by version")
+    # TODO: Add 'compact' option?
     for combination_key, combination in version_combos.items():
         n_regressions = len(version_testcases[combination_key])
         if n_regressions == 0: continue
-        combination_str = make_combination_str(combination)
-        print("\n{} regressions for combination{}".format(n_regressions, combination_str))
-        for testcase in version_testcases[combination_key]:
-            print("*", testcase_to_json(testcase))
-    print("\n===\nRegressions by configuration:")
+        out.section(minor=True)
+        show_combination(opts, out, n_regressions, combination, summary_fields)
+        for tc in version_testcases[combination_key]:
+            out.show_testcase(None, tc) # XXX no testrun
+    out.section()
+    out.message("Regressions by configuration")
+    # TODO: Add 'compact' option?
     for combination_key, combination in regression_combos.items():
-        n_regressions = len(regression_testcases[combination_key])
+        n_regressions = len(version_testcases[combination_key])
         if n_regressions == 0: continue
-        combination_str = make_combination_str(combination)
-        print("\n{} regressions for combination{}".format(n_regressions, combination_str))
-        for testcase in regression_testcases[combination_key]:
-            print("*", testcase_to_json(testcase))
+        out.section(minor=True)
+        show_combination(opts, out, n_regressions, combination, summary_fields)
+        for tc in version_testcases[combination_key]:
+            out.show_testcase(None, tc) # XXX no testrun
+
+    out.finish()

@@ -1373,7 +1373,8 @@ class BunsenOpts:
             return default
         items = []
         for val in self.__dict__[key].split(","):
-            lst.append(val.strip())
+            if val == "": continue
+            items.append(val.strip())
         return items
 
 # Subcommand 'init'
