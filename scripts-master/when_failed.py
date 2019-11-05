@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
-# Walk the history of the master branch of the Git repo
-# <source_repo>. For every commit, compare testruns under <project>
-# with testruns for the parent commit.  Print a summary of how test
-# results changed for test cases whose name contains <key>.
-usage = "when_failed.py <source_repo> <project> <key>"
+# Walk the history of the specified branch (default master) of the Git
+# repo source_repo. For every commit, compare testruns under specified
+# project with testruns for the parent commit. Print a summary of how
+# test results changes for testcases whose name contains the specified
+# substring <key>.
+usage = "when_failed.py [[key=]<key>] [[source_repo=]<path>] [branch=<name>] [project=<tag>]"
+default_args = {'project':None,     # restrict to testruns under <tag>
+                'key':None,         # restrict to testcases containing <key>
+                'source_repo':None, # scan commits from source_repo
+                'branch':'master',  # scan commits in branch <name>
+               }
 
 # TODO: Suggested options:
 # - increase/decrease verbosity
 # - sort commits by most-recent/least-recent first
 # - restrict to N most recent commits
-# - list commits for a different branch
 # - change/disable the is_similar check
+# TODO: make 'key' a regex?
+# TODO: change to use format_output
 
 import sys
 import bunsen
@@ -60,23 +67,25 @@ class Totals:
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
-    # TODO: source_repo_path, tag could take default values from b.config
-    source_repo_path, tag, key = b.cmdline_argsOLD(sys.argv, 3, usage=usage)
-    tags = b.tags if tag is None else [tag]
-    repo = Repo(source_repo_path)
+    opts = b.cmdline_args(sys.argv, usage=usage, required_args=[],
+                          optional_args=['key', 'source_repo'], defaults=default_args)
+    # TODO: out = get_formatter(b, opts)
+
+    tags = b.tags if opts.project is None else [opts.project]
+    repo = Repo(opts.source_repo)
 
     testruns_map, hexsha_lens = index_source_commits(b, tags)
     commit, testruns, totals = None, None, None
     printed = False
     for prev_commit, prev_testruns in \
-        iter_history(b, repo, testruns_map, hexsha_lens):
+        iter_history(b, repo, testruns_map, hexsha_lens, branch=opts.branch):
         # Build prev_commit, prev_testruns -> prev_totals
         prev_totals = Totals()
         for testrun in prev_testruns:
             testrun = b.full_testrun(testrun)
             for tc in testrun.testcases:
                 tc_name, tc_outcome = tc['name'], tc['outcome']
-                if key in tc_name:
+                if opts.key in tc_name:
                     prev_totals.add_name_outcome(tc_name, tc_outcome)
 
         prev_printed = False
@@ -119,7 +128,8 @@ if __name__=='__main__':
     #
     # testruns_map, hexsha_lens = index_source_commits(b, tags)
     # prev_commit, prev_testruns = None, None
-    # for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens):
+    # for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens,
+    #                                      branch=opts.branch):
     #     print(commit.hexsha[:7], commit.summary)
     #     # find relevant testcases
     #     for testrun in testruns:
@@ -129,7 +139,7 @@ if __name__=='__main__':
     #         print(testrun.to_json())
     #         testrun = b.full_testrun(testrun) # XXX load testcases
     #         for tc in testrun.testcases:
-    #             if key in tc['name']:
+    #             if opts.key in tc['name']:
     #                 print ("  -", testrun.testcase_to_json(tc))
     #     print()
     #     prev_commit, prev_testruns = commit, testruns
