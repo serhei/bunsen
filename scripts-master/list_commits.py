@@ -3,7 +3,7 @@
 # branch (default master) of the Git repo source_repo.
 usage = "list_commits.py [[source_repo=]<path>] [branch=<name>] [project=<tag>]\n" \
         "                       [verbose=yes|no] [compact=yes|no] [pretty=yes|no|html]\n" \
-        "                       [sort=[least]_recent] [restrict=<num>]" \
+        "                       [sort=[least]_recent] [restrict=<num>]\n" \
         "                       [header_fields=<field1>,<field2>,...]"
 default_args = {'source_repo':None,   # scan commits from source_repo
                 'branch':'master',    # scan commits in branch <name>
@@ -64,8 +64,9 @@ def index_source_commits(b, tags):
     return testruns_map, hexsha_lens
 
 def iter_history(b, repo, testruns_map=None, hexsha_lens=None,
-                 reverse=False, include_empty_commits=False):
-    for commit in repo.iter_commits('master', reverse=reverse):
+                 reverse=False, include_empty_commits=False,
+                 branch='master'):
+    for commit in repo.iter_commits(branch, reverse=reverse):
         testruns = find_testruns(commit.hexsha, testruns_map, hexsha_lens)
         if testruns is None:
             if include_empty_commits:
@@ -86,13 +87,15 @@ if __name__=='__main__':
 
     testruns_map, hexsha_lens = index_source_commits(b, tags)
     n_commits, n_testruns = 0, 0
-    for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens, reverse):
+    for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens, reverse,
+                                         branch=opts.branch):
         if opts.restrict >= 0 and n_commits >= opts.restrict:
             out.message("... restricted to {} commits, {} testruns ..." \
                         .format(n_commits, n_testruns))
             break
 
         info = dict()
+        # TODOXXX Shorten commit_id automatically, rename to source_commit
         info['commit_id'] = commit.hexsha[:7]+'...'
         info['summary'] = commit.summary
 
