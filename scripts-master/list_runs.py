@@ -46,6 +46,7 @@ if __name__=='__main__':
                 break
             extra = {}
             if upstream_repo is not None:
+                # TODOXXX Shorten source_commit automatically.
                 extra['source_commit'] = testrun.source_commit[:7] + '...'
                 try:
                     commit = upstream_repo.commit(testrun.source_commit)

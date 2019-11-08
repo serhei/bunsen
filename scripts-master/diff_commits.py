@@ -232,12 +232,13 @@ if __name__=='__main__':
                              show_all_details=False)
 
     # (2a) build maps of metadata->testrun to match testruns with similar configurations
-    baseline_map = {} # (summary_values minus source_commit, version) -> testrun
+    # summary_key := (summary_tuple minus source_commit, version)
+    baseline_map = {} # summary_key -> testrun
     for testrun in baseline_runs:
         t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
         assert t not in baseline_map # XXX would be kind of unforeseen
         baseline_map[t] = testrun
-    latest_map = {} # (summary_values minus source_commit, version) -> testrun
+    latest_map = {} # summary_key -> testrun
     for testrun in latest_runs:
         t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
         assert t not in latest_map # XXX would be kind of unforeseen

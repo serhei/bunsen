@@ -28,7 +28,7 @@ def field_summary(testrun, fields=None, separator=" ", sanitize=False):
     for k in fields:
         if not first: s += separator
         v = html_sanitize(testrun[k]) if sanitize else testrun[k]
-        s += "{}={}".format(k, v)
+        s += "{}={}".format(k,v)
         first = False
     return s
 
@@ -502,6 +502,8 @@ function details(s) {
         self.table_row(row, details=details, order=order, merge_header=True)
 
 def get_formatter(b, opts):
+    if 'pretty' not in opts.__dict__:
+        return PrettyPrinter(b, opts)
     pretty = opts.pretty
     if pretty == 'html':
         return HTMLFormatter(b, opts)

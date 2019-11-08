@@ -81,6 +81,7 @@ if __name__=='__main__':
         iter_history(b, repo, testruns_map, hexsha_lens, branch=opts.branch):
         # Build prev_commit, prev_testruns -> prev_totals
         prev_totals = Totals()
+        # TODOXXX: roll into a method of totals
         for testrun in prev_testruns:
             testrun = b.full_testrun(testrun)
             for tc in testrun.testcases:
