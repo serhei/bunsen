@@ -255,6 +255,20 @@ class Cursor:
         assert self.line_start == self.line_end
         return self.testlog.line(self.line_start)
 
+    def contents(self, context=0):
+        con_start = max(self.line_start-context,1)
+        con_end = min(self.line_end+context,len(self.testlog))
+        s = ""
+        snipped = False
+        for i in range(con_start,con_end+1):
+            if i > con_start+50 and i < con_end-49:
+                if not snipped:
+                    s += "... snipped {} lines ...\n".format(con_end-con_start-100)
+                    snipped = True
+                continue
+            s += self.testlog.line(i) + "\n"
+        return s
+
     def to_str(self, serialize=False):
         repr = ''
         if self.testlog.commit_id is not None:

@@ -3,6 +3,7 @@
 # TODO: Support output to a file (opts.output_file).
 # TODO: Add ASCII/HTML colors.
 
+import sys
 import html
 from bunsen import Testrun
 
@@ -498,6 +499,19 @@ function details(s) {
         suppress = suppress.union({'baseline_outcome'})
         info = suppress_fields(info, suppress)
         details = html_field_summary(info, separator="<br/>")
+
+        # TODO: more details -- origin_log
+        if False:
+            if 'baseline_log' in info:
+                contents = html_sanitize(tc['baseline_log'].contents(context=3))
+                #print("DEBUG got contents\n", contents,file=sys.stderr)
+                details += "<p>Baseline Log</p>"
+                details += "<pre>" + contents + "</pre>"
+            if 'origin_log' in info:
+                contents = html_sanitize(tc['origin_log'].contents(context=3))
+                #print("DEBUG got contents\n", contents,file=sys.stderr)
+                details += "<p>Latest Log</p>"
+                details += "<pre>" + contents + "</pre>"
 
         self.table_row(row, details=details, order=order, merge_header=True)
 
