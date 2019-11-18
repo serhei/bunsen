@@ -7,6 +7,9 @@ default_args = {'baseline':None, # baseline testrun to compare against
                 'pretty':True,   # pretty-print info instead of showing JSON
                }
 
+# TODOXXX Add filtering option as in diff_commits.
+fail_outcomes = {'FAIL','KFAIL','XFAIL','UNTESTED','UNSUPPORTED','ERROR'}
+
 import sys
 from bunsen import Bunsen, Testrun
 
@@ -37,6 +40,8 @@ def diff_testcases(outdiff, baseline_testcases, latest_tc):
             if 'subtest' not in tc2 and 'subtest' in tc1:
                 tc2['subtest'] = subtest_name(tc1['subtest'])
             tc2['baseline_outcome'] = tc1['outcome']
+            if tc2['baseline_outcome'] in fail_outcomes and tc2['outcome'] in fail_outcomes:
+                 continue
             if 'origin_sum' in tc1:
                 tc2['baseline_sum'] = tc1['origin_sum']
             if 'origin_log' in tc1:

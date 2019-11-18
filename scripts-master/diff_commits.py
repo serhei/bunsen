@@ -236,12 +236,14 @@ if __name__=='__main__':
     baseline_map = {} # summary_key -> testrun
     for testrun in baseline_runs:
         t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
-        assert t not in baseline_map # XXX would be kind of unforeseen
+        # XXX a sign of duplicate runs in the repo :(
+        #assert t not in baseline_map # XXX would be kind of unforeseen
         baseline_map[t] = testrun
     latest_map = {} # summary_key -> testrun
     for testrun in latest_runs:
         t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
-        assert t not in latest_map # XXX would be kind of unforeseen
+        # XXX a sign of duplicate runs in the repo :(
+        #assert t not in latest_map # XXX would be kind of unforeseen
         latest_map[t] = testrun
 
     # (2b) identify baseline testrun for baseline_commit
@@ -263,8 +265,8 @@ if __name__=='__main__':
            or int(testrun['pass_count']) > int(best_overall['pass_count']):
             best_overall = testrun
 
-    if best_with_latest is not None:
-        best_overall = best_with_latest
+    #if best_with_latest is not None:
+    #    best_overall = best_with_latest
 
     out.section()
     out.message("Found {} baseline, {} latest runs, preferred baseline {}:" \
@@ -300,6 +302,7 @@ if __name__=='__main__':
         t1_new = summary_tuple(baseline_testrun, summary_fields)
         t1_new_exclude = summary_tuple(baseline_testrun, summary_fields, exclude={'source_commit','version'})
         if t1_exclude not in latest_map or t1_new_exclude not in latest_map:
+            # TODO: perhaps report all differences as 'new' in this case?
             continue # did not find a matching comparison in latest_runs
         latest_baseline, latest_testrun = latest_map[t1_exclude], latest_map[t1_new_exclude]
         t2 = summary_tuple(latest_baseline, summary_fields)

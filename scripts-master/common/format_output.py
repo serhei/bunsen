@@ -374,7 +374,7 @@ function details(s) {
             prefix_len = len(s)
         for v in args:
             if len(s) > prefix_len: s += " "
-            s += v
+            s += str(v)
         for k,v in kwargs.items():
             if k in {'sep','end','file','flush'}:
                 # ignore print() arguments
