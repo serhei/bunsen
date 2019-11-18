@@ -143,7 +143,13 @@ class Testlog:
             self._input_file.close()
 
     def _data_stream_readlines(self):
+        if self._bunsen is not None and self.path is not None \
+           and self.commit_id is not None:
+            # Avoid reading _lines multiple times in different Cursor objects.
+            return self._bunsen._testlog_readlines(self.path, self.commit_id)
         try:
+            # TODOXXX Problem with GitPython blob.data_stream returning OStream.
+            #return self._data_stream.read().decode('utf8').split('\n')
             return self._data_stream.readlines()
         except UnicodeDecodeError: # yes, it happens
             warn_print("UnicodeDecodeError in TestLog, path={}".format(self.path))
@@ -732,6 +738,9 @@ class Bunsen:
         # Experiments so far show no benefit over linear scan of branches.
         #self._known_hexshas = {}
 
+        # XXX Use to avoid reading testlogs over and over again:
+        self._testlog_lines = {}
+
         # XXX Search scripts/, scripts-*/ in these directories:
         self.scripts_search_path = [self.base_dir, bunsen_repo_dir]
 
@@ -881,6 +890,16 @@ class Bunsen:
         #dbug_print("found testlog commit", commit.hexsha, commit.summary)
         blob = commit.tree[testlog_path]
         return Testlog(self, path=testlog_path, commit_id=commit_id, blob=blob)
+
+    def _testlog_readlines(self, testlog_path, commit_id):
+        if (testlog_path, commit_id) not in self._testlog_lines:
+            commit = self.git_repo.commit(commit_id)
+            blob = commit.tree[testlog_path]
+            print("DEBUG reading", blob, file=sys.stderr)
+            lines = blob.data_stream.read().decode('utf8').split('\n')
+            #lines = blob.data_stream.readlines()
+            self._testlog_lines[(testlog_path, commit_id)] = lines
+        return self._testlog_lines[(testlog_path, commit_id)]
 
     # Methods for adding testlogs and testruns:
 
