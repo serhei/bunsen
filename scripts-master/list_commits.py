@@ -64,15 +64,33 @@ def index_source_commits(b, tags):
     return testruns_map, hexsha_lens
 
 def iter_history(b, repo, testruns_map=None, hexsha_lens=None,
-                 reverse=False, include_empty_commits=False,
+                 forward=False, include_empty_commits=False,
                  branch='master'):
-    for commit in repo.iter_commits(branch, reverse=reverse):
+    for commit in repo.iter_commits(branch, reverse=forward):
         testruns = find_testruns(commit.hexsha, testruns_map, hexsha_lens)
         if testruns is None:
             if include_empty_commits:
                 yield commit, []
             continue
         yield commit, testruns
+
+def iter_adjacent(b, repo, testruns_map=None, hexsha_lens=None,
+                  forward=False, include_empty_commits=False,
+                  branch='master'):
+    '''For adjacent commits, yield
+    (older_commit, older_testruns, newer_commit, newer_testruns).'''
+    commit, testruns = None, None
+    for commit2, testruns2 in \
+        iter_history(b, repo, testruns_map, hexsha_lens,
+                     forward=forward, branch=branch):
+        if not include_empty_commits and len(testruns2) <= 0:
+            continue
+        if commit is not None:
+            if forward: # commit2 is newer
+                yield (commit, testruns, commit2, testruns2)
+            else: # commit is newer
+                yield (commit2, testruns2, commit, testruns)
+        commit, testruns = commit2, testruns2
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
@@ -82,13 +100,13 @@ if __name__=='__main__':
 
     tags = b.tags if opts.project is None else [opts.project]
     repo = Repo(opts.source_repo)
-    reverse = True if opts.sort == 'least_recent' else False
+    forward = True if opts.sort == 'least_recent' else False
     header_fields = opts.get_list('header_fields', default=['arch', 'osver'])
 
     testruns_map, hexsha_lens = index_source_commits(b, tags)
     n_commits, n_testruns = 0, 0
-    for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens, reverse,
-                                         branch=opts.branch):
+    for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens,
+                                         forward=forward, branch=opts.branch):
         if opts.restrict >= 0 and n_commits >= opts.restrict:
             out.message("... restricted to {} commits, {} testruns ..." \
                         .format(n_commits, n_testruns))

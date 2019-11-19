@@ -23,7 +23,7 @@ import sys
 import bunsen
 from git import Repo
 
-from list_commits import index_source_commits, iter_history
+from list_commits import index_source_commits, iter_history, iter_adjacent
 
 # TODO: Compute a detailed diff rather than this crude numerical tally.
 class Totals:
@@ -75,10 +75,10 @@ if __name__=='__main__':
     repo = Repo(opts.source_repo)
 
     testruns_map, hexsha_lens = index_source_commits(b, tags)
-    commit, testruns, totals = None, None, None
+    totals = None
     printed = False
-    for prev_commit, prev_testruns in \
-        iter_history(b, repo, testruns_map, hexsha_lens, branch=opts.branch):
+    for prev_commit, prev_testruns, commit, testruns in \
+        iter_adjacent(b, repo, testruns_map, hexsha_lens, branch=opts.branch):
         # Build prev_commit, prev_testruns -> prev_totals
         prev_totals = Totals()
         # TODOXXX: roll into a method of totals
@@ -122,13 +122,12 @@ if __name__=='__main__':
                 print(prev_commit.hexsha[:7], prev_commit.summary)
                 prev_printed = True
 
-        commit, testruns, totals = prev_commit, prev_testruns, prev_totals
+        totals = prev_totals
         printed = prev_printed
 
     # EXAMPLE CODE -- Printing all commits + testcases.
     #
     # testruns_map, hexsha_lens = index_source_commits(b, tags)
-    # prev_commit, prev_testruns = None, None
     # for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens,
     #                                      branch=opts.branch):
     #     print(commit.hexsha[:7], commit.summary)
@@ -143,4 +142,3 @@ if __name__=='__main__':
     #             if opts.key in tc['name']:
     #                 print ("  -", testrun.testcase_to_json(tc))
     #     print()
-    #     prev_commit, prev_testruns = commit, testruns
