@@ -48,7 +48,7 @@ def diff_testcases(outdiff, baseline_testcases, latest_tc):
                 tc2['baseline_log'] = tc1['origin_log']
             outdiff.testcases.append(tc2)
 
-def diff_testruns(baseline, latest):
+def diff_testruns(baseline, latest, key=None):
     '''
     1st-order diff: testcases in latest that
     differ from baseline.
@@ -80,6 +80,7 @@ def diff_testruns(baseline, latest):
 
     for tc1 in baseline.testcases:
         name = tc1['name']
+        if key is not None and key not in name: continue # TODOXXX
         append_map(tc1_map, name, tc1)
         if 'subtest' in tc1:
             name_plus_subtest = name + '+' + subtest_name(tc1['subtest'])
@@ -89,6 +90,7 @@ def diff_testruns(baseline, latest):
 
     for tc2 in latest.testcases:
         name = tc2['name']
+        if key is not None and key not in name: continue # TODOXXX
         name_plus_subtest = None
         if 'subtest' in tc2:
             name_plus_subtest = name + '+' + subtest_name(tc2['subtest'])
