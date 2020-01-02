@@ -42,6 +42,10 @@ def dbug_print(*args, **kwargs):
     if False:
         print(prefix, file=sys.stderr, *args, **kwargs)
 
+class BunsenError(Exception):
+    def __init__(msg):
+        self.msg = msg
+
 # XXX For now, hardcode Bunsen data to live in the git checkout directory:
 bunsen_repo_dir = os.path.dirname(os.path.realpath(__file__))
 bunsen_default_dir = os.path.join(bunsen_repo_dir, ".bunsen")
@@ -962,9 +966,11 @@ class Bunsen:
         for testrun in self._staging_testruns:
             if year_month is None:
                 year_month = testrun.year_month
-            elif testrun.year_month is not None:
-                assert year_month == testrun.year_month # TODO Signal error.
-        assert year_month is not None # TODO Signal error.
+            elif testrun.year_month is not None \
+                 and testrun.year_month != year_month:
+                raise BunsenError('conflicting testrun year_months in one commit')
+        if year_month is None:
+            raise BunsenError('missing year_month in new commit')
 
         temporary_wd = wd is None
         if temporary_wd:
@@ -1020,13 +1026,15 @@ class Bunsen:
             for testrun in self._staging_testruns:
                 testrun_tag = testrun.tag if 'tag' in testrun else tag
                 if tag is None or testrun_tag == tag:
-                    assert not have_primary # TODO Signal error.
+                    if have_primary:
+                        raise BunsenError('conflicting testrun tags in one commit')
                     have_primary = True
                 json_name = testrun_tag + "-" + commit_id + ".json"
                 json_path = os.path.join(wd_testruns.working_tree_dir, json_name)
                 with open(json_path, 'w') as out:
                     out.write(testrun.to_json())
-            assert have_primary # TODO Signal error.
+            if not have_primary:
+                raise BunsenError('missing primary testrun in new commit')
             commit_msg = branch_name
             commit_msg += ": {} index files for commit {}" \
                 .format(len(self._staging_testruns), commit_id)
@@ -1132,9 +1140,8 @@ class Bunsen:
                     postfix=None):
         if branch_name is None and self.default_branch_name:
             branch_name = self.default_branch_name
-        else:
-            # TODO Signal error properly:
-            assert branch_name is not None
+        elif branch_name is None:
+            raise BunsenError('no branch name specified for checkout (check BUNSEN_BRANCH environment variable)')
 
         if checkout_name is None and self.default_work_dir:
             checkout_name = os.path.basename(self.default_work_dir)
@@ -1424,7 +1431,8 @@ def bunsen_init(b):
 def bunsen_checkout_wd(b, branch_name=None, checkout_path=None):
     if branch_name is None:
         # XXX Branch (should have been) specified from environment.
-        assert b.default_branch_name is not None # TODO Signal error properly.
+        if b.default_branch_name is None:
+            raise BunsenError('no branch name specified for checkout (check BUNSEN_BRANCH environment variable)')
         branch_name = b.default_branch_name
     if checkout_path is None and b.default_work_dir is not None:
         # XXX Checkout path was specified from environment.
@@ -1464,10 +1472,8 @@ def bunsen_run(b, hostname, scriptname, invocation_args):
             #hostname = b.default_vm_host
             hostname = 'localhost'
         elif script_dirname == "scripts-guest":
-            # TODO Signal error properly;
-            warn_print("Hostname not specified for guest script", script_path,
-                       prefix="ERROR:")
-            assert False
+            raise BunsenError("hostname not specified for guest script {}" \
+                              .format(script_path))
         else:
             # If hostname is not specified, default to running locally:
             hostname = 'localhost'
@@ -1564,20 +1570,15 @@ def sub_run(parser, args):
         elif invocation is None and hostname is None:
             hostname = arg
         elif invocation is None:
-            # TODO Signal error properly through parser:
-            warn_print("Unexpected argument","'"+arg+"'", prefix="ERROR:")
-            exit(1)
+            parser.error("Unexpected argument '{}'".format(arg))
         else:
             invocation.append(arg)
     if invocation is not None:
         invocations.append(invocation)
 
     if not invocations:
-        # TODO Use parser to signal error.
-        warn_print("No invocations found " + \
-                   "(hint: 'bunsen run +script' not 'bunsen run script').",
-                   prefix="ERROR:")
-        exit(1)
+        parser.error("No invocations found " + \
+                    "(hint: 'bunsen run +script' not 'bunsen run script').")
     b = Bunsen()
     for invocation in invocations:
         scriptname = invocation[0]
