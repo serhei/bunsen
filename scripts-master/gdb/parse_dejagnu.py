@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 # WIP -- Example parsing library for GDB buildbot DejaGNU test logs.
-usage = "parse_dejagnu.py <buildbot_log_folder>"
+usage = "parse_dejagnu.py [logdir=]<path> [verbose=yes|no]"
+default_args = {'logdir':None,   # buildbot log folder
+                'verbose':False, # show less-important warnings
+               }
 
-# <buildbot_log_folder> example (individual files may be .xz):
+# logdir example (individual files may be .xz):
 # $ ls gdb-sample-logs/
 # baseline  gdb.sum           README.txt  xfail.table
 # gdb.log   previous_gdb.sum  xfail
@@ -13,10 +16,6 @@ usage = "parse_dejagnu.py <buildbot_log_folder>"
 
 # XXX The following fields must be added to a testrun by a caller:
 # - osver (for GDB buildbot results, present in the path)
-
-# TODO: Suggested options:
-# - increase/decrease verbosity
-quiet = False
 
 import sys
 from bunsen import Bunsen, Testrun, Cursor
@@ -103,7 +102,8 @@ def get_expname_subtest(line):
     if m is None: return None
     return m.group('outcome'), m.group('expname'), m.group('subtest')
 
-def parse_dejagnu_sum(testrun, sumfile, consolidate_pass=True, all_cases=None):
+def parse_dejagnu_sum(testrun, sumfile, all_cases=None,
+                      consolidate_pass=True, verbose=True):
     if testrun is None: return None
     f = openfile_or_xz(sumfile)
 
@@ -200,7 +200,8 @@ def get_running_exp(running_test):
     running_test = running_test[t1:t2]
     return running_test
 
-def annotate_dejagnu_log(testrun, logfile, outcome_lines=[], handle_reordering=False):
+def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
+                         handle_reordering=False, verbose=True):
     '''
     Annotate the testcases in a Testrun (presumably parsed from
     gdb.sum) with their locations in a corresponding gdb.log file.
@@ -224,8 +225,9 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[], handle_reordering=F
             testcase_start[name] = i
         if handle_reordering:
             if outcome_line in testcase_outcomes:
-                print("WARNING duplicate outcome lines in testcases {} and {}" \
-                      .format(testcases[testcase_outcomes[outcome_line]], testcases[i]))
+                if verbose:
+                    print("WARNING duplicate outcome lines in testcases {} and {}" \
+                          .format(testcases[testcase_outcomes[outcome_line]], testcases[i]))
                 handle_reordering = False
             else:
                 testcase_outcomes[outcome_line] = i
@@ -281,7 +283,7 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[], handle_reordering=F
                 last_test_cur.line_end = cur.line_end-1
 
                 if running_test not in testcase_start:
-                    pass # XXX gdb has tons of UNSUPPORTED not showing up in the sum
+                    pass # XXX gdb has tons of UNSUPPORTED not showing up in the sum, probably too much even for a verbose run
                     #print("WARNING: no testcases for {}@{}, skipping".format(running_test, running_cur.to_str()))
                 else:
                     i = testcase_start[running_test]
@@ -307,13 +309,12 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[], handle_reordering=F
             # first reordering.
             if j < len(outcome_lines) and running_test not in outcome_lines[j] and running_test in testcase_line_start:
                 new_j = testcase_line_start[running_test]
-                # TODO: Control this with verbose option.
-                #print("WARNING: subtests reordered between .sum and .log, skipped{} from".format("" if new_j > j else " back"), str(j) + "::" + outcome_lines[j], "to", str(new_j) + "::" + outcome_lines[new_j])
+                if verbose:
+                    print("WARNING: subtests reordered between .sum and .log, skipped{} from".format("" if new_j > j else " back"), str(j) + "::" + outcome_lines[j], "to", str(new_j) + "::" + outcome_lines[new_j])
                 j = new_j
             elif j < len(outcome_lines) and running_test not in outcome_lines[j]:
-                pass
-                # TODO: Control this with verbose option.
-                #print("WARNING: no outcome lines matching", running_test()
+                if verbose:
+                    print("WARNING: no outcome lines matching", running_test)
 
             running_cur = Cursor(start=cur)
             last_test_cur = Cursor(start=cur); last_test_cur.line_start += 1
@@ -364,7 +365,7 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[], handle_reordering=F
               "("+skip_reason+")", file=sys.stderr)
         return None
 
-    if not quiet:
+    if verbose:
         print("Processed", logfile, testrun.version,
               testrun.arch, str(testrun.pass_count) + "pass",
               str(testrun.fail_count) + "fail", file=sys.stdout)
@@ -372,18 +373,21 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[], handle_reordering=F
 
 b = Bunsen()
 if __name__ == '__main__':
-    # TODO: enable cwd as the default command line argument
-    logdir = b.cmdline_argsOLD(sys.argv, 1, usage=usage)
+    # TODO: enable cwd as the default logdir argument
+    opts = b.cmdline_args(sys.argv, usage=usage, required_args=['logdir'],
+                          defaults=default_args)
 
     # TODO: use Bunsen library to load testlogs
     # TODO: support reading testlogs from script's cwd or Bunsen repo
-    READMEfile = os.path.join(logdir, 'README.txt')
-    logfile = os.path.join(logdir, 'gdb.log')
-    sumfile = os.path.join(logdir, 'gdb.sum')
+    READMEfile = os.path.join(opts.logdir, 'README.txt')
+    logfile = os.path.join(opts.logdir, 'gdb.log')
+    sumfile = os.path.join(opts.logdir, 'gdb.sum')
 
     testrun = Testrun()
     all_cases = []
     testrun = parse_README(testrun, READMEfile)
-    testrun = parse_dejagnu_sum(testrun, sumfile, all_cases=all_cases)
-    testrun = annotate_dejagnu_log(testrun, logfile, all_cases)
+    testrun = parse_dejagnu_sum(testrun, sumfile, all_cases=all_cases,
+                                verbose=opts.verbose)
+    testrun = annotate_dejagnu_log(testrun, logfile, all_cases,
+                                   verbose=opts.verbose)
     print(testrun.to_json(pretty=True))

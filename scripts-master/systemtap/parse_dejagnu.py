@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 # WIP -- Example parsing library for SystemTap DejaGNU test logs.
 # Based on some DejaGNU parsing code written in C++ by Martin Cermak.
-usage = "parse_dejagnu.py <systemtap_log_file> <systemtap_sum_file>"
+usage = "parse_dejagnu.py [logfile=]<path> [sumfile=]<path> [verbose=yes|no]"
+default_args = {'logfile':None,  # SystemTap log file
+                'sumfile':None,  # SystemTap sum file
+                'verbose':False, # show less-important warnings
+               }
 
 # TODO: Additional information & fields to parse (harmonize with gdb):
 # - source_commit (extract from version field?)
 # - year_month (extract from sum/logfiles, sysinfo, or path)
 # - gcc_version
 # - kernel_version
-
-# TODO: Suggested options:
-# - increase/decrease verbosity
 
 import sys
 from bunsen import Bunsen, Testrun, Cursor
@@ -71,7 +72,8 @@ def validate_testrun(testrun, print_errors=True):
         if field not in testrun:
             result = False
             if print_errors:
-                print("ERROR: missing {} in testrun {}".format(field, testrun))
+                print("ERROR: missing {} in testrun {}".format(field, testrun),
+                      file=sys.stderr)
             else:
                 return result
     return result
@@ -125,8 +127,8 @@ def get_running_exp(running_test):
     running_test = running_test[t1:t2]
     return running_test
 
-def parse_dejagnu_log(testrun, logfile_path,
-                      consolidate_pass=True, all_cases=None):
+def parse_dejagnu_log(testrun, logfile_path, all_cases=None,
+                      consolidate_pass=True, verbose=True):
     '''
     Parse log or sum file. Sum files are more reliable since
     PASS:/FAIL: results can sometimes be interspersed with SystemTap
@@ -182,7 +184,8 @@ def parse_dejagnu_log(testrun, logfile_path,
                 if running_test is not None:
                     # close Cursor range for this test
                     running_cur.line_end = cur.line_end-1
-                    if running_cur.line_start >= running_cur.line_end:
+                    if verbose \
+                       and running_cur.line_start >= running_cur.line_end:
                         print("single line testcase {}".format(running_cur.to_str()))
                     last_test_cur.line_end = cur.line_end-1
 
@@ -294,7 +297,7 @@ def parse_dejagnu_log(testrun, logfile_path,
         testrun.osver = check_mapping(distro_is,
                                       distro_map)
     if testrun.osver is None:
-        print("UNKNOWN DISTRO_IS", distro_is)
+        print("WARNING: ignoring unknown distro_is", distro_is, file=sys.stderr)
 
     if rhel7_alt_seen:
         testrun.osver = "rhel-alt-7"
@@ -326,9 +329,10 @@ def parse_dejagnu_log(testrun, logfile_path,
     # XXX skip testrun.key = testrun.logfile_hash \
     #    + "+" + testrun.osver \
     #    + "+" + testrun.arch
-    print("Processed", logfile_path, testrun.version,
-          testrun.arch, str(testrun.pass_count) + "pass",
-          str(testrun.fail_count) + "fail", file=sys.stdout)
+    if verbose:
+        print("Processed", logfile_path, testrun.version,
+              testrun.arch, str(testrun.pass_count) + "pass",
+              str(testrun.fail_count) + "fail", file=sys.stdout)
 
     return testrun
 
@@ -339,8 +343,8 @@ def parse_dejagnu_log(testrun, logfile_path,
 # valid_hashes.append(testrun.logfile_hash)
 # foreach tc in testrun.testcases: valid_testcases.append(tc['name'])
 
-def annotate_dejagnu_log(testrun, logfile_path,
-                         outcome_lines=[], handle_reordering=False):
+def annotate_dejagnu_log(testrun, logfile_path, outcome_lines=[],
+                         handle_reordering=False, verbose=True):
     '''
     Annotate the testcases in a Testrun (presumably parsed from
     systemtap.sum) with their locations in a corresponding systemtap.log file.
@@ -360,8 +364,9 @@ def annotate_dejagnu_log(testrun, logfile_path,
             testcase_start[name] = i
         if handle_reordering:
             if outcome_line in testcase_outcomes:
-                print("WARNING duplicate outcome lines in testcases {} and {}" \
-                      .format(testcases[testcase_outcomes[outcome_line]], testcases[i]))
+                if verbose:
+                    print("WARNING duplicate outcome lines in testcases {} and {}" \
+                          .format(testcases[testcase_outcomes[outcome_line]], testcases[i]))
                 handle_reordering = False
             else:
                 testcase_outcomes[outcome_line] = i
@@ -381,7 +386,7 @@ def annotate_dejagnu_log(testrun, logfile_path,
                 running_cur.line_end = cur.line_end-1
                 last_test_cur.line_end = cur.line_end-1
 
-                if running_test not in testcase_start:
+                if running_test not in testcase_start and verbose:
                     print("WARNING: no testcases for {}@{}, skipping".format(running_test, running_cur.to_str()))
                 else:
                     i = testcase_start[running_test]
@@ -420,13 +425,17 @@ b = Bunsen()
 if __name__ == '__main__':
     # TODO: enable the following default command line arguments
     #wd_defaults = ['systemtap.log', 'systemtap.sum']
-    logfile, sumfile = b.cmdline_argsOLD(sys.argv, 2, usage=usage)
+    opts = b.cmdline_args(sys.argv, usage=usage,
+                          required_args=['logfile', 'sumfile'],
+                          defaults=default_args)
     # TODO: use Bunsen library to load testlogs
     # TODO: support reading testlogs from script's cwd or Bunsen repo
-    #logfile = b.logfile(logfile)
-    #sumfile = b.logfile(sumfile)
+    #logfile = b.logfile(opts.logfile)
+    #sumfile = b.logfile(opts.sumfile)
     testrun = Testrun()
     all_cases = []
-    testrun = parse_dejagnu_log(testrun, sumfile, all_cases=all_cases)
-    testrun = annotate_dejagnu_log(testrun, logfile, all_cases)
+    testrun = parse_dejagnu_log(testrun, opts.sumfile, all_cases=all_cases,
+                                verbose=opts.verbose)
+    testrun = annotate_dejagnu_log(testrun, opts.logfile, all_cases,
+                                   verbose=opts.verbose)
     print(testrun.to_json(pretty=True))

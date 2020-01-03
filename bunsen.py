@@ -1299,11 +1299,13 @@ class Bunsen:
             warn_print("Support remote script execution.", prefix="TODO:")
             assert False
 
-    # TODO: Replace old cmdline_args with this new parser.
+    def opts(self, defaults={}):
+        return BunsenOpts(self, defaults)
+
     def cmdline_args(self, argv, usage=None, required_args=[],
                       optional_args=[], defaults={}, use_config=True):
         argv = argv[1:] # Removes sys.argv[0].
-        opts = BunsenOpts(self, defaults)
+        opts = self.opts(defaults)
         unnamed_args = []
         check_required = False
         for i in range(len(argv)):
@@ -1368,29 +1370,6 @@ class Bunsen:
                 opts.__dict__[key] = int(val)
 
         return opts
-
-    def cmdline_argsOLD(self, argv, nargs=None, usage=None, defaults=None):
-        '''Verify number of command line arguments and return them as a list
-           (if nargs=None) or a tuple (otherwise). Exit if the number of
-           arguments fails to match nargs, unless no arguments are provided
-           and defaults is provided.'''
-        argv = argv[1:] # XXX Removes sys.argv[0].
-        if not nargs:
-            return argv
-        assert defaults is None or len(defaults) <= nargs
-        if defaults is not None and len(argv) == 0 and len(defaults) == nargs:
-            if len(defaults) == 1: return defaults[0]
-            return tuple(defaults)
-        minargs = nargs - (0 if defaults is None else len(defaults))
-        if defaults is not None and len(argv) < nargs and len(argv) >= minargs:
-            delta = len(argv) - minargs + 1
-            for i in range(len(argv),nargs):
-                argv.append(defaults[i-delta])
-        if len(argv) != nargs:
-            warn_print("USAGE:", usage, prefix="")
-            exit(1)
-        if len(argv) == 1: return argv[0]
-        return tuple(argv)
 
 # Returned from cmdline_args():
 class BunsenOpts:

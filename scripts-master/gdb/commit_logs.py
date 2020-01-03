@@ -1,7 +1,30 @@
 #!/usr/bin/env python3
-# WIP -- Commit a set of GDB test logs to a Bunsen git repo. Some
-# assembly required.
-usage = "commit_logs.py <local_path>"
+# WIP -- Commit GDB test logs to a Bunsen git repo. Some assembly required.
+usage = "commit_logs.py [raw_logs=]<path> ... (see source code)"
+default_args = {
+# - raw buildbot log repository
+    'raw_logs':None,
+# - project tag for the created logs
+    'tag':'gdb',
+# - enable to ignore BUNSEN_COMMIT files. Bunsen should still prevent
+#   duplication of testlog data, but the process of checking will be
+#   slower.
+    'rebuild':True,
+# - enable to only commit testruns whose year_month tag belongs to
+#   this set. This requires gdb_label_year_month.py to be run first in
+#   order to add year_month.txt to the buildbot raw log directories.
+# e.g. timeslice:'2019-08,2019-09'
+    'timeslice':None,
+# - enable to push + recreate all working directories every few logs
+# e.g. push_every:250
+    'push_every':-1,
+# - enable to skip all testruns until you reach a certain log
+#   directory (whose path ends in skip_until). This is handy if your
+#   commit_logs process was interrupted, but assumes os.listdir()
+#   ordering is stable.
+#skip_until = 'Fedora-x86_64-native-extended-gdbserver-m64/a0/a051e2f3e0c1cedf4be0e1fedcd383fd203c769c'
+    'skip_until':None,
+}
 
 # This assumes the format of the public GDB buildbot data:
 # - https://gdb-buildbot.osci.io/results/
@@ -9,31 +32,9 @@ usage = "commit_logs.py <local_path>"
 #
 # In each testrun's directory, a BUNSEN_COMMIT directory is created to
 # mark the testrun as committed. By default, testruns with an already
-# existing BUNSEN_COMMIT are skipped (see 'rebuild' option below).
+# existing BUNSEN_COMMIT are skipped (see 'rebuild' option above).
 
 # TODO: Suppress spurious progress bar and printing when used for cron jobs.
-
-# TODO: Suggested options:
-# - project tag for the created logs
-tag = 'gdb'
-# - enable to ignore BUNSEN_COMMIT files. Bunsen should still prevent
-#   duplication of testlog data, but the process of checking will be
-#   slower.
-rebuild = True
-# - enable to only commit testruns whose year_month tag belongs to
-#   this set. This requires gdb_label_year_month.py to be run first in
-#   order to add year_month.txt to the buildbot raw log directories.
-#timeslice = {'2019-09'}
-timeslice = None
-# - enable to push + recreate all working directories every few logs
-#push_every = 250
-push_every = None
-# - enable to skip all testruns until you reach a certain log
-#   directory (whose path ends in skip_until). This is handy if your
-#   commit_logs process was interrupted, but assumes os.listdir()
-#   ordering is stable.
-#skip_until = 'Fedora-x86_64-native-extended-gdbserver-m64/a0/a051e2f3e0c1cedf4be0e1fedcd383fd203c769c'
-skip_until = None
 
 import sys
 from bunsen import Bunsen, Testrun
@@ -146,13 +147,16 @@ def traverse_logs(log_src, restrict=None):
                 if not is_testdir(testdir): continue
                 yield osver, test_sha, testdir
 
-def commit_logs(b, log_src):
+def commit_logs(b, log_src, opts=None):
     '''
     Commit logs from local path log_src. Scans for the following logs:
     - <log_src>/<vm_name>/<hexsha_prefix>/<hexsha>/{README.txt,gdb.log,gdb.sum}
 
     Log files can also be compressed with .xz.
     '''
+    global default_args
+    if opts is None: opts = b.opts(default_args)
+
     # TODO: Turn this into a command line option. Or we should be able to
     # just give the subdirectory and have the traversal look one level down.
     # Allows us to commit in small slices when we want to babysit the process.
@@ -164,19 +168,19 @@ def commit_logs(b, log_src):
 
     # XXX Purely to have a progress bar:
     n_logdirs = 0
-    skipping = skip_until is not None
+    skipping = opts.skip_until is not None
     for osver, test_sha, testdir in traverse_logs(log_src, restrict=restrict):
-        if skipping and testdir.endswith(skip_until):
+        if skipping and testdir.endswith(opts.skip_until):
             skipping = False
         if skipping: continue
 
         year_month = None
-        if timeslice is not None and os.path.isfile(os.path.join(testdir,'year_month.txt')):
+        if opts.timeslice is not None and os.path.isfile(os.path.join(testdir,'year_month.txt')):
             with open(os.path.join(testdir,'year_month.txt'),'r') as f:
                 year_month = f.read().strip()
-        if timeslice is not None and year_month not in timeslice:
+        if opts.timeslice is not None and year_month not in opts.timeslice:
             continue # won't be processed
-        if not rebuild and \
+        if not opts.rebuild and \
            os.path.isfile(os.path.join(testdir,'BUNSEN_COMMIT')):
             continue # won't be processed
         n_logdirs += 1
@@ -192,7 +196,7 @@ def commit_logs(b, log_src):
     wd = b.checkout_wd()
     #wd_index = b.checkout_wd(postfix="index")
     #wd_testruns = b.checkout_wd(postfix="testruns")
-    skipping = skip_until is not None
+    skipping = opts.skip_until is not None
     last_osver = None
     for osver, test_sha, testdir in traverse_logs(log_src, restrict=restrict):
         if osver != last_osver:
@@ -201,14 +205,14 @@ def commit_logs(b, log_src):
             print("Now processing:", osver)
             last_osver = osver
 
-        if skipping and testdir.endswith(skip_until):
+        if skipping and testdir.endswith(opts.skip_until):
             skipping = False
         if skipping: continue
 
         # XXX Check log directory for a BUNSEN_COMMIT file as a quick
         # way to avoid making duplicate commits that doesn't require
         # hashing files:
-        if not rebuild and \
+        if not opts.rebuild and \
            os.path.isfile(os.path.join(testdir,'BUNSEN_COMMIT')):
             # don't update progress
             total_dirs += 1
@@ -223,7 +227,7 @@ def commit_logs(b, log_src):
         if os.path.isfile(os.path.join(testdir,'year_month.txt')):
             with open(os.path.join(testdir,'year_month.txt'),'r') as f:
                 year_month = f.read().strip()
-        if timeslice is not None and year_month not in timeslice:
+        if opts.timeslice is not None and year_month not in opts.timeslice:
             # don't update progress
             total_dirs += 1
             continue
@@ -260,8 +264,8 @@ def commit_logs(b, log_src):
             continue
 
         # XXX To avoid huge working copies, use branch_extra to split testruns branches by source buildbot:
-        commit_id = b.commit(tag, wd=wd, push=False, allow_duplicates=False, branch_extra=testrun.osver)
-        #commit_id = b.commit(tag, wd=wd, push=False, allow_duplicates=True, wd_index=wd_index, wd_testruns=wd_testruns)
+        commit_id = b.commit(opts.tag, wd=wd, push=False, allow_duplicates=False, branch_extra=testrun.osver)
+        #commit_id = b.commit(opts.tag, wd=wd, push=False, allow_duplicates=True, wd_index=wd_index, wd_testruns=wd_testruns)
 
         # XXX Create BUNSEN_COMMIT file to mark logs as committed:
         with open(os.path.join(testdir,"BUNSEN_COMMIT"), 'w') as f:
@@ -284,7 +288,7 @@ def commit_logs(b, log_src):
         #tmpdir = tempfile.mkdtemp()
 
         # XXX Incremental pushing support
-        if push_every is not None and new_runs % push_every == 0:
+        if opts.push_every != -1 and new_runs % opts.push_every == 0:
             wd.push_all()
             #wd_index.push_all()
             #wd_testruns.push_all()
@@ -314,5 +318,7 @@ def commit_logs(b, log_src):
 
 b = Bunsen()
 if __name__=='__main__':
-    log_src = b.cmdline_argsOLD(sys.argv, 1, usage=usage)
-    commit_logs(b, log_src)
+    opts = b.cmdline_args(sys.argv, usage=usage, required_args=['raw_logs'],
+                          defaults=default_args)
+    opts.timeslice = opts.get_list('timeslice')
+    commit_logs(b, opts.raw_logs, opts=opts)
