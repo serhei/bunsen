@@ -1216,10 +1216,16 @@ class Bunsen:
                         # XXX Allow script_name to be a relative path
                         # e.g. scripts-host/examples/hello-shell.sh
                         # invoked as +examples/hello-shell.
-                        candidate_path = os.path.join(candidate_path, script_name)
-                        candidate_paths = [candidate_path,
-                                           candidate_path + '.sh',
-                                           candidate_path + '.py']
+                        script_path = os.path.join(candidate_path, script_name)
+                        candidate_paths = [script_path,
+                                           script_path + '.sh',
+                                           script_path + '.py']
+                        # PR25090: Allow e.g. +commit-logs instead of +commit_logs:
+                        script_name2 = script_name.replace('-','_')
+                        script_path2 = os.path.join(candidate_path, script_name2)
+                        candidate_paths += [script_path2,
+                                            script_path2 + '.sh',
+                                            script_path2 + '.py']
                         for candidate_path in candidate_paths:
                             if os.path.isfile(candidate_path):
                                 scripts_found.append(candidate_path)
