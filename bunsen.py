@@ -43,7 +43,7 @@ def dbug_print(*args, **kwargs):
         print(prefix, file=sys.stderr, *args, **kwargs)
 
 class BunsenError(Exception):
-    def __init__(msg):
+    def __init__(self, msg):
         self.msg = msg
 
 # XXX For now, hardcode Bunsen data to live in the git checkout directory:
@@ -1226,9 +1226,8 @@ class Bunsen:
             search_dirs = next_search_dirs
             all_search_dirs += next_search_dirs
         if len(scripts_found) == 0:
-            warn_print("Could not find script +{}\nSearch paths: {}" \
-                       .format(script_name, all_search_dirs), prefix="ERROR:")
-            assert False # TODO Throw exception properly.
+            raise BunsenError("Could not find script +{}\nSearch paths: {}" \
+                              .format(script_name, all_search_dirs))
 
         # Prioritize among scripts_found:
         fallback_script_path = scripts_found[0]
