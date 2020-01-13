@@ -1,13 +1,13 @@
 #! /usr/bin/env python3
 # List the testruns in the Bunsen repo for each commit in a specified
 # branch (default master) of the Git repo source_repo.
-usage = "list_commits.py [[source_repo=]<path>] [branch=<name>] [project=<tag>]\n" \
+usage = "list_commits.py [[source_repo=]<path>] [branch=<name>] [project=<tags>]\n" \
         "                       [verbose=yes|no] [compact=yes|no] [pretty=yes|no|html]\n" \
         "                       [sort=[least]_recent] [restrict=<num>]\n" \
         "                       [header_fields=<field1>,<field2>,...]"
 default_args = {'source_repo':None,   # scan commits from source_repo
                 'branch':'master',    # scan commits in branch <name>
-                'project':None,       # restrict to testruns under <tag>
+                'project':None,       # restrict to testruns under <tags>
                 'verbose':False,      # show info for each testrun
                 'compact':False,      # for pretty=html only -- show one row per commit
                 'pretty':True,        # pretty-print info instead of showing JSON

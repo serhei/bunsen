@@ -2,10 +2,10 @@
 # Walk the history of the specified branch (default master) of the Git
 # repo source_repo. For every commit, compare testruns under specified
 # project with testruns for the parent commit. Print a summary of how
-# test results changes for testcases whose name contains the specified
+# test results change for testcases whose name contains the specified
 # substring <key>.
-usage = "when_failed.py [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tag>]"
-default_args = {'project':None,     # restrict to testruns under <tag>
+usage = "when_failed.py [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tags>]"
+default_args = {'project':None,     # restrict to testruns under <tags>
                 'key':None,         # restrict to testcases matching <glob>
                 'source_repo':None, # scan commits from source_repo
                 'branch':'master',  # scan commits in branch <name>
