@@ -13,6 +13,7 @@ fail_outcomes = {'FAIL','KFAIL','XFAIL','UNTESTED','UNSUPPORTED','ERROR'}
 import sys
 from bunsen import Bunsen, Testrun
 
+from fnmatch import fnmatchcase
 from common.format_output import get_formatter
 
 def append_map(m, key, val):
@@ -80,7 +81,7 @@ def diff_testruns(baseline, latest, key=None):
 
     for tc1 in baseline.testcases:
         name = tc1['name']
-        if key is not None and key not in name: continue # TODOXXX
+        if key is not None and not fnmatchcase(name, key): continue
         append_map(tc1_map, name, tc1)
         if 'subtest' in tc1:
             name_plus_subtest = name + '+' + subtest_name(tc1['subtest'])
@@ -90,7 +91,7 @@ def diff_testruns(baseline, latest, key=None):
 
     for tc2 in latest.testcases:
         name = tc2['name']
-        if key is not None and key not in name: continue # TODOXXX
+        if key is not None and not fnmatchcase(name, key): continue
         name_plus_subtest = None
         if 'subtest' in tc2:
             name_plus_subtest = name + '+' + subtest_name(tc2['subtest'])

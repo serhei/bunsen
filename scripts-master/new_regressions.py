@@ -4,18 +4,15 @@
 # project with testruns for the parent commit. Report all regressions
 # that did not already appear within the previous window_size (default
 # infinity) commits.
-usage = "new_regressions.py [[key=]<key>] [[source_repo=]<path>] [branch=<name>] [project=<tag>] [window_size=<num>]"
+usage = "new_regressions.py [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tag>] [window_size=<num>]"
 default_args = {'project':None,     # restrict to testruns under <tag>
-                'key':None,         # restrict to testcases containing <key>
+                'key':None,         # restrict to testcases matching <glob>
                 'source_repo':None, # scan commits from source_repo
                 'branch':'master',  # scan commits in branch <name>
                 'window_size':-1,   # check against last N commits (0 for unbounded)
                 'restrict':-1,      # TODOXXX restrict analysis to last N commits (0 for unbounded)
                 'pretty':True,      # TODOXXX
                }
-
-# TODO: use 'key' below
-# TODO: make 'key' a regex?
 
 # TODO: Suggested options:
 # - Restrict analysis to last N commits.
@@ -246,7 +243,7 @@ if __name__=='__main__':
             #print("DEBUG diffing", baseline, latest)
             baseline, latest = b.testrun(baseline), b.testrun(latest)
             last_testruns[summary_key] = (next_commit.hexsha, latest)
-            diff = diff_testruns(baseline, latest, key=opts.key) # TODOXXX proper interface for filtering
+            diff = diff_testruns(baseline, latest, key=opts.key)
             for tc in diff.testcases:
                 # TODO: Combine similar changes e.g. FAIL->PASS vs KFAIL->PASS.
                 # TODO: Filter trivial regressions e.g. FAIL->KFAIL.

@@ -4,9 +4,9 @@
 # project with testruns for the parent commit. Print a summary of how
 # test results changes for testcases whose name contains the specified
 # substring <key>.
-usage = "when_failed.py [[key=]<key>] [[source_repo=]<path>] [branch=<name>] [project=<tag>]"
+usage = "when_failed.py [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tag>]"
 default_args = {'project':None,     # restrict to testruns under <tag>
-                'key':None,         # restrict to testcases containing <key>
+                'key':None,         # restrict to testcases matching <glob>
                 'source_repo':None, # scan commits from source_repo
                 'branch':'master',  # scan commits in branch <name>
                }
@@ -16,13 +16,13 @@ default_args = {'project':None,     # restrict to testruns under <tag>
 # - sort commits by most-recent/least-recent first
 # - restrict to N most recent commits
 # - change/disable the is_similar check
-# TODO: make 'key' a regex?
 # TODO: change to use format_output
 
 import sys
 import bunsen
 from git import Repo
 
+from fnmatch import fnmatchcase
 from list_commits import index_source_commits, iter_history, iter_adjacent
 
 # TODO: Compute a detailed diff rather than this crude numerical tally.
@@ -86,7 +86,7 @@ if __name__=='__main__':
             testrun = b.full_testrun(testrun)
             for tc in testrun.testcases:
                 tc_name, tc_outcome = tc['name'], tc['outcome']
-                if opts.key in tc_name:
+                if opts.key is None or fnmatchcase(tc_name, opts.key):
                     prev_totals.add_name_outcome(tc_name, tc_outcome)
 
         prev_printed = False
@@ -139,6 +139,6 @@ if __name__=='__main__':
     #         print(testrun.to_json())
     #         testrun = b.full_testrun(testrun) # XXX load testcases
     #         for tc in testrun.testcases:
-    #             if opts.key in tc['name']:
+    #             if opts.key is None or fnmatchcase(tc_name, opts.key):
     #                 print ("  -", testrun.testcase_to_json(tc))
     #     print()
