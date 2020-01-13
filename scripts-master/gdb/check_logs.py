@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # WIP one-off -- Check which GDB test logs are present in a Bunsen git repo.
-usage = "check_logs.py [raw_logs=]<path>"
+usage = "+check_logs [raw_logs=]<path>"
 default_args = {'raw_logs':None, # raw buildbot log repository
                }
 

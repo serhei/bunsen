@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Compare the specified testruns.
-usage = "list_commits.py [baseline=]<bunsen_commit> [latest=]<bunsen_commit>\n" \
-        "                       [pretty=yes|no|html]"
+usage = "+diff_runs [baseline=]<bunsen_commit> [latest=]<bunsen_commit>\n" \
+        "                  [pretty=yes|no|html]"
 default_args = {'baseline':None, # baseline testrun to compare against
                 'latest':None,   # testrun to compare; TODO support multiple testruns?
                 'pretty':True,   # pretty-print info instead of showing JSON

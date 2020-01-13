@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # WIP -- Example parsing library for SystemTap DejaGNU test logs.
 # Based on some DejaGNU parsing code written in C++ by Martin Cermak.
-usage = "parse_dejagnu.py [logfile=]<path> [sumfile=]<path> [verbose=yes|no]"
+usage = "+parse_dejagnu [logfile=]<path> [sumfile=]<path> [verbose=yes|no]"
 default_args = {'logfile':None,  # SystemTap log file
                 'sumfile':None,  # SystemTap sum file
                 'verbose':False, # show less-important warnings

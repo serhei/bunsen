@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 # List testruns in the Bunsen repo.
-usage = "list_runs [[project=]<tags>] [[source_repo=]<path>] [verbose=yes|no] [pretty=yes|no|html]\n" \
-        "                 [sort=[least_]recent] [restrict=<num>]"
+usage = "+list_runs [[project=]<tags>] [[source_repo=]<path>] [verbose=yes|no] [pretty=yes|no|html]\n" \
+        "                  [sort=[least_]recent] [restrict=<num>]"
 default_args = {'project':None,     # restrict to testruns under <tags>
                 'source_repo':None, # add commit messages from source_repo
                 'verbose':False,    # show all fields in pretty-print view

@@ -4,7 +4,7 @@
 # project with testruns for the parent commit. Report all regressions
 # that did not already appear within the previous window_size (default
 # infinity) commits.
-usage = "new_regressions.py [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tags>] [window_size=<num>]"
+usage = "+new_regressions [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tags>] [window_size=<num>]"
 default_args = {'project':None,     # restrict to testruns under <tags>
                 'key':None,         # restrict to testcases matching <glob>
                 'source_repo':None, # scan commits from source_repo

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # WIP -- Example parsing library for GDB buildbot DejaGNU test logs.
-usage = "parse_dejagnu.py [logdir=]<path> [verbose=yes|no]"
+usage = "+parse_dejagnu [logdir=]<path> [verbose=yes|no]"
 default_args = {'logdir':None,   # buildbot log folder
                 'verbose':False, # show less-important warnings
                }

@@ -4,7 +4,7 @@
 # project with testruns for the parent commit. Print a summary of how
 # test results change for testcases whose name contains the specified
 # substring <key>.
-usage = "when_failed.py [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tags>]"
+usage = "+when_failed [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tags>]"
 default_args = {'project':None,     # restrict to testruns under <tags>
                 'key':None,         # restrict to testcases matching <glob>
                 'source_repo':None, # scan commits from source_repo

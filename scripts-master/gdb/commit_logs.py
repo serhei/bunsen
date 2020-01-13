@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # WIP -- Commit GDB test logs to a Bunsen git repo. Some assembly required.
-usage = "commit_logs.py [raw_logs=]<path> ... (see source code)"
+usage = "+commit_logs [raw_logs=]<path> ... (see source code)"
 default_args = {
 # - raw buildbot log repository
     'raw_logs':None,

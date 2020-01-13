@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Compare all testruns for two commits in the Git repo source_repo
 # and summarize regressions.
-usage = "diff_commits.py [baseline=]<source_commit> [latest=]<source_commit> [[source_repo=]<path>]\n" \
-        "                       [exclude={new,unresolved,f2f}] [pretty=yes|no|html]"
+usage = "+diff_commits [baseline=]<source_commit> [latest=]<source_commit> [[source_repo=]<path>]\n" \
+        "                     [exclude={new,unresolved,f2f}] [pretty=yes|no|html]"
 default_args = {'source_repo':None, # obtain commits from source_repo
                 'baseline':None,    # baseline commit to compare against
                 'latest':None,      # commit to compare
