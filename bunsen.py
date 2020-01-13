@@ -152,9 +152,12 @@ class Testlog:
             # Avoid reading _lines multiple times in different Cursor objects.
             return self._bunsen._testlog_readlines(self.path, self.commit_id)
         try:
+            data_stream = self._data_stream
             # TODOXXX Problem with GitPython blob.data_stream returning OStream.
-            #return self._data_stream.read().decode('utf8').split('\n')
-            return self._data_stream.readlines()
+            print("DEBUG", data_stream)
+            #if isinstance(data_stream, OStream): # TODOXXX
+            #    return data_stream.read().decode('utf8').split('\n')
+            return data_stream.readlines()
         except UnicodeDecodeError: # yes, it happens
             warn_print("UnicodeDecodeError in TestLog, path={}".format(self.path))
             return [""]

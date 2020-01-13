@@ -161,8 +161,7 @@ if __name__=='__main__':
                           optional_args=['source_repo'], defaults=default_args)
     out = get_formatter(b, opts)
 
-    # TODOXXX: Here and in other scripts, change to tags = opts.get_tags('project')
-    tags = b.tags if opts.project is None else [opts.project]
+    tags = opts.get_list('project', default=b.tags)
     repo = Repo(opts.source_repo)
     forward = False # TODOXXX Make this an option.
     window_size = None # TODOXXX Make this an option.

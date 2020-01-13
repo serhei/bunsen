@@ -98,7 +98,7 @@ if __name__=='__main__':
                           optional_args=['project'], defaults=default_args)
     out = get_formatter(b, opts)
 
-    tags = b.tags if opts.project is None else [opts.project]
+    tags = opts.get_list('project', default=b.tags)
     repo = Repo(opts.source_repo)
     forward = True if opts.sort == 'least_recent' else False
     header_fields = opts.get_list('header_fields', default=['arch', 'osver'])

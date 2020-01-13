@@ -24,7 +24,7 @@ if __name__=='__main__':
                           defaults=default_args)
     out = get_formatter(b, opts)
 
-    tags = b.tags if opts.project is None else [opts.project]
+    tags = opts.get_list('project', default=b.tags)
     upstream_repo = None if opts.source_repo is None \
         else Repo(opts.source_repo)
 

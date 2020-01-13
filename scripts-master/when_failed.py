@@ -71,7 +71,7 @@ if __name__=='__main__':
                           optional_args=['key', 'source_repo'], defaults=default_args)
     # TODO: out = get_formatter(b, opts)
 
-    tags = b.tags if opts.project is None else [opts.project]
+    tags = opts.get_list('project', default=b.tags)
     repo = Repo(opts.source_repo)
 
     testruns_map, hexsha_lens = index_source_commits(b, tags)
