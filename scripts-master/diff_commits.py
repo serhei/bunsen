@@ -61,7 +61,7 @@ def find_testruns(b, source_hexsha, msg='Finding testruns'):
         progress.close()
     return testruns
 
-def find_summary_fields(testrun, summary_fields, summary_vals):
+def _find_summary_fields(testrun, summary_fields, summary_vals):
     excluded = {'pass_count', 'fail_count', 'year_month', 'testcases'}
                # 'source_commit', 'version'} # XXX implied by choice of commit?
     found_fields = set()
@@ -79,6 +79,23 @@ def find_summary_fields(testrun, summary_fields, summary_vals):
         summary_fields.intersection_update(found_fields)
         if len(summary_fields) == 0:
             raise ValueError('No metadata overlap between selected testruns.')
+
+# XXX return pair (header_fields, summary_fields)
+def index_summary_fields(iterable):
+    summary_fields = set()
+    summary_vals = {}
+    for testrun in iterable:
+        _find_summary_fields(testrun, summary_fields, summary_vals)
+
+    # for displaying testruns:
+    header_fields = list(summary_fields - {'source_branch','version'})
+
+    # trim summary fields identical in all testruns
+    for field in set(summary_fields):
+        if summary_vals[field] is not None:
+            summary_fields.discard(field)
+
+    return header_fields, summary_fields
 
 def summary_tuple(testrun, summary_fields, exclude=set()):
     vals = []
@@ -178,7 +195,7 @@ def strip_tc(tc):
     if 'outcome' in tc: tc2['outcome'] = tc['outcome']
     if 'baseline_outcome' in tc: tc2['baseline_outcome'] = tc['baseline_outcome']
     return tc2
-    
+
 # TODO: Modify Bunsen Testrun class to support this directly and to
 # use customizations from the testcase's original Testrun.
 def testcase_to_json(tc):
@@ -206,20 +223,7 @@ if __name__=='__main__':
         msg='Finding testruns for latest {}'.format(opts.latest))
 
     # (1b) find summary fields present in all testruns
-    summary_fields = set()
-    summary_vals = {}
-    for testrun in baseline_runs:
-        find_summary_fields(testrun, summary_fields, summary_vals)
-    for testrun in latest_runs:
-        find_summary_fields(testrun, summary_fields, summary_vals)
-
-    # for displaying testruns:
-    header_fields = list(summary_fields - {'source_branch', 'version'})
-
-    # (1c) trim summary fields identical in all testruns
-    for field in set(summary_fields):
-        if summary_vals[field] is not None:
-            summary_fields.discard(field)
+    header_fields, summary_fields = index_summary_fields(baseline_runs+latest_runs)
 
     if True:
         out.message(baseline=opts.baseline, latest=opts.latest)
