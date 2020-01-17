@@ -3,7 +3,7 @@
 # branch (default master) of the Git repo source_repo.
 usage = "+list_commits [[source_repo=]<path>] [branch=<name>] [project=<tags>]\n" \
         "                     [verbose=yes|no] [compact=yes|no] [pretty=yes|no|html]\n" \
-        "                     [sort=[least]_recent] [restrict=<num>]\n" \
+        "                     [sort=[least_]recent] [restrict=<num>]\n" \
         "                     [header_fields=<field1>,<field2>,...]"
 default_args = {'source_repo':None,   # scan commits from source_repo
                 'branch':'master',    # scan commits in branch <name>
@@ -112,12 +112,14 @@ if __name__=='__main__':
                         .format(n_commits, n_testruns))
             break
 
+        # TODOXXX Improve commit_header formatting boilerplate here, and in +when_failed, +new_regressions
         info = dict()
         # TODOXXX Shorten commit_id automatically, rename to source_commit
         info['commit_id'] = commit.hexsha[:7]+'...'
         info['summary'] = commit.summary
 
         # compact output (HTML only) -- one line per commit
+        # TODOXXX Create a version of this for PrettyPrinter
         if opts.compact and opts.pretty == 'html':
             out.table_row(info, order=['commit_id','summary'], merge_header=True)
             for testrun in testruns:
