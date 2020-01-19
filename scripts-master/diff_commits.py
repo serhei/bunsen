@@ -8,6 +8,7 @@ default_args = {'source_repo':None, # obtain commits from source_repo
                 'latest':None,      # commit to compare
                 'exclude':None,     # list of exclusions (see below)
                 'pretty':True,      # pretty-print info instead of showing JSON
+                # TODO 'diff_baseline':True, # diff against probable baseline if same configuration is missing
                }
 
 # List of exclusions 'new', 'unresolved', 'f2f' (XXX values overridden by opts):
@@ -188,12 +189,14 @@ def get_tc_key(tc):
     return key
 
 # XXX only the fields for get_tc_key
-def strip_tc(tc):
+def strip_tc(tc, keep=set()):
     tc2 = {}
     if 'name' in tc: tc2['name'] = tc['name']
     if 'subtest' in tc: tc2['subtest'] = tc['subtest']
     if 'outcome' in tc: tc2['outcome'] = tc['outcome']
     if 'baseline_outcome' in tc: tc2['baseline_outcome'] = tc['baseline_outcome']
+    for k in keep:
+        if k in tc: tc2[k] = tc[k]
     return tc2
 
 # TODO: Modify Bunsen Testrun class to support this directly and to
@@ -201,6 +204,120 @@ def strip_tc(tc):
 def testcase_to_json(tc):
     dummy_testrun = bunsen.Testrun()
     return dummy_testrun.testcase_to_json(tc)
+
+def diff_all_testruns(baseline_runs, latest_runs,
+                      summary_fields, diff_baseline=True,
+                      diff_previous=None, # summary_key -> testrun
+                      diff_same=False, out=None):
+    # (2a) build maps of metadata->testrun to match testruns with similar configurations
+    # summary_key := (summary_tuple minus source_commit, version)
+    baseline_map = {} # summary_key -> testrun
+    for testrun in baseline_runs:
+        t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
+        # XXX a sign of duplicate runs in the repo :(
+        #assert t not in baseline_map # XXX would be kind of unforeseen
+        baseline_map[t] = testrun
+    previous_map = {} # summary_key -> testrun
+    if diff_previous is not None:
+        previous_map = diff_previous
+    latest_map = {} # summary_key -> testrun
+    for testrun in latest_runs:
+        t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
+        # XXX a sign of duplicate runs in the repo :(
+        #assert t not in latest_map # XXX would be kind of unforeseen
+        latest_map[t] = testrun
+
+    # (2b) identify baseline testrun from baseline_runs
+    # If diff_baseline is enabled, everything will be
+    # compared relative to this single baseline.
+    #
+    # Reasoning
+    # - prefer largest number of pass
+    # - prefer tuple present in both baseline_runs and latest_runs
+    #   (minus source_commit, version data)
+    best_overall = None
+    best_with_latest = None
+    for testrun in baseline_runs:
+        t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
+        if t in latest_map:
+            if best_with_latest is None \
+               or int(testrun['pass_count']) > int(best_with_latest['pass_count']):
+                best_with_latest = testrun
+        if best_overall is None \
+           or int(testrun['pass_count']) > int(best_overall['pass_count']):
+            best_overall = testrun
+
+    #if best_with_latest is not None:
+    #    best_overall = best_with_latest
+
+    # TODO: Consider splitting at this point into pick_comparisons(),
+    # diff_comparisons() to avoid having to pass out into this function.
+    if out is not None:
+        out.section()
+        out.message("Found {} baseline, {} latest runs, preferred baseline {}:" \
+                    .format(len(baseline_runs), len(latest_runs),
+                            best_overall.bunsen_commit_id))
+        out.show_testrun(best_overall, header_fields=header_fields, kind='baseline',
+                         show_all_details=False)
+
+    # (3) Compare relevant baseline & latest logs relative to baseline:
+    version_diffs = []    # regressions in latest wrt baseline
+    regression_diffs = [] # between latest targets which don't appear in baseline
+    t1 = summary_tuple(best_overall, summary_fields)
+    t1_exclude = summary_tuple(best_overall, summary_fields, exclude={'source_commit','version'})
+    for testrun in latest_runs:
+        t2 = summary_tuple(testrun, summary_fields)
+        t2_exclude = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
+        # XXX Try to identify a baseline run matching t2_exclude.
+        # This ensures that version_diffs and regression_diffs will not overlap.
+        # TODO: Ideally, we would compare both baseline *and* best_overall.
+        baseline, preferred_t1 = None, None
+        if diff_baseline:
+            baseline = best_overall
+            preferred_t1 = t1
+        if t2_exclude in previous_map:
+            baseline = previous_map[t2_exclude]
+            preferred_t1 = summary_tuple(baseline, summary_fields)
+        if t2_exclude in baseline_map:
+            baseline = baseline_map[t2_exclude]
+            preferred_t1 = summary_tuple(baseline, summary_fields)
+        if baseline is None:
+            continue
+        diff = diff_testruns(baseline, testrun)
+        diff.diff_order = 1
+        diff.baseline_summary_tuple = list(preferred_t1)
+        diff.summary_tuple = list(t2)
+        if len(diff.testcases) > 0:
+            version_diffs.append(diff)
+        #print("DEBUG COMPARED", str(preferred_t1)+"->"+str(t2))
+        #print(diff.to_json(pretty=True))
+    for baseline_testrun in baseline_runs:
+        # XXX This calculation always requires baseline, so
+        # diff_previous, diff_baseline flags are ignored.
+        t1_new = summary_tuple(baseline_testrun, summary_fields)
+        t1_new_exclude = summary_tuple(baseline_testrun, summary_fields, exclude={'source_commit','version'})
+        if t1_exclude not in latest_map or t1_new_exclude not in latest_map:
+            # TODO: perhaps report all differences as 'new' in this case?
+            continue # did not find a matching comparison in latest_runs
+        latest_baseline, latest_testrun = latest_map[t1_exclude], latest_map[t1_new_exclude]
+        t2 = summary_tuple(latest_baseline, summary_fields)
+        t2_new = summary_tuple(latest_testrun, summary_fields)
+        diff_baseline = diff_testruns(best_overall, baseline_testrun)
+        diff_latest = diff_testruns(latest_baseline, latest_testrun)
+        diff2 = diff_2or(diff_baseline, diff_latest)
+        diff2.diff_order = 2
+        diff2.baseline_comparison = [list(t1), list(t1_new)]
+        diff2.comparison = [list(t2), list(t2_new)]
+        if len(diff.testcases) > 0:
+            regression_diffs.append(diff2)
+        #print("DEBUG COMPARED", str(t2)+"->"+str(t2_new),
+        #      "MINUS", str(t1)+"->"+str(t1_new))
+        #print(diff2.to_json(pretty=True))
+
+    # TODO: Only compute regression_diffs when necessary.
+    if diff_same:
+        return version_diffs, regression_diffs
+    return version_diffs
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
@@ -235,93 +352,11 @@ if __name__=='__main__':
             out.show_testrun(testrun, header_fields=header_fields, kind='latest',
                              show_all_details=False)
 
-    # (2a) build maps of metadata->testrun to match testruns with similar configurations
-    # summary_key := (summary_tuple minus source_commit, version)
-    baseline_map = {} # summary_key -> testrun
-    for testrun in baseline_runs:
-        t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
-        # XXX a sign of duplicate runs in the repo :(
-        #assert t not in baseline_map # XXX would be kind of unforeseen
-        baseline_map[t] = testrun
-    latest_map = {} # summary_key -> testrun
-    for testrun in latest_runs:
-        t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
-        # XXX a sign of duplicate runs in the repo :(
-        #assert t not in latest_map # XXX would be kind of unforeseen
-        latest_map[t] = testrun
-
-    # (2b) identify baseline testrun for baseline_commit
-    # Everything will be compared relative to this single baseline.
-    #
-    # Reasoning
-    # - prefer largest number of pass
-    # - prefer tuple present in both baseline_runs and latest_runs
-    #   (minus source_commit, version data)
-    best_overall = None
-    best_with_latest = None
-    for testrun in baseline_runs:
-        t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
-        if t in latest_map:
-            if best_with_latest is None \
-               or int(testrun['pass_count']) > int(best_with_latest['pass_count']):
-                best_with_latest = testrun
-        if best_overall is None \
-           or int(testrun['pass_count']) > int(best_overall['pass_count']):
-            best_overall = testrun
-
-    #if best_with_latest is not None:
-    #    best_overall = best_with_latest
-
-    out.section()
-    out.message("Found {} baseline, {} latest runs, preferred baseline {}:" \
-                .format(len(baseline_runs), len(latest_runs),
-                        best_overall.bunsen_commit_id))
-    out.show_testrun(best_overall, header_fields=header_fields, kind='baseline',
-                     show_all_details=False)
-
-    # (3) Compare relevant baseline & latest logs relative to baseline:
-    version_diffs = []    # regressions in latest wrt baseline
-    regression_diffs = [] # between latest targets which don't appear in baseline
-    t1 = summary_tuple(best_overall, summary_fields)
-    t1_exclude = summary_tuple(best_overall, summary_fields, exclude={'source_commit','version'})
-    for testrun in latest_runs:
-        t2 = summary_tuple(testrun, summary_fields)
-        t2_exclude = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
-        # XXX Try to identify a baseline run matching t2_exclude.
-        # This ensures that version_diffs and regression_diffs will not overlap.
-        # TODO: Ideally, we would compare both baseline *and* best_overall.
-        baseline, preferred_t1 = best_overall, t1
-        if t2_exclude in baseline_map:
-            baseline = baseline_map[t2_exclude]
-            preferred_t1 = summary_tuple(baseline, summary_fields)
-        diff = diff_testruns(baseline, testrun)
-        diff.diff_order = 1
-        diff.baseline_summary_tuple = list(preferred_t1)
-        diff.summary_tuple = list(t2)
-        if len(diff.testcases) > 0:
-            version_diffs.append(diff)
-        #print("DEBUG COMPARED", str(preferred_t1)+"->"+str(t2))
-        #print(diff.to_json(pretty=True))
-    for baseline_testrun in baseline_runs:
-        t1_new = summary_tuple(baseline_testrun, summary_fields)
-        t1_new_exclude = summary_tuple(baseline_testrun, summary_fields, exclude={'source_commit','version'})
-        if t1_exclude not in latest_map or t1_new_exclude not in latest_map:
-            # TODO: perhaps report all differences as 'new' in this case?
-            continue # did not find a matching comparison in latest_runs
-        latest_baseline, latest_testrun = latest_map[t1_exclude], latest_map[t1_new_exclude]
-        t2 = summary_tuple(latest_baseline, summary_fields)
-        t2_new = summary_tuple(latest_testrun, summary_fields)
-        diff_baseline = diff_testruns(best_overall, baseline_testrun)
-        diff_latest = diff_testruns(latest_baseline, latest_testrun)
-        diff2 = diff_2or(diff_baseline, diff_latest)
-        diff2.diff_order = 2
-        diff2.baseline_comparison = [list(t1), list(t1_new)]
-        diff2.comparison = [list(t2), list(t2_new)]
-        if len(diff.testcases) > 0:
-            regression_diffs.append(diff2)
-        #print("DEBUG COMPARED", str(t2)+"->"+str(t2_new),
-        #      "MINUS", str(t1)+"->"+str(t1_new))
-        #print(diff2.to_json(pretty=True))
+    # (2,3) compare relevant baseline & latest logs
+    version_diffs, regression_diffs = \
+        diff_all_testruns(baseline_runs, latest_runs, summary_fields,
+                          diff_same=True, # XXX compute 2or diff
+                          out=out)
 
     # (4) Determine which comparisons each regression appears in.
     # Do this by preparing a merged regression report.
