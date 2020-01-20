@@ -23,6 +23,7 @@ default_args = {'project':None,         # restrict to testruns under <tags>
                 'verbose':False,        # report progress of 'training' (# testcases added vs. merged)
                 # TODO: add options restrict, restrict_training
                 # TODO: add option pretty=yes/html
+                'pretty':'yes',
                 # TODO: add option profile ??
                }
 
