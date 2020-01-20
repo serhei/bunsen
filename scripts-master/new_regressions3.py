@@ -314,6 +314,10 @@ class ChangeSet:
             self._remove_bounds(prev_change, prev_change_ix)
             prev_change.merge(single_change, comparison_ix)
             self._add_bounds(prev_change, prev_change_ix)
+            commit_id = single_change.commit_pair[1]
+            if commit_id not in self.num_skipped_changes:
+                self.num_skipped_changes[commit_id] = 0
+            self.num_skipped_changes[commit_id] += 1
             # update stats
             self.num_merged += 1
         self.num_seen += 1
@@ -335,6 +339,8 @@ class ChangeSet:
         return change_list
 
     def skipped_changes(self, commit_id):
+        if commit_id not in self.num_skipped_changes:
+            return 0
         return self.num_skipped_changes[commit_id]
 
     def get_age(self, change):
