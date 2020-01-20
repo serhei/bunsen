@@ -522,18 +522,20 @@ if __name__=='__main__':
             break
         to_show -= 1
 
-        change_list = cs.significant_changes(commit.hexsha)
-        if len(change_list) == 0 and cs.skipped_changes(commit.hexsha) == 0:
-            continue
-
-        assert(commit.hexsha in cs.known_commits)
-
+        # XXX should still print a commit we don't have results for,
+        # in order to provide the necessary context:
         info = dict()
         info['commit_id'] = commit.hexsha[:7]+'...'
         info['summary'] = commit.summary
         out.section(minor=True)
         out.message(commit_id=info['commit_id'],
                     summary=info['summary'])
+
+        change_list = cs.significant_changes(commit.hexsha)
+        if len(change_list) == 0 and cs.skipped_changes(commit.hexsha) == 0:
+            continue
+
+        assert(commit.hexsha in cs.known_commits)
 
         for change in change_list:
             if opts.key is not None and not fnmatchcase(change.tc['name'], key): continue
@@ -560,7 +562,7 @@ if __name__=='__main__':
             # TODO: colorize depending on change_kind
             # TODO: colorize depending on whether last occurrence is fix or fail
         if cs.skipped_changes(commit.hexsha) > 0:
-            out.message("{} changes skipped as similar to other changes" \
+            out.message("+ {} changes skipped as similar to other changes" \
                         .format(cs.skipped_changes(commit.hexsha)))
 
     out.finish()
