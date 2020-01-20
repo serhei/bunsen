@@ -7,6 +7,9 @@ import sys
 import html
 from bunsen import Testrun
 
+# TODO: def short_hexsha(commit): ...
+# replace commit.hexsha[:7] -> short_hexsha(commit)
+
 uninteresting_fields = {'year_month',
                         'bunsen_testruns_branch',
                         'bunsen_testlogs_branch'}

@@ -33,7 +33,7 @@ profiler = None
 from common.format_output import get_formatter
 from list_commits import index_source_commits, iter_history, iter_adjacent
 from diff_runs import diff_testruns, fail_outcomes
-from diff_commits import get_tc_key, find_summary_fields, summary_tuple
+from diff_commits import get_tc_key, _find_summary_fields, summary_tuple
 
 # TODOXXX merge to other scripts, harmonize with append_map() type functions
 def pick_comparisons(summary_fields, baseline_runs, latest_runs,
@@ -173,7 +173,7 @@ if __name__=='__main__':
         iter_history(b, repo, testruns_map, hexsha_lens,
                      forward=True, branch=opts.branch):
         for testrun in testruns:
-            find_summary_fields(testrun, summary_fields, summary_vals)
+            _find_summary_fields(testrun, summary_fields, summary_vals)
             
     # for displaying testruns:
     header_fields = list(summary_fields - {'source_branch', 'version'})
