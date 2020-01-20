@@ -63,6 +63,15 @@ def index_source_commits(b, tags):
             append_map(testruns_map, hexsha, testrun)    
     return testruns_map, hexsha_lens
 
+def iter_testruns(b, repo, testruns_map=None, hexsha_lens=None,
+                  forward=False, branch='master'):
+    for commit in repo.iter_commits(branch, reverse=forward):
+        testruns = find_testruns(commit.hexsha, testruns_map, hexsha_lens)
+        if testruns is None:
+            continue
+        for testrun in testruns:
+            yield testrun
+
 def iter_history(b, repo, testruns_map=None, hexsha_lens=None,
                  forward=False, include_empty_commits=False,
                  branch='master'):

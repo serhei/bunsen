@@ -208,7 +208,8 @@ def testcase_to_json(tc):
 def diff_all_testruns(baseline_runs, latest_runs,
                       summary_fields, diff_baseline=True,
                       diff_previous=None, # summary_key -> testrun
-                      diff_same=False, out=None):
+                      diff_same=False, key=None,
+                      out=None):
     # (2a) build maps of metadata->testrun to match testruns with similar configurations
     # summary_key := (summary_tuple minus source_commit, version)
     baseline_map = {} # summary_key -> testrun
@@ -283,7 +284,7 @@ def diff_all_testruns(baseline_runs, latest_runs,
             preferred_t1 = summary_tuple(baseline, summary_fields)
         if baseline is None:
             continue
-        diff = diff_testruns(baseline, testrun)
+        diff = diff_testruns(baseline, testrun, key=key)
         diff.diff_order = 1
         diff.baseline_summary_tuple = list(preferred_t1)
         diff.summary_tuple = list(t2)
@@ -304,7 +305,7 @@ def diff_all_testruns(baseline_runs, latest_runs,
         t2_new = summary_tuple(latest_testrun, summary_fields)
         diff_baseline = diff_testruns(best_overall, baseline_testrun)
         diff_latest = diff_testruns(latest_baseline, latest_testrun)
-        diff2 = diff_2or(diff_baseline, diff_latest)
+        diff2 = diff_2or(diff_baseline, diff_latest, key=key)
         diff2.diff_order = 2
         diff2.baseline_comparison = [list(t1), list(t1_new)]
         diff2.comparison = [list(t2), list(t2_new)]

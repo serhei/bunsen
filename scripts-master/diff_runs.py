@@ -152,7 +152,7 @@ def diff_2or_testcases(outdiff2, baseline_testcases, latest_tc):
             add_2or_origins(tc2, 'baseline_origins', tc1)
             outdiff2.testcases.append(tc2)
 
-def diff_2or(diff_baseline, diff_latest):
+def diff_2or(diff_baseline, diff_latest, key=None):
     '''
     2nd-order diff: changes in diff_latest that
     don't also appear in diff_baseline.
@@ -170,6 +170,7 @@ def diff_2or(diff_baseline, diff_latest):
 
     for tc1 in diff_baseline.testcases:
         name = tc1['name']
+        if key is not None and not fnmatchcase(name, key): continue
         append_map(tc1_map, name, tc1)
         if 'subtest' in tc1:
             name_plus_subtest = name + '+' + subtest_name(tc1['subtest'])
@@ -179,6 +180,7 @@ def diff_2or(diff_baseline, diff_latest):
 
     for tc2 in diff_latest.testcases:
         name = tc2['name']
+        if key is not None and not fnmatchcase(name, key): continue
         name_plus_subtest = None
         if 'subtest' in tc2:
             name_plus_subtest = name + '+' + subtest_name(tc2['subtest'])
