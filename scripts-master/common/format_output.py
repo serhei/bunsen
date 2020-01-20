@@ -170,6 +170,8 @@ def select_class(field, val):
         return 'bcommit'
     elif field == 'source_commit':
         return 'scommit'
+    elif field == 'subtest':
+        return 'subtest'
     return None
 
 class HTMLTable:
@@ -328,6 +330,7 @@ class HTMLFormatter:
 .n { background-color: lavender; }
 .bcommit { font-weight: bold; color: darkslateblue; }
 .scommit { font-weight: bold; color: darkslategray; }
+.subtest { width: 40%; white-space: pre-wrap; }
 .h { writing-mode: tb-rl; width: 20px; font-size: xx-small; }
 td,th { background-color: white; text-align: left;
         padding: 3px; white-space: nowrap; }
