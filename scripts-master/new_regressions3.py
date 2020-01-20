@@ -6,12 +6,11 @@
 # novelty_threshold (default infinity) commits. More precisely, report
 # the first occurrence of a failed change ('first failed') and the
 # last occurrence of a fixed change ('last fixed').
-usage = "+new_regressions [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tags>] [novelty_threshold=<num>] [sort=[least_]recent] [show_both_ends=no|yes] [diff_earlier=yes|no] [diff_baseline=no|yes] [cached_data=<path>] [rebuild_cache=no|yes]..."
+usage = "+new_regressions [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tags>] [novelty_threshold=<num>] [sort=[least_]recent] [show_both_ends=no|yes] [diff_earlier=yes|no] [diff_baseline=no|yes] [cached_data=<path>] [rebuild_cache=no|yes] [restrict_training=<num>] [restrict=<num>] ..."
 default_args = {'project':None,         # restrict to testruns under <tags>
                 'key':None,             # restrict to testcases matching <glob>
                 'source_repo':None,     # scan commits from source_repo
                 'branch':'master',      # scan commits in branch <name>
-                # TODO: accept 'infinity' as a value for novelty_threshold
                 'novelty_threshold':-1, # distance at which to merge changes (-1 denotes infinity)
                 'sort':'recent',        # sort by date of commit
                 'show_both_ends':False, # also consider 'last failed' and 'first fixed'
@@ -21,11 +20,13 @@ default_args = {'project':None,         # restrict to testruns under <tags>
                 'cached_data':None,     # <path> of JSON cached data from prior runs
                 'rebuild_cache':False,  # compute each diff even if already present in cache
                 'verbose':False,        # report progress of 'training' (# testcases added vs. merged)
-                # TODO: add options restrict, restrict_training
+                'restrict_training':-1, # limit the number of scanned commits (-1 denotes unlimited)
+                'restrict':-1,          # limit the number of displayed commits (-1 denotes unlimited)
                 # TODO: add option pretty=yes/html
-                'pretty':'yes',
+                'pretty':True,
                 # TODO: add option profile ??
                }
+# TODO: accept 'infinity/unlimited' as a value for novelty_threshold, restrict_training, restrict
 
 # TODOXXX Some stats on how much information is filtered out:
 # - 216 commits from GDB project, novelty_threshold=infinity, summary ? changes of ? total
@@ -35,6 +36,7 @@ default_args = {'project':None,         # restrict to testruns under <tags>
 
 import sys
 import os
+import json
 import bunsen
 from git import Repo
 
@@ -172,10 +174,10 @@ class ChangeSet:
 
         if cachefile is not None and os.path.isfile(cachefile):
             input_file = open(cachefile, 'r')
-            json_data = json.loads(cachefile.read().decode('utf8'))
+            # TODO: fail with a graceful warning on empty/incomplete file
+            sd = json.loads(input_file.read())
             input_file.close()
-
-            pass # TODO parse JSON, use _cache_change, handle opts.rebuild_cache option
+            self._load_data(sd)
 
         self.merged_changes = []      # list of Change, computed
         self.num_skipped_changes = {} # maps commit_id -> int, computed
@@ -203,7 +205,7 @@ class ChangeSet:
         if '*' not in self.known_keys[commit_pair]:
             self.known_keys[commit_pair].append(key)
 
-    def _cache_change(self, single_change, comparison_ix):
+    def _cache_change(self, single_change, comparison_ix=None):
         assert(single_change.is_single)
         if single_change.tc_key not in self.single_change_map:
             ix = len(self.all_changes)
@@ -214,9 +216,10 @@ class ChangeSet:
             self.single_change_map[single_change.tc_key] = ix
         else:
             ix = self.single_change_map[single_change.tc_key]
-        if single_change.commit_pair not in self.known_diffs:
-            self.known_diffs[single_change.commit_pair] = []
-        self.known_diffs[single_change.commit_pair].append((ix,comparison_ix))
+        if comparison_ix is not None:
+            if single_change.commit_pair not in self.known_diffs:
+                self.known_diffs[single_change.commit_pair] = []
+            self.known_diffs[single_change.commit_pair].append((ix,comparison_ix))
 
     # XXX call in forward order for all commit_pairs across a branch!
     def _merge_changes(self, commit_pair):
@@ -230,17 +233,21 @@ class ChangeSet:
             # TODO: perhaps exclude cached changes from the add_change() stats update?
             self.add_change(sc, comparison, already_cached=True)
 
-    def build_merged_changes(self, b, repo, testruns_map, hexsha_lens, branch='master'):
+    def build_merged_changes(self, b, repo, testruns_map, hexsha_lens, branch='master', to_skip=0):
         self._commit_no = 0
         self.recent_changes = {}
         self.num_kept, self.num_seen = 0, 0
         for commit, testruns, next_commit, next_testruns in \
             iter_adjacent(b, repo, testruns_map, hexsha_lens,
                           forward=True, branch=branch):
+            if to_skip > 0:
+                to_skip -= 1
+                continue
             self.num_added, self.num_merged = 0, 0
             # XXX first, merge already_cached changes
             self._merge_changes((next_commit.hexsha,commit.hexsha))
             # XXX next, allow new changes to be added
+            #print("DEBUG yield baseline", commit.hexsha, commit.summary, file=sys.stderr)
             yield commit, testruns, next_commit, next_testruns
             self.known_commits.add(next_commit.hexsha)
             self._commit_no += 1
@@ -253,7 +260,7 @@ class ChangeSet:
 
     # XXX updates changes_starting, changes_ending
     def _remove_bounds(self, change, change_ix):
-        start_commit, end_commit = change.first_commit_pair[1], change.commit_pair[1]
+        start_commit, end_commit = change.first_commit_pair[0], change.commit_pair[0]
         if start_commit in self.changes_starting:
             self.changes_starting[start_commit].discard(change_ix)
         if end_commit in self.changes_ending:
@@ -261,7 +268,7 @@ class ChangeSet:
 
     # XXX updates changes_starting, changes_ending
     def _add_bounds(self, change, change_ix):
-        start_commit, end_commit = change.first_commit_pair[1], change.commit_pair[1]
+        start_commit, end_commit = change.first_commit_pair[0], change.commit_pair[0]
         if start_commit not in self.changes_starting:
             self.changes_starting[start_commit] = set()
         self.changes_starting[start_commit].add(change_ix)
@@ -314,7 +321,7 @@ class ChangeSet:
             self._remove_bounds(prev_change, prev_change_ix)
             prev_change.merge(single_change, comparison_ix)
             self._add_bounds(prev_change, prev_change_ix)
-            commit_id = single_change.commit_pair[1]
+            commit_id = single_change.commit_pair[0]
             if commit_id not in self.num_skipped_changes:
                 self.num_skipped_changes[commit_id] = 0
             self.num_skipped_changes[commit_id] += 1
@@ -348,8 +355,55 @@ class ChangeSet:
         assert(end_commit_no <= self.max_commit_no)
         return self.max_commit_no-end_commit_no
 
+    def _load_data(self, sd):
+        for change_d in sd['all_changes']:
+            # XXX we would need to deserialize change.tc here
+            # if non-string (Cursor) fields were not all stripped
+            change = Change(change_d['tc'], change_d['commit_pair'])
+            self._cache_change(change)
+        self.all_comparisons = sd['all_comparisons']
+        for kk in sd['known_keys']:
+            commit_pair = (kk[0],kk[1])
+            vals = list(kk[2:])
+            self.known_keys[commit_pair] = vals
+        for kd in sd['known_diffs']:
+            commit_pair = (kd[0],kd[1])
+            vals = list(kd[2:])
+            self.known_diffs[commit_pair] = vals
+            self.known_commits.add(kd[0]) # XXX kd[0] is latest
+
     def save_data(self, cachefile):
-        pass # TODO produce JSON
+        sd = {}
+        sd['all_changes'] = []
+        for change in self.all_changes:
+            assert(change.is_single)
+            # XXX we would need to serialize change.tc here
+            # if non-string (Cursor) fields were not all stripped
+            change_d = {'tc':change.tc, 'commit_pair':change.commit_pair} # XXX other fields not needed
+            sd['all_changes'].append(change_d)
+        sd['all_comparisons'] = self.all_comparisons # can be saved to JSON directly
+        # XXX known_keys must be encoded as json does not allow tuple keys
+        known_keys_list = []
+        for commit_pair, vals in self.known_keys.items():
+            kk = []
+            kk += commit_pair
+            kk += vals
+            known_keys_list.append(kk)
+        sd['known_keys'] = known_keys_list
+        # XXX known_diffs must be encoded as json does not allow tuple keys
+        known_diffs_list = []
+        for commit_pair, vals in self.known_diffs.items():
+            kd = []
+            kd += commit_pair
+            kd += vals
+            known_diffs_list.append(kd)
+        sd['known_diffs'] = known_diffs_list
+
+        #print("DEBUG", sd, file=sys.stderr)
+        output_file = open(cachefile, 'w')
+        # TODO use json.dumps() before opening output_file in case of error
+        json.dump(sd, output_file)
+        output_file.close()
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
@@ -376,20 +430,29 @@ if __name__=='__main__':
     for commit, testruns, next_commit, next_testruns in \
         iter_adjacent(b, repo, testruns_map, hexsha_lens,
                       forward=True, branch=opts.branch):
-        commit_pair = (next_commit.hexsha, commit.hexsha)
-        if not opts.rebuild_cache \
-           and next_commit.hexsha in cs.known_commits \
-           and cs.has_key(commit_pair, opts.key):
-            continue
+        # TODO XXX include cached data in progress,
+        # else opts.restrict calculation will be thrown off?
+        # commit_pair = (next_commit.hexsha, commit.hexsha)
+        # if not opts.rebuild_cache \
+        #    and next_commit.hexsha in cs.known_commits \
+        #    and cs.has_key(commit_pair, opts.key):
+        #     continue
         num_pairs += 1
     total_pairs = num_pairs
-    # TODO: implement options to restrict analysis
     progress = None
+
+    to_skip = 0
+    if opts.restrict_training >= 0:
+        # XXX when opts.restrict_training > 0, analyze the *last* N commits:
+        to_skip = num_pairs - opts.restrict_training
+        num_pairs = opts.restrict_training
 
     # Store the most recent testrun for each configuration:
     recent_testruns = {} if opts.diff_earlier else None # summary_key -> testrun
+    # TODO: Use this to track which testcases have been fixed or not?
     for commit, testruns, next_commit, next_testruns in \
-        cs.build_merged_changes(b, repo, testruns_map, hexsha_lens, branch=opts.branch):
+        cs.build_merged_changes(b, repo, testruns_map, hexsha_lens, branch=opts.branch,
+                                to_skip=to_skip):
         if progress is None:
             progress = tqdm.tqdm(iterable=None, desc='Finding regressions',
                                  total=num_pairs, leave=True, unit='commit')
@@ -397,12 +460,24 @@ if __name__=='__main__':
         if not opts.rebuild_cache \
            and next_commit.hexsha in cs.known_commits \
            and cs.has_key(commit_pair, opts.key):
+            # XXX include cached data in progress
+            progress.update(n=1)
+            if opts.verbose:
+                print("added {} and merged {} changes, summary size {}/{}" \
+                      .format(cs.num_added, cs.num_merged, cs.num_kept, cs.num_seen),
+                      file=sys.stderr)
+                print("- latest {} {}\n- baseline {} {}" \
+                      .format(next_commit.hexsha[:7], next_commit.summary,
+                              commit.hexsha[:7], commit.summary),
+                      file=sys.stderr)
             continue
 
+        #print("DEBUG reading testruns", file=sys.stderr)
         # TODO: b.testrun() should have some limited caching to avoid redundancy here
         testruns = load_full_runs(b, testruns)
         next_testruns = load_full_runs(b, next_testruns)
 
+        #print("DEBUG diffing testruns", file=sys.stderr)
         diffs = diff_all_testruns(testruns, next_testruns, summary_fields,
                                   diff_previous=recent_testruns,
                                   diff_baseline=opts.diff_baseline,
@@ -413,6 +488,7 @@ if __name__=='__main__':
                 t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
                 recent_testruns[t] = testrun # XXX overwrite earlier run with the same configuration
 
+        #print("DEBUG adding/merging changes", file=sys.stderr)
         for diff in diffs:
             comparison = get_comparison(diff)
             for tc in diff.testcases:
@@ -435,11 +511,21 @@ if __name__=='__main__':
     if progress is not None:
         progress.close()
 
+    to_show = -1
+    if opts.restrict >= 0:
+        to_show = opts.restrict
+
     # (2) Display regressions over specified novelty_threshold:
     for commit in repo.iter_commits(opts.branch, forward=forward):
+        if opts.restrict >= 0 and to_show <= 0:
+            break
+        to_show -= 1
+
         change_list = cs.significant_changes(commit.hexsha)
         if len(change_list) == 0 and cs.skipped_changes(commit.hexsha) == 0:
             continue
+
+        assert(commit.hexsha in cs.known_commits)
 
         info = dict()
         info['commit_id'] = commit.hexsha[:7]+'...'
@@ -450,17 +536,26 @@ if __name__=='__main__':
 
         for change in change_list:
             if opts.key is not None and not fnmatchcase(change.tc['name'], key): continue
-            # TODOXXX show <baseline_outcome>-><outcome> <num_merged>times <name> <subtest> <change_kind>={failing,recently_fixed,fixed} + details:
-            # - first occurs in: <commit_id> <summary>
-            # - last occurs in: <commit_id> <summary>
-            # - across: <dist> commits
-            # - seen in comparisons: <comparisons>
+            # XXX show <baseline_outcome>-><outcome> <name> <subtest> <num_occurrences> <change_kind> + details:
+            # - first_occurrence: <commit_id> <summary>
+            # - last_occurrence: <commit_id> <summary>
+            # - occurrences_span: <dist> commits
+            # - comparisons: <comparisons>
             # where <change_kind> in {failing,recently_fixed,fixed}
-            # TODOXXX compute dist using change.commit_nos / change.span()
-            # TODOXXX compute recently_fixed using cs.get_age(change)
-            out.show_testcase(None, change.tc, num_merged="{} times".format(regression.num_merged))
-            # TODO: optionally, provide more detail on when / how many times each comparison was seen
-            # TODO: identify corresponding failing/fixed change
+            #change_kind = "TODO" # TODOXXX compute change_kind using cs.get_age(change)
+            first_commit = repo.commit(change.first_commit_pair[0])
+            first_occurrence = "{} {}".format(first_commit.hexsha[:7], first_commit.summary)
+            last_commit = repo.commit(change.commit_pair[0])
+            last_occurrence = "{} {}".format(last_commit.hexsha[:7], last_commit.summary)
+            #comparisons_str = "TODO" # TODOXXX compute using change.comparisons, cs.all_comparisons, ...
+            out.show_testcase(None, change.tc, header_fields=['num_occurrences'], # header_fields=['num_occurrences', 'change_kind'],
+                              num_occurrences=change.num_merged,
+                              #change_kind=change_kind,
+                              first_occurrence=first_occurrence,
+                              last_occurrence=last_occurrence,
+                              occurrences_span="{} commits".format(change.span))
+                              #comparisons=comparisons_str)
+            # TODO: match to corresponding failing/fixed change for each configuration
             # TODO: colorize depending on change_kind
             # TODO: colorize depending on whether last occurrence is fix or fail
         if cs.skipped_changes(commit.hexsha) > 0:
@@ -470,4 +565,5 @@ if __name__=='__main__':
     out.finish()
 
     # (3) Save cached data:
-    cs.save_data(opts.cached_data)
+    if opts.cached_data is not None:
+        cs.save_data(opts.cached_data)
