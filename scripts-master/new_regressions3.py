@@ -6,7 +6,7 @@
 # novelty_threshold (default infinity) commits. More precisely, report
 # the first occurrence of a failed change ('first failed') and the
 # last occurrence of a fixed change ('last fixed').
-usage = "+new_regressions [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tags>] [novelty_threshold=<num>] [sort=[least_]recent] [show_both_ends=no|yes] [diff_earlier=yes|no] [diff_baseline=no|yes] [cached_data=<path>] [rebuild_cache=no|yes] [restrict_training=<num>] [restrict=<num>] ..."
+usage = "+new_regressions [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tags>] [novelty_threshold=<num>] [sort=[least_]recent] [show_both_ends=no|yes] [diff_earlier=yes|no] [diff_baseline=no|yes] [cached_data=<path>] [update_cache=yes|no] [rebuild_cache=no|yes] [restrict_training=<num>] [restrict=<num>] ..."
 default_args = {'project':None,         # restrict to testruns under <tags>
                 'key':None,             # restrict to testcases matching <glob>
                 'source_repo':None,     # scan commits from source_repo
@@ -18,6 +18,7 @@ default_args = {'project':None,         # restrict to testruns under <tags>
                 'diff_earlier':True,    # diff against earlier commit if same configuration is missing
                 'diff_baseline':False,  # diff against probable baseline if same configuration is missing
                 'cached_data':None,     # <path> of JSON cached data from prior runs
+                'update_cache':True,    # update cache with previously unseen testruns
                 'rebuild_cache':False,  # compute each diff even if already present in cache
                 'verbose':False,        # report progress of 'training' (# testcases added vs. merged)
                 'restrict_training':-1, # limit the number of scanned commits (-1 denotes unlimited)
@@ -565,5 +566,5 @@ if __name__=='__main__':
     out.finish()
 
     # (3) Save cached data:
-    if opts.cached_data is not None:
+    if opts.cached_data is not None and opts.update_cache:
         cs.save_data(opts.cached_data)
