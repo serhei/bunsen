@@ -18,6 +18,7 @@ default_args = {'project':None,         # restrict to testruns under <tags>
                 'diff_earlier':True,    # diff against earlier commit if same configuration is missing
                 'diff_baseline':False,  # diff against probable baseline if same configuration is missing
                 'cached_data':None,     # <path> of JSON cached data from prior runs
+                # TODO default update_cache to no ??
                 'update_cache':True,    # update cache with previously unseen testruns
                 'rebuild_cache':False,  # compute each diff even if already present in cache
                 'verbose':False,        # report progress of 'training' (# testcases added vs. merged)
@@ -29,11 +30,15 @@ default_args = {'project':None,         # restrict to testruns under <tags>
                }
 # TODO: accept 'infinity/unlimited' as a value for novelty_threshold, restrict_training, restrict
 
-# TODOXXX Some stats on how much information is filtered out:
-# - 216 commits from GDB project, novelty_threshold=infinity, summary ? changes of ? total
-# - 216 commits from GDB project, novelty_threshold=50, summary 8539 changes of 37784 total (filter out 77.4%) over 1h15min
-# - TODOXXX ? commits from SystemTap project, novelty_threshold=infinity, summary ? changes of ? total
-# - ? commits from SystemTap project, novelty_threshold=50, summary ? changes of ? total
+# XXX Some stats on how much information is filtered out:
+# - 216 commit_pairs from GDB project, novelty_threshold=50, summary 8539 changes of 37784 total (filter out 77.4%) over 3h20min (full rebuild)
+# - 216 commit_pairs from GDB project, novelty_threshold=infinity, summary 8336 changes of 37784 total (filter out 77.9%) over 40sec (from 3.1MB of cached data)
+# - ... novelty_threshold=25 -> summary 8802/37784 (76.7%)
+# - ... novelty_threshold=10 -> summary 9456/37784 (74.9%)
+# - ... novelty_threshold=5 -> summary 12394/37784 (67.2%)
+# - 339 commit_pairs from SystemTap project, novelty_threshold=50, summary 14458 changes of 51157 total (filter out 71.7%) over 1h18min (full rebuild)
+# - 339 commit_pairs from SystemTap project, novelty_threshold=infinity, summary 9307 changes of 51157 total (filter out 81.8%) over 45sec (from 5.2MB of cached data)
+# - ... novelty_threshold=25 -> summary 16411/51157 (67.9%)
 
 import sys
 import os
