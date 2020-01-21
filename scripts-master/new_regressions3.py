@@ -512,16 +512,21 @@ if __name__=='__main__':
     if progress is not None:
         progress.close()
 
+    # (2) Save cached data:
+    if opts.cached_data is not None and opts.update_cache:
+        cs.save_data(opts.cached_data)
+
+    # (3) Display regressions over specified novelty_threshold:
     to_show = -1
     if opts.restrict >= 0:
         to_show = opts.restrict
 
-    # (2) Display regressions over specified novelty_threshold:
     for commit in repo.iter_commits(opts.branch, forward=forward):
         if opts.restrict >= 0 and to_show <= 0:
             break
         to_show -= 1
 
+        # TODO: only if we've started displaying non-vacuous commits?
         # XXX should still print a commit we don't have results for,
         # in order to provide the necessary context:
         info = dict()
@@ -560,13 +565,9 @@ if __name__=='__main__':
                               #comparisons=comparisons_str)
             # TODO: match to corresponding failing/fixed change for each configuration
             # TODO: colorize depending on change_kind
-            # TODO: colorize depending on whether last occurrence is fix or fail
+            # TODOXXX: colorize depending on whether last occurrence is fix or fail
         if cs.skipped_changes(commit.hexsha) > 0:
             out.message("+ {} changes skipped as similar to other changes" \
                         .format(cs.skipped_changes(commit.hexsha)))
 
     out.finish()
-
-    # (3) Save cached data:
-    if opts.cached_data is not None and opts.update_cache:
-        cs.save_data(opts.cached_data)

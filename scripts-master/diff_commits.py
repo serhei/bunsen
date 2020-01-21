@@ -184,7 +184,7 @@ def get_tc_key(tc):
     key = ''
     key += tc['name'] + '+'
     key += ('null' if 'subtest' not in tc else tc['subtest']) + '+'
-    key += tc['outcome'] + '+'
+    key += ('null' if tc['outcome'] is None else tc['outcome']) + '+'
     key += ('null' if tc['baseline_outcome'] is None else tc['baseline_outcome'])
     return key
 

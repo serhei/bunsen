@@ -124,12 +124,13 @@ class PrettyPrinter:
         extra = field_summary(info, header_fields)
         if len(extra) > 0: extra = " " + extra
         tc_outcome = "null" if 'outcome' not in info else info['outcome']
+        if tc_outcome is None: tc_outcome = "<none>"
         if 'baseline_outcome' in info:
             tc_baseline = info['baseline_outcome']
             if tc_baseline is None: tc_baseline = "<none>"
-            tc_outcome = tc_baseline + "=>" + tc_outcome
-        tc_name = "<unknown>" if 'name' not in info else info['name']
-        tc_subtest = "" if 'subtest' not in info else " " + info['subtest'].strip()
+            tc_outcome = str(tc_baseline) + "=>" + str(tc_outcome)
+        tc_name = "<unknown>" if 'name' not in info else str(info['name'])
+        tc_subtest = "" if 'subtest' not in info else " " + str(info['subtest'].strip())
         print("* {} {}{}{}".format(tc_outcome, tc_name, tc_subtest, extra))
 
         # details
@@ -482,12 +483,13 @@ function details(s) {
         info = testrun.testcase_to_json(info, as_dict=True)
 
         tc_outcome = "null" if 'outcome' not in info else info['outcome']
+        if tc_outcome is None: tc_outcome = "<none>"
         if 'baseline_outcome' in info:
             tc_baseline = info['baseline_outcome']
             if tc_baseline is None: tc_baseline = "null"
-            tc_outcome = tc_baseline + "=>" + tc_outcome
-        tc_name = "<unknown>" if 'name' not in info else info['name']
-        tc_subtest = "" if 'subtest' not in info else info['subtest'].strip()
+            tc_outcome = str(tc_baseline) + "=>" + str(tc_outcome)
+        tc_name = "<unknown>" if 'name' not in info else str(info['name'])
+        tc_subtest = "" if 'subtest' not in info else str(info['subtest'].strip())
 
         # header
         row = dict()
