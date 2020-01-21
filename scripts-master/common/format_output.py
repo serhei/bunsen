@@ -339,6 +339,7 @@ td.clicky:hover { background-color: azure; }
 tr.clicky:hover > td { background-color: beige; }
 .detail { white-space: nowrap; text-align: left; display: none; }
 tr.detail { font-size: x-small; }
+tr.detail td { white-space: pre-wrap; }
 div.detail { font-size: xx-small; }
 </style>""")
         print("""<script type='text/javascript'>

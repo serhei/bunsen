@@ -51,7 +51,7 @@ import tqdm
 from common.format_output import get_formatter
 from list_commits import index_source_commits, iter_testruns, iter_adjacent
 from diff_runs import fail_outcomes
-from diff_commits import get_tc_key, strip_tc, index_summary_fields, summary_tuple, get_comparison, diff_all_testruns
+from diff_commits import make_comparison_str, get_tc_key, strip_tc, index_summary_fields, summary_tuple, get_comparison, diff_all_testruns
 
 # TODO: Similar to make_comparison_str in diff_commits
 def comparison_key(comparison):
@@ -356,6 +356,12 @@ class ChangeSet:
             return 0
         return self.num_skipped_changes[commit_id]
 
+    def get_comparisons(self, change):
+        cl = []
+        for ix in change.comparisons:
+            cl.append(self.all_comparisons[ix])
+        return cl
+
     def get_age(self, change):
         _start_commit_no, end_commit_no = change.commit_nos
         assert(end_commit_no <= self.max_commit_no)
@@ -560,14 +566,16 @@ if __name__=='__main__':
             first_occurrence = "{} {}".format(first_commit.hexsha[:7], first_commit.summary)
             last_commit = repo.commit(change.commit_pair[0])
             last_occurrence = "{} {}".format(last_commit.hexsha[:7], last_commit.summary)
-            #comparisons_str = "TODO" # TODOXXX compute using change.comparisons, cs.all_comparisons, ...
+            comparisons_str = ""
+            for comparison in cs.get_comparisons(change):
+                comparisons_str += make_comparison_str(opts, comparison, summary_fields, single=True) + "\n"
             out.show_testcase(None, change.tc, header_fields=['num_occurrences'], # header_fields=['num_occurrences', 'change_kind'],
                               num_occurrences=change.num_merged,
                               #change_kind=change_kind,
                               first_occurrence=first_occurrence,
                               last_occurrence=last_occurrence,
-                              occurrences_span="{} commits".format(change.span))
-                              #comparisons=comparisons_str)
+                              occurrences_span="{} commits".format(change.span),
+                              comparisons=comparisons_str)
             # TODO: match to corresponding failing/fixed change for each configuration
             # TODO: colorize depending on change_kind
             # TODOXXX: colorize depending on whether last occurrence is fix or fail
