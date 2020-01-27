@@ -6,13 +6,14 @@
 # novelty_threshold (default infinity) commits. More precisely, report
 # the first occurrence of a failed change ('first failed') and the
 # last occurrence of a fixed change ('last fixed').
-usage = "+new_regressions [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tags>] [novelty_threshold=<num>] [sort=[least_]recent] [show_both_ends=no|yes] [diff_earlier=yes|no] [diff_baseline=no|yes] [cached_data=<path>] [update_cache=yes|no] [rebuild_cache=no|yes] [restrict_training=<num>] [restrict=<num>] ..."
+usage = "+new_regressions [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tags>] [novelty_threshold=<num>] [sort=[least_]recent] [show_empty_commits=yes|no] [show_both_ends=no|yes] [diff_earlier=yes|no] [diff_baseline=no|yes] [cached_data=<path>] [update_cache=yes|no] [rebuild_cache=no|yes] [restrict_training=<num>] [restrict=<num>] ..."
 default_args = {'project':None,         # restrict to testruns under <tags>
                 'key':None,             # restrict to testcases matching <glob>
                 'source_repo':None,     # scan commits from source_repo
                 'branch':'master',      # scan commits in branch <name>
                 'novelty_threshold':-1, # distance at which to merge changes (-1 denotes infinity)
                 'sort':'recent',        # sort by date of commit
+                'show_empty_commits':True, # list a commit even if it has no associated changes
                 'show_both_ends':False, # also consider 'last failed' and 'first fixed'
                 # XXX note that diff_earlier takes precedence over diff_baseline
                 'diff_earlier':True,    # diff against earlier commit if same configuration is missing
@@ -22,6 +23,7 @@ default_args = {'project':None,         # restrict to testruns under <tags>
                 'update_cache':True,    # update cache with previously unseen testruns
                 'rebuild_cache':False,  # compute each diff even if already present in cache
                 'verbose':False,        # report progress of 'training' (# testcases added vs. merged)
+                # TODO automatically enable restrict_training if restrict and sort=least_recent enabled
                 'restrict_training':-1, # limit the number of scanned commits (-1 denotes unlimited)
                 'restrict':-1,          # limit the number of displayed commits (-1 denotes unlimited)
                 # TODO: add option pretty=yes/html
@@ -48,7 +50,9 @@ from git import Repo
 
 import tqdm
 
+from fnmatch import fnmatchcase
 from common.format_output import get_formatter
+
 from list_commits import index_source_commits, iter_testruns, iter_adjacent
 from diff_runs import fail_outcomes
 from diff_commits import make_comparison_str, get_tc_key, strip_tc, index_summary_fields, summary_tuple, get_comparison, diff_all_testruns
@@ -154,10 +158,13 @@ class Change:
             self.comparisons.add(comparison_ix)
 
 class ChangeSet:
-    def __init__(self, cachefile=None, novelty_threshold=None):
+    def __init__(self, cachefile=None, key=None, novelty_threshold=None):
         self.novelty_threshold = novelty_threshold
         if self.novelty_threshold < 0: # XXX infinity
             self.novelty_threshold = None
+
+        # TODOXXX: Make 'key' argument optional in has_key() etc.
+        self.expected_key = key
 
         # XXX +new_regressions can be run with different key= and
         # novelty_threshold= arguments. To allow recomputation of this
@@ -307,6 +314,12 @@ class ChangeSet:
         if single_change.commit_nos is None:
             single_change.commit_nos = (self._commit_no, self._commit_no)
 
+        # XXX: build entirety of all_changes,
+        # but filter computed data according to expected_key
+        if self.expected_key is not None \
+           and not fnmatchcase(single_change.tc['name'], self.expected_key):
+            return
+
         # update merged_changes, changes_starting, changes_ending
         prev_change, prev_change_ix = None, None
         if single_change.tc_key in self.recent_changes:
@@ -358,8 +371,11 @@ class ChangeSet:
 
     def get_comparisons(self, change):
         cl = []
+        seen_ix = set() # TODOXXX deduplicate earlier!!
         for ix in change.comparisons:
+            if ix in seen_ix: continue
             cl.append(self.all_comparisons[ix])
+            seen_ix.add(ix)
         return cl
 
     def get_age(self, change):
@@ -429,7 +445,9 @@ if __name__=='__main__':
     required_key = '*' if opts.key is None else opts.key
 
     # (0) Restore cached data:
-    cs = ChangeSet(opts.cached_data, novelty_threshold=opts.novelty_threshold)
+    cs = ChangeSet(opts.cached_data,
+                   novelty_threshold=opts.novelty_threshold,
+                   key=opts.key)
 
     # (1) Index regressions in the specified history:
     testruns_map, hexsha_lens = index_source_commits(b, tags)
@@ -537,8 +555,13 @@ if __name__=='__main__':
             break
         to_show -= 1
 
-        # TODO: only if we've started displaying non-vacuous commits?
-        # XXX should still print a commit we don't have results for,
+        change_list = cs.significant_changes(commit.hexsha)
+        is_empty = len(change_list) == 0 \
+            and cs.skipped_changes(commit.hexsha) == 0
+        if not opts.show_empty_commits and is_empty: continue
+        # TODO: add a note '... skipped <n> commits with no changes ...'
+
+        # XXX could still print a commit we don't have results for,
         # in order to provide the necessary context:
         info = dict()
         info['commit_id'] = commit.hexsha[:7]+'...'
@@ -546,15 +569,18 @@ if __name__=='__main__':
         out.section(minor=True)
         out.message(commit_id=info['commit_id'],
                     summary=info['summary'])
+        # TODO: Also show the date when commit was made.
 
-        change_list = cs.significant_changes(commit.hexsha)
-        if len(change_list) == 0 and cs.skipped_changes(commit.hexsha) == 0:
-            continue
+        if is_empty: continue
 
+        # TODOXXX: Check assertion earlier?
         assert(commit.hexsha in cs.known_commits)
 
         for change in change_list:
-            if opts.key is not None and not fnmatchcase(change.tc['name'], key): continue
+            # TODOXXX: Filtering done in ChangeSet so len(change_list) is accurate.
+            #if opts.key is not None \
+            #   and not fnmatchcase(change.tc['name'], opts.key): continue
+
             # XXX show <baseline_outcome>-><outcome> <name> <subtest> <num_occurrences> <change_kind> + details:
             # - first_occurrence: <commit_id> <summary>
             # - last_occurrence: <commit_id> <summary>
