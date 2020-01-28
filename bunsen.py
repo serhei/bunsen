@@ -695,7 +695,7 @@ class Workdir(Repo):
                     "skip destroying it").format(self.working_tree_dir))
 
 class Bunsen:
-    def __init__(self, bunsen_dir=None, alternate_cookie=None):
+    def __init__(self, bunsen_dir=None, repo=None, alternate_cookie=None):
         '''
         Create a Bunsen object from a Bunsen repo, which is a directory
         that must contain the following:
@@ -720,7 +720,13 @@ class Bunsen:
             else:
                 self.base_dir = bunsen_default_dir
 
-        self.git_repo_path = os.path.join(self.base_dir, "bunsen.git")
+        self.git_repo_path = repo
+        if repo is None:
+            if 'BUNSEN_REPO' in os.environ:
+                self.git_repo_path = os.environ['BUNSEN_REPO']
+            else:
+                self.git_repo_path = os.path.join(self.base_dir, "bunsen.git")
+
         if os.path.isdir(self.git_repo_path):
             self.git_repo = Repo(self.git_repo_path)
 
@@ -782,6 +788,7 @@ class Bunsen:
 
         # XXX Add the following environment variables to a running script:
         self.default_script_env = {'BUNSEN_DIR': self.base_dir,
+                                   'BUNSEN_REPO': self.git_repo_path,
                                    'BUNSEN_CACHE': self.cache_dir}
         # XXX BUNSEN_WORK_DIR, etc. set for each individual run.
 
@@ -1532,11 +1539,11 @@ def bunsen_gorilla():
 # Command Line Interface
 
 def sub_init(parser, args):
-    b = Bunsen()
+    b = Bunsen(repo=args.repo)
     bunsen_init(b)
 
 def sub_checkout_wd(parser, args):
-    b = Bunsen(alternate_cookie=str(os.getppid()))
+    b = Bunsen(repo=args.repo, alternate_cookie=str(os.getppid()))
     branch_name = args.branch
     bunsen_checkout_wd(b, branch_name)
 
@@ -1566,7 +1573,7 @@ def sub_run(parser, args):
     if not invocations:
         parser.error("No invocations found " + \
                     "(hint: 'bunsen run +script' not 'bunsen run script').")
-    b = Bunsen()
+    b = Bunsen(repo=args.repo)
     for invocation in invocations:
         scriptname = invocation[0]
         invocation_args = invocation[1:]
@@ -1587,7 +1594,11 @@ def sub_help(parser, args):
     parser.print_help()
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser()
+    common_parser = argparse.ArgumentParser()
+    common_parser.add_argument('--repo', help="path to bunsen git repo")
+    # TODO Add another option for bunsen_dir
+
+    parser = argparse.ArgumentParser(parents=[common_parser], add_help=False)
     subparsers = parser.add_subparsers(dest='cmd', metavar='<command>')
 
     supported_commands = ['init', 'checkout-wd', 'run', 'gorilla', 'help']
@@ -1604,7 +1615,8 @@ if __name__=="__main__":
 
     parser_run = subparsers.add_parser('run', \
         help='run a script with bunsen env')
-    parser_run.add_argument('args', nargs=argparse.REMAINDER)
+    parser_run.add_argument('args', nargs=argparse.REMAINDER,
+        help='arguments for analysis script')
     parser_run.set_defaults(func=sub_run)
 
     # XXX This was a sanity test for tqdm that got way out of hand.
@@ -1623,12 +1635,14 @@ if __name__=="__main__":
 
     # XXX Handle $ bunsen +command similarly to $ bunsen run +command
     # TODO: Document bunsen +command shorthand in command line help.
-    basic_parser = argparse.ArgumentParser()
+    basic_parser = argparse.ArgumentParser(parents=[common_parser], add_help=False)
     basic_parser.add_argument('args', nargs=argparse.REMAINDER)
     basic_parser.set_defaults(func=sub_run_or_help)
 
     # XXX Trickery to make sure extra_args end up in the right place.
-    if len(sys.argv) > 1 and sys.argv[1] not in supported_commands:
+    if len(sys.argv) > 1 and sys.argv[1] not in supported_commands \
+        and sys.argv[1].startswith('+'):
+        print("DEBUG", sys.argv[1])
         # TODO: Instead, catch the exception thrown by parser.parse_args()?
         # TODO: Need to print help for the parent parser, not the child parser.
         args = basic_parser.parse_args()
