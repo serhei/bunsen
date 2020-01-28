@@ -24,7 +24,7 @@ def suppress_fields(testrun, suppress=set()):
 def html_sanitize(obj):
     return html.escape(str(obj))
 
-def field_summary(testrun, fields=None, separator=" ", sanitize=False):
+def field_summary(testrun, fields=None, separator=" ", sanitize=False, suppress_keys=False):
     if fields is None:
         fields = testrun.keys()
     s = ""
@@ -32,7 +32,10 @@ def field_summary(testrun, fields=None, separator=" ", sanitize=False):
     for k in fields:
         if not first: s += separator
         v = html_sanitize(testrun[k]) if sanitize else testrun[k]
-        s += "{}={}".format(k,v)
+        if suppress_keys:
+            s += "{}".format(v)
+        else:
+            s += "{}={}".format(k,v)
         first = False
     return s
 
@@ -147,8 +150,8 @@ class PrettyPrinter:
 
 # HTML formatting code:
 
-def html_field_summary(testrun, fields=None, separator=" "):
-    return field_summary(testrun, fields, separator, sanitize=True)
+def html_field_summary(testrun, fields=None, separator=" ", suppress_keys=False):
+    return field_summary(testrun, fields, separator, sanitize=True, suppress_keys=suppress_keys)
 
 def select_class(field, val):
     if field == 'outcome':
