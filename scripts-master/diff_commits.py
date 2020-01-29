@@ -43,6 +43,7 @@ for f1 in fail_type_outcomes:
 num_testruns = None
 
 def find_testruns(b, source_hexsha, msg='Finding testruns'):
+    '''Find all testruns which test source commit <source_hexsha>.'''
     global num_testruns
     if num_testruns is None: # XXX purely for progress
         num_testruns = 0
@@ -83,6 +84,7 @@ def _find_summary_fields(testrun, summary_fields, summary_vals):
 
 # XXX return pair (header_fields, summary_fields)
 def index_summary_fields(iterable):
+    '''Select the fields used to summarize the configuration for a testrun.'''
     summary_fields = set()
     summary_vals = {}
     for testrun in iterable:
@@ -96,100 +98,124 @@ def index_summary_fields(iterable):
         if summary_vals[field] is not None:
             summary_fields.discard(field)
 
-    return header_fields, summary_fields
+    return header_fields, list(summary_fields) # XXX important to preserve order
 
-def summary_tuple(testrun, summary_fields, exclude=set()):
-    vals = []
+def get_summary(testrun, summary_fields, exclude_version=True):
+    '''Summarize the configuration for a testrun.
+
+    Used to match testruns with similar configurations across
+    different source commits.
+    '''
+    excluded = {'source_commit', 'version'}
+    d = {}
     for field in summary_fields:
-        if field in exclude: continue
-        vals.append(testrun[field])
-    return tuple(vals)
+        if exclude_version and field in excluded:
+            continue
+        if field not in testrun:
+            d[field] = '<unknown>'
+            continue
+        d[field] = testrun[field]
+    return d
 
 # TODO: change the 'comparison'/'baseline_comparison' format in 2or diffs
 # to match the output of get_comparison() for 1or diffs
 def get_comparison(diff):
-    if 'summary_tuple' in diff and 'baseline_summary_tuple' in diff: # 1or diff
-        comp = {'summary_tuple': diff['summary_tuple'],
-                'baseline_summary_tuple': diff['baseline_summary_tuple']}
-    elif 'comparison' in diff and 'baseline_comparison' in diff: # 2or diff
-        comp = {'summary_tuple': diff['comparison'][1],
-                'baseline_summary_tuple': diff['comparison'][0],
-                'minus_summary_tuple': diff['baseline_comparison'][1],
-                'minus_baseline_summary_tuple': diff['baseline_comparison'][0]}
+    '''Describe which configurations were being compared in a diff.'''
+    if 'latest_summary' in diff and 'baseline_summary' in diff: # 1or diff
+        comp = {'summary': diff['latest_summary'],
+                'baseline_summary': diff['baseline_summary']}
+    elif 'latest_comparison' in diff and 'baseline_comparison' in diff: # 2or diff
+        comp = {'summary': diff['latest_comparison'][1],
+                'baseline_summary': diff['latest_comparison'][0],
+                'minus_summary': diff['baseline_comparison'][1],
+                'minus_baseline_summary': diff['baseline_comparison'][0]}
     else:
         assert False # XXX unknown diff format
     return comp
 
-# XXX for pretty-printing
-def make_summary_str(opts, summary_tuple, summary_fields):
-    # TODO: Avoid needless opts.pretty == 'html' checking?
-    d = {}
-    summary_fields = list(summary_fields)
-    for i in range(len(summary_fields)):
-        if summary_fields[i] == 'source_commit':
-            continue # XXX this is just clutter
-        d[summary_fields[i]] = summary_tuple[i]
-    if opts.pretty == 'html':
-        return "(" + html_field_summary(d) + ")"
+def make_summary_str(summary, exclude_version=True, html=False):
+    excluded = {'source_commit', 'version'}
+    for k in excluded:
+        if exclude_version and k in summary:
+            del summary[k]
+    if html:
+        return "(" + html_field_summary(summary) + ")"
     else:
-        return "(" + field_summary(d) + ")"
+        return "(" + field_summary(summary) + ")"
 
-# XXX for pretty-printing
-def make_comparison_str(opts, comparison, summary_fields, single=False):
-    # TODO: Avoid needless opts.pretty == 'html' checking?
+def make_comparison_str(comparison, single=False, html=False):
     s = ""
-    if not single and opts.pretty == 'html':
+    if not single and html:
         s += "<li>"
-    elif not single and opts.pretty != 'html':
+    elif not single and html:
         s += "  - "
-    d = {}
-    s += make_summary_str(opts, comparison['baseline_summary_tuple'], summary_fields)
-    s += " -> " + make_summary_str(opts, comparison['summary_tuple'], summary_fields)
-    if 'minus_baseline_summary_tuple' in comparison:
-        assert 'minus_summary_tuple' in comparison
-        s += " minus "
-        s += make_summary_str(opts, comparison['minus_baseline_summary_tuple'], summary_fields)
-        s += " -> " + make_summary_str(opts, comparison['minus_summary_tuple'], summary_fields)
-    if not single and opts.pretty == 'html': s += "</li>"
+    s += make_summary_str(comparison['baseline_summary'], html=html)
+    s += " -> " + make_summary_str(comparison['summary'], html=html)
+    if 'minus_baseline_summary' in comparison:
+        assert 'minus_summary' in comparison
+        s += " MINUS "
+        s += make_summary_str(comparison['minus_baseline_summary'], html=html)
+        s += " -> " + make_summary_str(comparison['summary'], html=html)
+    if not single and html:
+        s += "</li>"
     return s
 
 # XXX for pretty-printing
-def show_combination(opts, out, n_regressions, combination, summary_fields):
-    # TODO: Avoid needless opts.pretty == 'html' checking?
+def show_combination(opts, out, n_regressions, combination):
     s = "Found {} regressions for".format(n_regressions)
     single = len(combination) <= 1
+    to_html = opts.pretty == 'html'
     if not single:
         out.message(s+":")
         s = ""
     else:
         s += " "
-    if opts.pretty == 'html' and not single:
+    if not single and html:
         out.message("<ul>", raw=True)
     for comparison in combination:
-        s += make_comparison_str(opts, comparison, summary_fields, single=single)
+        s += make_comparison_str(comparison, single=single, html=to_html)
         out.message(s, raw=not single)
         s = ""
-    if opts.pretty == 'html' and not single:
+    if not single and html:
         out.message("</ul>", raw=True)
 
-# XXX hack for consistent indexing
-def make_combination_key(combination):
-    combination_strs = []
-    for comp in combination:
-        combination_strs.append(str(comp))
-    return str(sorted(combination_strs))
-
 # XXX for consistent indexing
-def get_tc_key(tc):
+def get_tc_key(tc, strip_outcome=False):
+    '''Create a key name+subtest+outcome+baseline_outcome for consistent indexing.'''
     key = ''
     key += tc['name'] + '+'
     key += ('null' if 'subtest' not in tc else tc['subtest']) + '+'
-    key += ('null' if tc['outcome'] is None else tc['outcome']) + '+'
-    key += ('null' if tc['baseline_outcome'] is None else tc['baseline_outcome'])
+    if not strip_outcome:
+        key += ('null' if tc['outcome'] is None else tc['outcome']) + '+'
+        key += ('null' if tc['baseline_outcome'] is None else tc['baseline_outcome'])
     return key
+
+def get_summary_key(summary):
+    '''Create a key listing all summary elements for consistent indexing.'''
+    # XXX Hack to avoid worrying about stable dict iteration order.
+    return str(sorted(summary.items()))
+
+def get_comparison_key(comparison):
+    '''Create a key listing all comparison elements for consistent indexing.'''
+    # TODO: Perhaps just look at the specific (known-to-exist) keys?
+    comparison_strs = []
+    for k, v in comparison.items():
+        s = get_summary_key(v) if isinstance(v,dict) else str(v)
+        comparison_strs.append(str((k,s)))
+    # XXX Hack to avoid worrying about stable dict iteration order.
+    return str(sorted(comparison_strs))
+
+def get_combination_key(combination):
+    '''Create a key listing all combinations for consistent indexing.'''
+    combination_strs = []
+    for comparison in combination:
+        combination_strs.append(get_comparison_key(comparison))
+    # XXX Hack to avoid worrying about stable dict iteration order.
+    return str(sorted(combination_strs))
 
 # XXX only the fields for get_tc_key
 def strip_tc(tc, keep=set()):
+    '''Remove all fields except those present in set keep or used by get_tc_key().'''
     tc2 = {}
     if 'name' in tc: tc2['name'] = tc['name']
     if 'subtest' in tc: tc2['subtest'] = tc['subtest']
@@ -199,22 +225,16 @@ def strip_tc(tc, keep=set()):
         if k in tc: tc2[k] = tc[k]
     return tc2
 
-# TODO: Modify Bunsen Testrun class to support this directly and to
-# use customizations from the testcase's original Testrun.
-def testcase_to_json(tc):
-    dummy_testrun = bunsen.Testrun()
-    return dummy_testrun.testcase_to_json(tc)
-
 def diff_all_testruns(baseline_runs, latest_runs,
                       summary_fields, diff_baseline=True,
                       diff_previous=None, # summary_key -> testrun
                       diff_same=False, key=None,
                       out=None):
     # (2a) build maps of metadata->testrun to match testruns with similar configurations
-    # summary_key := (summary_tuple minus source_commit, version)
+    # summary_key := (summary minus source_commit, version)
     baseline_map = {} # summary_key -> testrun
     for testrun in baseline_runs:
-        t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
+        t = get_summary_key(get_summary(testrun, summary_fields))
         # XXX a sign of duplicate runs in the repo :(
         #assert t not in baseline_map # XXX would be kind of unforeseen
         baseline_map[t] = testrun
@@ -223,7 +243,7 @@ def diff_all_testruns(baseline_runs, latest_runs,
         previous_map = diff_previous
     latest_map = {} # summary_key -> testrun
     for testrun in latest_runs:
-        t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
+        t = get_summary_key(get_summary(testrun, summary_fields))
         # XXX a sign of duplicate runs in the repo :(
         #assert t not in latest_map # XXX would be kind of unforeseen
         latest_map[t] = testrun
@@ -239,7 +259,7 @@ def diff_all_testruns(baseline_runs, latest_runs,
     best_overall = None
     best_with_latest = None
     for testrun in baseline_runs:
-        t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
+        t = get_summary_key(get_summary(testrun, summary_fields))
         if t in latest_map:
             if best_with_latest is None \
                or int(testrun['pass_count']) > int(best_with_latest['pass_count']):
@@ -264,11 +284,13 @@ def diff_all_testruns(baseline_runs, latest_runs,
     # (3) Compare relevant baseline & latest logs relative to baseline:
     version_diffs = []    # regressions in latest wrt baseline
     regression_diffs = [] # between latest targets which don't appear in baseline
-    t1 = summary_tuple(best_overall, summary_fields)
-    t1_exclude = summary_tuple(best_overall, summary_fields, exclude={'source_commit','version'})
+    t1 = get_summary(best_overall, summary_fields, exclude_version=False)
+    t1_exclude = get_summary(best_overall, summary_fields)
+    t1_key = get_summary_key(t1_exclude)
     for testrun in latest_runs:
-        t2 = summary_tuple(testrun, summary_fields)
-        t2_exclude = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
+        t2 = get_summary(testrun, summary_fields, exclude_version=False)
+        t2_exclude = get_summary(testrun, summary_fields)
+        t2_key = get_summary_key(t2_exclude)
         # XXX Try to identify a baseline run matching t2_exclude.
         # This ensures that version_diffs and regression_diffs will not overlap.
         # TODO: Ideally, we would compare both baseline *and* best_overall.
@@ -276,18 +298,20 @@ def diff_all_testruns(baseline_runs, latest_runs,
         if diff_baseline:
             baseline = best_overall
             preferred_t1 = t1
-        if t2_exclude in previous_map:
-            baseline = previous_map[t2_exclude]
-            preferred_t1 = summary_tuple(baseline, summary_fields)
-        if t2_exclude in baseline_map:
-            baseline = baseline_map[t2_exclude]
-            preferred_t1 = summary_tuple(baseline, summary_fields)
+        if t2_key in previous_map:
+            baseline = previous_map[t2_key]
+            preferred_t1 = get_summary(baseline, summary_fields,
+                                       exclude_version=False)
+        if t2_key in baseline_map:
+            baseline = baseline_map[t2_key]
+            preferred_t1 = get_summary(baseline, summary_fields,
+                                       exclude_version=False)
         if baseline is None:
             continue
         diff = diff_testruns(baseline, testrun, key=key)
         diff.diff_order = 1
-        diff.baseline_summary_tuple = list(preferred_t1)
-        diff.summary_tuple = list(t2)
+        diff.baseline_summary = preferred_t1
+        diff.latest_summary = t2
         if len(diff.testcases) > 0:
             version_diffs.append(diff)
         #print("DEBUG COMPARED", str(preferred_t1)+"->"+str(t2))
@@ -295,20 +319,23 @@ def diff_all_testruns(baseline_runs, latest_runs,
     for baseline_testrun in baseline_runs:
         # XXX This calculation always requires baseline, so
         # diff_previous, diff_baseline flags are ignored.
-        t1_new = summary_tuple(baseline_testrun, summary_fields)
-        t1_new_exclude = summary_tuple(baseline_testrun, summary_fields, exclude={'source_commit','version'})
-        if t1_exclude not in latest_map or t1_new_exclude not in latest_map:
+        t1_new = get_summary(baseline_testrun, summary_fields, exclude_version=False)
+        t1_new_exclude = get_summary(baseline_testrun, summary_fields)
+        t1_new_key = get_summary_key(t1_new_exclude)
+        if t1_key not in latest_map or t1_new_key not in latest_map:
             # TODO: perhaps report all differences as 'new' in this case?
             continue # did not find a matching comparison in latest_runs
-        latest_baseline, latest_testrun = latest_map[t1_exclude], latest_map[t1_new_exclude]
-        t2 = summary_tuple(latest_baseline, summary_fields)
-        t2_new = summary_tuple(latest_testrun, summary_fields)
+        latest_baseline, latest_testrun = \
+            latest_map[get_summary_key(t1_exclude)], \
+            latest_map[get_summary_key(t1_new_exclude)]
+        t2 = get_summary(baseline_testrun, summary_fields, exclude_version=False)
+        t2_new = get_summary(baseline_testrun, summary_fields, exclude_version=False)
         diff_baseline = diff_testruns(best_overall, baseline_testrun)
         diff_latest = diff_testruns(latest_baseline, latest_testrun)
         diff2 = diff_2or(diff_baseline, diff_latest, key=key)
         diff2.diff_order = 2
-        diff2.baseline_comparison = [list(t1), list(t1_new)]
-        diff2.comparison = [list(t2), list(t2_new)]
+        diff2.baseline_comparison = [t1, t1_new]
+        diff2.latest_comparison = [t2, t2_new]
         if len(diff.testcases) > 0:
             regression_diffs.append(diff2)
         #print("DEBUG COMPARED", str(t2)+"->"+str(t2_new),
@@ -396,8 +423,8 @@ if __name__=='__main__':
             tc_key = get_tc_key(tc)
             append_map(regression_tcs_map, tc_key, (tc, comparison))
 
-    # comparison := dict with keys {'summary_tuple', 'baseline_summary_tuple',
-    #                'minus_summary_tuple', 'minus_baseline_summary_tuple'}
+    # comparison := dict with keys {'summary', 'baseline_summary',
+    #                'minus_summary', 'minus_baseline_summary'}
     # combination := lst of comparison
     # combination_key := sorted lst of comparison -> json
     version_combos = {} # combination_key -> combination
@@ -416,7 +443,7 @@ if __name__=='__main__':
             if comparison in combination:
                 continue # don't add the same one twice
             combination.append(comparison)
-        combination_key = make_combination_key(combination)
+        combination_key = get_combination_key(combination)
         if combination_key not in version_combos:
             version_combos[combination_key] = combination
         append_map(version_testcases, combination_key, base_tc)
@@ -431,7 +458,7 @@ if __name__=='__main__':
             if comparison in combination:
                 continue # don't add the same one twice
             combination.append(comparison)
-        combination_key = make_combination_key(combination)
+        combination_key = get_combination_key(combination)
         if combination_key not in regression_combos:
             regression_combos[combination_key] = combination
         append_map(regression_testcases, combination_key, base_tc)
@@ -444,7 +471,7 @@ if __name__=='__main__':
         n_regressions = len(version_testcases[combination_key])
         if n_regressions == 0: continue
         out.section(minor=True)
-        show_combination(opts, out, n_regressions, combination, summary_fields)
+        show_combination(opts, out, n_regressions, combination)
         for tc in version_testcases[combination_key]:
             out.show_testcase(None, tc) # XXX no testrun
     out.section()
@@ -454,7 +481,7 @@ if __name__=='__main__':
         n_regressions = len(version_testcases[combination_key])
         if n_regressions == 0: continue
         out.section(minor=True)
-        show_combination(opts, out, n_regressions, combination, summary_fields)
+        show_combination(opts, out, n_regressions, combination)
         for tc in version_testcases[combination_key]:
             out.show_testcase(None, tc) # XXX no testrun
 

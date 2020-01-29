@@ -13,6 +13,7 @@ default_args = {'project':None,         # restrict to testruns under <tags>
                 'branch':'master',      # scan commits in branch <name>
                 'novelty_threshold':-1, # distance at which to merge changes (-1 denotes infinity)
                 'sort':'recent',        # sort by date of commit
+                # TODOXXX: Need to still mark empty commits as known (or they won't be cached).
                 'show_empty_commits':True, # list a commit even if it has no associated changes
                 'show_both_ends':False, # also consider 'last failed' and 'first fixed'
                 # XXX note that diff_earlier takes precedence over diff_baseline
@@ -55,15 +56,9 @@ from common.format_output import get_formatter
 
 from list_commits import index_source_commits, iter_testruns, iter_adjacent
 from diff_runs import fail_outcomes
-from diff_commits import make_comparison_str, get_tc_key, strip_tc, index_summary_fields, summary_tuple, get_comparison, diff_all_testruns
-
-# TODO: Similar to make_comparison_str in diff_commits
-def comparison_key(comparison):
-    s = "{}->{}".format(comparison['baseline_summary_tuple'],comparison['summary_tuple'])
-    if 'minus_baseline_summary_tuple' in comparison:
-        assert('minus_sumary_tuple' in comparison)
-        s += "-{}->{}".format(comparison['minus_baseline_summary_tuple'],comparison['minus_summary_tuple'])
-    return s
+from diff_commits import index_summary_fields, get_summary, get_comparison, \
+    make_comparison_str, get_tc_key, get_summary_key, get_comparison_key, \
+    strip_tc, diff_all_testruns
 
 def load_full_runs(b, testruns):
     full_testruns = []
@@ -210,7 +205,8 @@ class ChangeSet:
         if key is None: key = '*'
         if commit_pair not in self.known_keys:
             self.known_keys[commit_pair] = []
-        return key in self.known_keys[commit_pair] or '*' in self.known_keys[commit_pair]
+        return key in self.known_keys[commit_pair] \
+            or '*' in self.known_keys[commit_pair]
 
     def add_key(self, commit_pair, key):
         if commit_pair not in self.known_keys:
@@ -260,7 +256,6 @@ class ChangeSet:
             # XXX first, merge already_cached changes
             self._merge_changes((next_commit.hexsha,commit.hexsha))
             # XXX next, allow new changes to be added
-            #print("DEBUG yield baseline", commit.hexsha, commit.summary, file=sys.stderr)
             yield commit, testruns, next_commit, next_testruns
             self.known_commits.add(next_commit.hexsha)
             self._commit_no += 1
@@ -296,10 +291,10 @@ class ChangeSet:
                and self.recent_changes is not None)
 
         # add comparison to all_comparisons
-        # TODO: when building JSON, move this to a separate method
+        # TODOXXX: when building JSON, move this to a separate method?
         comparison_ix = None
         if comparison is not None:
-            ck = comparison_key(comparison)
+            ck = get_comparison_key(comparison)
             # TODO: here and elsewhere comparison_ix = find_or_add_ix(self.all_comparisons, self.comparison_map, ck, comparison)
             if ck not in self.comparison_map:
                 comparison_ix = len(self.all_comparisons)
@@ -444,6 +439,7 @@ if __name__=='__main__':
     repo = Repo(opts.source_repo)
     forward = True if opts.sort == 'least_recent' else False
     required_key = '*' if opts.key is None else opts.key
+    to_html = opts.pretty == 'html'
 
     # (0) Restore cached data:
     cs = ChangeSet(opts.cached_data,
@@ -516,7 +512,7 @@ if __name__=='__main__':
         if recent_testruns is not None:
             # update recent_testruns from testruns
             for testrun in testruns:
-                t = summary_tuple(testrun, summary_fields, exclude={'source_commit','version'})
+                t = get_summary_key(get_summary(testrun, summary_fields))
                 recent_testruns[t] = testrun # XXX overwrite earlier run with the same configuration
 
         #print("DEBUG adding/merging changes", file=sys.stderr)
@@ -595,7 +591,7 @@ if __name__=='__main__':
             last_occurrence = "{} {}".format(last_commit.hexsha[:7], last_commit.summary)
             comparisons_str = ""
             for comparison in cs.get_comparisons(change):
-                comparisons_str += make_comparison_str(opts, comparison, summary_fields, single=True) + "\n"
+                comparisons_str += make_comparison_str(comparison, single=True, html=to_html) + "\n"
             out.show_testcase(None, change.tc, header_fields=['num_occurrences'], # header_fields=['num_occurrences', 'change_kind'],
                               num_occurrences=change.num_merged,
                               #change_kind=change_kind,
