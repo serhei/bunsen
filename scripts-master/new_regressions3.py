@@ -330,6 +330,7 @@ class ChangeSet:
             and prev_change.dist(single_change) > self.novelty_threshold):
             next_change_ix = len(self.merged_changes)
             next_change = single_change.copy()
+            next_change.comparisons.add(comparison_ix)
             self.merged_changes.append(next_change)
             self.recent_changes[single_change.tc_key] = next_change_ix
             self._add_bounds(next_change, next_change_ix)
