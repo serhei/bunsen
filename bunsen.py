@@ -154,7 +154,7 @@ class Testlog:
         try:
             data_stream = self._data_stream
             # TODOXXX Problem with GitPython blob.data_stream returning OStream.
-            print("DEBUG", data_stream)
+            # print("DEBUG", data_stream) -> TextIOWrapper in commit_logs
             #if isinstance(data_stream, OStream): # TODOXXX
             #    return data_stream.read().decode('utf8').split('\n')
             return data_stream.readlines()

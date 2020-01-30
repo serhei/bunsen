@@ -184,9 +184,10 @@ def parse_dejagnu_log(testrun, logfile_path, all_cases=None,
                 if running_test is not None:
                     # close Cursor range for this test
                     running_cur.line_end = cur.line_end-1
-                    if verbose \
-                       and running_cur.line_start >= running_cur.line_end:
-                        print("single line testcase {}".format(running_cur.to_str()))
+                    # XXX This is fairly usual across a couple of cases:
+                    # if verbose \
+                    #    and running_cur.line_start >= running_cur.line_end:
+                    #     print("single line testcase {}".format(running_cur.to_str()))
                     last_test_cur.line_end = cur.line_end-1
 
                     # handle result of previous tests
@@ -387,7 +388,10 @@ def annotate_dejagnu_log(testrun, logfile_path, outcome_lines=[],
                 last_test_cur.line_end = cur.line_end-1
 
                 if running_test not in testcase_start and verbose:
-                    print("WARNING: no testcases for {}@{}, skipping".format(running_test, running_cur.to_str()))
+                    # XXX Cut down on the chatter for normally-empty cases:
+                    if not running_test.startswith('systemtap/notest.exp') \
+                       and not running_test.startswith('systemtap.samples/examples.exp'):
+                        print("WARNING: no testcases for {}@{}, skipping".format(running_test, running_cur.to_str()))
                 else:
                     i = testcase_start[running_test]
                     if 'subtest' not in testcases[i]:
