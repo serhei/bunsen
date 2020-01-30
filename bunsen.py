@@ -1642,7 +1642,6 @@ if __name__=="__main__":
     # XXX Trickery to make sure extra_args end up in the right place.
     if len(sys.argv) > 1 and sys.argv[1] not in supported_commands \
         and sys.argv[1].startswith('+'):
-        print("DEBUG", sys.argv[1])
         # TODO: Instead, catch the exception thrown by parser.parse_args()?
         # TODO: Need to print help for the parent parser, not the child parser.
         args = basic_parser.parse_args()
