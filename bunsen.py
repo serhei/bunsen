@@ -31,7 +31,8 @@ def warn_print(*args, **kwargs):
     if 'prefix' in kwargs:
         prefix = kwargs['prefix']
         del kwargs['prefix']
-    print(prefix, file=sys.stderr, *args, **kwargs)
+    print(prefix, file=sys.stderr, end=('' if prefix == '' else ' '))
+    print(file=sys.stderr, *args, **kwargs)
 
 # TODO: Control with bunsen debug option.
 def dbug_print(*args, **kwargs):
@@ -40,7 +41,8 @@ def dbug_print(*args, **kwargs):
         prefix = kwargs['prefix']
         del kwargs['prefix']
     if False:
-        print(prefix, file=sys.stderr, *args, **kwargs)
+        print(prefix, file=sys.stderr, end=('' if prefix == '' else ' '))
+        print(file=sys.stderr, *args, **kwargs)
 
 class BunsenError(Exception):
     def __init__(self, msg):
