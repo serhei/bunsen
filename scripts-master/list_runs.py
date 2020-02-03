@@ -1,14 +1,20 @@
 #! /usr/bin/env python3
-# List testruns in the Bunsen repo.
-usage = "+list_runs [[project=]<tags>] [[source_repo=]<path>] [verbose=yes|no] [pretty=yes|no|html]\n" \
-        "                  [sort=[least_]recent] [restrict=<num>]"
-default_args = {'project':None,     # restrict to testruns under <tags>
-                'source_repo':None, # add commit messages from source_repo
-                'verbose':False,    # show all fields in pretty-print view
-                'pretty':True,      # pretty-print instead of showing JSON
-                'sort':None,        # sort by chronological order
-                'restrict':-1,      # restrict output to N testruns
-               }
+# TODO from common.cmdline_args import default_args
+info='''List testruns in the Bunsen repo.'''
+cmdline_args = [
+    ('project', None, '<tags>',
+     "restrict to testruns under <tags>"),
+    ('source_repo', None, '<path>',
+     "add commit messages from source repo <path>"),
+    ('verbose', False, None,
+     "show all fields in pretty-print view"),
+    ('pretty', True, None,
+     "pretty-print instead of showing JSON"),
+    ('sort', None, '[least_]recent',
+     "sort by chronological order"),
+    ('restrict', -1, None,
+     "restrict output to <num> testruns"),
+]
 
 import sys
 import bunsen
@@ -19,9 +25,8 @@ from common.format_output import get_formatter
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
-    opts = b.cmdline_args(sys.argv, usage=usage,
-                          optional_args=['project','source_repo'],
-                          defaults=default_args)
+    opts = b.cmdline_args(sys.argv, info=info, args=cmdline_args,
+                          optional_args=['project','source_repo'])
     out = get_formatter(b, opts)
 
     tags = opts.get_list('project', default=b.tags)

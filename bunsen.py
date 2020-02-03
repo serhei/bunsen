@@ -711,10 +711,17 @@ class Bunsen:
           * <tag>/testlogs-<year>-<month>
             - <commit> '<tag>/testlogs-<year>-<month>: ...'
               - testlogs from one test run (must remove previous commit's testlogs)
-        - cache/ -- TODO will contain scratch data for Bunsen scripts
-        - config -- TODO will be a git style INI file
+        - cache/ -- TODO will contain scratch data for Bunsen scripts, see e.g. +new_regressions3
+        - config -- git style INI file, with sections:
+          - [core]            -- applies always
+          - [<script_name>]   -- applies to script +<script_name> only
+          - [project "<tag>"] -- applies to any script running on project <tag>
         - scripts/ -- a folder for user-contributed scripts
         '''
+        self.script_name = '<unknown>' # for commandline args & config section
+        if 'BUNSEN_SCRIPT_NAME' in os.environ:
+            self.script_name = os.environ['BUNSEN_SCRIPT_NAME']
+
         self.base_dir = bunsen_dir
         if self.base_dir is None:
             if 'BUNSEN_DIR' in os.environ:
@@ -728,6 +735,7 @@ class Bunsen:
                 self.git_repo_path = os.environ['BUNSEN_REPO']
             else:
                 self.git_repo_path = os.path.join(self.base_dir, "bunsen.git")
+        # TODO: Also configure git_repo_path via a config option?
 
         if os.path.isdir(self.git_repo_path):
             self.git_repo = Repo(self.git_repo_path)
@@ -792,7 +800,7 @@ class Bunsen:
         self.default_script_env = {'BUNSEN_DIR': self.base_dir,
                                    'BUNSEN_REPO': self.git_repo_path,
                                    'BUNSEN_CACHE': self.cache_dir}
-        # XXX BUNSEN_WORK_DIR, etc. set for each individual run.
+        # XXX BUNSEN_SCRIPT_NAME, BUNSEN_WORK_DIR, etc. set per individual run.
 
     # Methods for querying testlogs and testruns:
 
@@ -1288,9 +1296,12 @@ class Bunsen:
             else fallback_script_path
 
     def run_script(self, hostname, script_path, script_args,
-                   wd_path=None, wd_branch_name=None, wd_cookie=None):
+                   wd_path=None, wd_branch_name=None, wd_cookie=None,
+                   script_name=None):
         script_env = self.default_script_env
 
+        if script_name:
+            script_env['BUNSEN_SCRIPT_NAME'] = script_name
         if wd_path:
             script_env['BUNSEN_WORK_DIR'] = wd_path
         if wd_branch_name:
@@ -1319,54 +1330,166 @@ class Bunsen:
     def opts(self, defaults={}):
         return BunsenOpts(self, defaults)
 
-    def cmdline_args(self, argv, usage=None, required_args=[],
-                      optional_args=[], defaults={}, use_config=True):
-        argv = argv[1:] # Removes sys.argv[0].
+    def _print_usage(self, info, args, usage=None,
+                     required_args=[], optional_args=[]):
+        if usage is not None:
+            warn_print("USAGE:", usage, prefix="")
+            return
+
+        LINE_WIDTH = 80
+        usage, arg_info, offset = "", "", 0
+        usage += "USAGE: "
+        offset += len("USAGE: ")
+        usage += "+" + self.script_name
+        offset += len("+" + self.script_name)
+        indent = " " * (offset+1) # TODO: Needs tweaking for long script names.
+
+        arginfo_map = {}
+        required_arginfo = []
+        optional_arginfo = []
+        other_arginfo = []
+        for t in args:
+            # TODO: Later args should override earlier args with same name.
+            name, default_val, cookie, description = t
+            arginfo_map[name] = t
+            if name not in required_args and name not in optional_args:
+                other_arginfo.append(t)
+        for name in required_args:
+            required_arginfo.append(arginfo_map[name])
+        for name in optional_args:
+            optional_arginfo.append(arginfo_map[name])
+        all_args = required_arginfo + optional_arginfo + other_arginfo
+        for t in all_args:
+            name, default_val, cookie, description = t
+            if cookie is None and isinstance(default_val, int):
+                cookie = '<num>'
+            elif cookie is None and name == 'pretty' \
+                 and isinstance(default_val, bool):
+                cookie = 'yes|no|html' if default_val else 'no|yes|html'
+            elif cookie is None and isinstance(default_val, bool):
+                cookie = 'yes|no' if default_val else 'no|yes'
+            # TODO: Other cases where cookie==None? e.g. sort=[least_]recent
+
+            basic_arg_desc = "{}={}".format(name, cookie)
+            if name in required_args:
+                arg_desc = "[{}=]{}".format(name, cookie)
+            elif name in optional_args:
+                arg_desc = "[[{}=]{}]".format(name, cookie)
+            else:
+                arg_desc = "[{}={}]".format(name, cookie)
+            arg_width = 1 + len(arg_desc) # XXX includes a space before
+            if offset + arg_width > LINE_WIDTH + 1:
+                usage += "\n" + indent
+                offset = len(indent)
+            else:
+                usage += " "
+                offset += arg_width
+            usage += arg_desc
+
+            # TODO: adjust \t to width of arg names?
+            arg_info += "- {}\t{}\n".format(basic_arg_desc, description)
+        usage += "\n\n"
+        usage += info
+        usage += "\n\nArguments:\n"
+        usage += arg_info
+        warn_print(usage, prefix="")
+
+    # TODO: Document recognized default and cookie types.
+    def cmdline_args(self, argv, usage=None, info=None, args=None,
+                     required_args=[], optional_args=[],
+                     defaults={}, use_config=True):
+        '''Used by analysis scripts to pass command line options.
+
+        Supports two formats:
+        - usage=str defaults={'name':default_value, ...}
+        - info=str args=list of tuples ('name', default_value, 'cookie', 'Detailed description')
+
+        The second format automatically generates a usage message
+        which includes argument descriptions in the form
+        "name=cookie \t Detailed description."'''
+        # TODO: Print usage when script is invoked with --help.
+        assert(usage is None or args is None) # XXX usage built from args
+        assert(args is None or len(defaults) == 0)
+
+        # generate information about defaults:
+        if args is not None:
+            for t in args:
+                name, default_val, cookie, description = t
+                defaults[name] = default_val
+        else:
+            args = []
+            for name, default_val in defaults.items():
+                args.append((name, default_val, None, None))
+
         opts = self.opts(defaults)
-        unnamed_args = []
-        check_required = False
+
+        # iterate through argv, assumed to be sys.argv
+        argv = argv[1:] # Removes sys.argv[0].
+        unnamed_args = [] # matched against required_args+optional_args
+        check_required = False # need to find required_args not in unnamed_args
+        found_unknown = False # warn about unknown option
         for i in range(len(argv)):
             m = cmdline_regex.fullmatch(argv[i])
-            if m.group('keyword') is None:
+            key = m.group('keyword')
+            if key is None:
                 unnamed_args.append(m.group('arg'))
-            else:
-                key = m.group('keyword')
-                if key not in defaults:
-                    warn_print("Unknown keyword argument '{}'".format(key))
-                opts.__dict__[key] = m.group('arg')
-        j = 0
+                continue
+            if key not in defaults:
+                warn_print("Unknown keyword argument '{}'".format(key))
+                found_unknown = True
+                continue
+            opts.add_opt(key, m.group('arg'))
+            opts.__dict__[key] = m.group('arg')
+        if found_unknown:
+            self._print_usage(info, args, usage,
+                              required_args, optional_args)
+            exit(1)
+
+        # match unnamed_args against required_args+optional_args
+        j = 0 # index into unnamed_args
         for i in range(len(required_args)):
             if j >= len(unnamed_args):
                 check_required = True
                 break
-            opts.__dict__[required_args[i]] = unnamed_args[j]
+            opts.add_opt(required_args[i], unnamed_args[j])
             j += 1
         for i in range(len(optional_args)):
             if j >= len(unnamed_args):
                 break
-            opts.__dict__[optional_args[i]] = unnamed_args[j]
+            opts.add_opt(optional_args[i], unnamed_args[j])
             j += 1
         if j < len(unnamed_args):
-            warn_print("Unexpected extra (unnamed) argument '{}'\nUSAGE: {}" \
-                       .format(unnamed_args[j], usage), prefix="")
+            warn_print("Unexpected extra (unnamed) argument '{}'" \
+                       .format(unnamed_args[j]), prefix="")
+            self._print_usage(info, args, usage)
             exit(1)
 
-        # Set any options from self.config:
+        # set options from self.config
         if use_config:
+            # section [core], [<script_name>]:
             opts.add_config('core')
-            if 'project' in opts.__dict__:
-                opts.add_config(opts.project, is_project=True)
+            opts.add_config(self.script_name)
 
-        # Check if missing required arguments were filled from config:
+            # section [project "<tag>"]
+            tags = opts.get_list('project')
+            if tags is not None and len(tags) == 1:
+                # XXX Only load config when project is unambiguous.
+                # If specifying multiple projects, use command line args.
+                opts.add_config(tags[0], is_project=True) # section [project "<tag>"]
+
+        # check if missing required arguments were provided
+        # (either from config or as named arguments):
         if check_required:
             for i in range(len(required_args)):
                 if required_args[i] not in opts.__dict__:
-                    warn_print("Missing required argument '{}'\nUSAGE: {}" \
-                           .format(required_args[i], usage), prefix="")
+                    warn_print("Missing required argument '{}'" \
+                           .format(required_args[i]), prefix="")
+                    self._print_usage(info, args, usage)
                     exit(1)
 
-        # Normalize types and set defaults:
-        for key, default_val in defaults.items():
+        # normalize types and set defaults:
+        for t in args:
+            key, default_val, cookie, description = t
             if key not in opts.__dict__:
                 opts.__dict__[key] = default_val
                 continue
@@ -1384,6 +1507,8 @@ class Bunsen:
                 opts.__dict__[key] = val
             elif isinstance(default_val, int):
                 val = opts.__dict__[key]
+                if val == 'infinity' or val == 'unlimited':
+                    val = -1
                 opts.__dict__[key] = int(val)
 
         return opts
@@ -1394,14 +1519,20 @@ class BunsenOpts:
         self._bunsen = bunsen
         self._defaults = defaults
 
+    def add_opt(self, key, val, warn_duplicates=True):
+        # TODO: Check for conflict with previous added options if warn_duplicates is enabled.
+        self.__dict__[key] = val
+
     def add_config(self, config_section, is_project=False):
         if is_project:
             config_section = 'project "{}"'.format(config_section)
         if config_section not in self._bunsen.config:
             return
         for key, val in self._bunsen.config[config_section].items():
-            if key in self._defaults:
-                self.__dict__[key] = val
+            if key in self._defaults \
+               or key == 'project': # XXX always used, for config sections
+                if key not in self.__dict__: # XXX if not added from cmdline
+                    self.__dict__[key] = val
 
     def get_list(self, key, default=None):
         '''Parse a comma-separated list.'''
@@ -1507,7 +1638,8 @@ def bunsen_run(b, hostname, scriptname, invocation_args):
     print("===", file=sys.stderr)
     b.run_script(hostname, script_path, invocation_args,
                  wd_path=wd_path, wd_branch_name=wd_branch_name,
-                 wd_cookie='') # XXX empty cookie defaults to PID
+                 wd_cookie='', # XXX empty cookie defaults to PID
+                 script_name=scriptname)
 
 # Subcommand 'gorilla' -- a parable about false negative errors
 
