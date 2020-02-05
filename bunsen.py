@@ -716,6 +716,8 @@ class Bunsen:
           - [core]            -- applies always
           - [<script_name>]   -- applies to script +<script_name> only
           - [project "<tag>"] -- applies to any script running on project <tag>
+          - TODOXXX [bunsen-push]
+          - TODOXXX [bunsen-push "<tag>"]
         - scripts/ -- a folder for user-contributed scripts
         '''
         self.script_name = '<unknown>' # for commandline args & config section

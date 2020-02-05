@@ -147,7 +147,12 @@ def traverse_logs(log_src, restrict=None):
                 if not is_testdir(testdir): continue
                 yield osver, test_sha, testdir
 
-def commit_logs(b, log_src, opts=None):
+# TODOXXX Factor code from commit_repo_logs:
+def commit_logs(b, opts=None, push=False, *args):
+    # TODO: Perhaps roll push into kwargs, default to push=True?
+    pass # TODOXXX
+
+def commit_repo_logs(b, log_src, opts=None):
     '''
     Commit logs from local path log_src. Scans for the following logs:
     - <log_src>/<vm_name>/<hexsha_prefix>/<hexsha>/{README.txt,gdb.log,gdb.sum}
@@ -321,4 +326,4 @@ if __name__=='__main__':
     opts = b.cmdline_args(sys.argv, usage=usage, required_args=['raw_logs'],
                           defaults=default_args)
     opts.timeslice = opts.get_list('timeslice')
-    commit_logs(b, opts.raw_logs, opts=opts)
+    commit_repo_logs(b, opts.raw_logs, opts=opts)

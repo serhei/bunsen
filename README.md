@@ -28,6 +28,10 @@ configurations.
     $ pip3 install --user GitPython # see https://github.com/gitpython-developers/GitPython
     $ pip3 install --user dateparser # see https://github.com/scrapinghub/dateparser
 
+For the `bunsen-push` server:
+
+    $ pip3 install --user web.py # see https://webpy.org/
+
 ## Development
 
 `bunsen` is now hosted on sourceware.org:
