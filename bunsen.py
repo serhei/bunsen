@@ -933,7 +933,6 @@ class Bunsen:
         if (testlog_path, commit_id) not in self._testlog_lines:
             commit = self.git_repo.commit(commit_id)
             blob = commit.tree[testlog_path]
-            print("DEBUG reading", blob, file=sys.stderr)
             lines = blob.data_stream.read().decode('utf8').split('\n')
             #lines = blob.data_stream.readlines()
             self._testlog_lines[(testlog_path, commit_id)] = lines
@@ -1461,7 +1460,8 @@ class Bunsen:
         if j < len(unnamed_args):
             warn_print("Unexpected extra (unnamed) argument '{}'" \
                        .format(unnamed_args[j]), prefix="")
-            self._print_usage(info, args, usage)
+            self._print_usage(info, args, usage,
+                              required_args, optional_args)
             exit(1)
 
         # set options from self.config
@@ -1484,7 +1484,8 @@ class Bunsen:
                 if required_args[i] not in opts.__dict__:
                     warn_print("Missing required argument '{}'" \
                            .format(required_args[i]), prefix="")
-                    self._print_usage(info, args, usage)
+                    self._print_usage(info, args, usage,
+                                      required_args, optional_args)
                     exit(1)
 
         # normalize types and set defaults:
