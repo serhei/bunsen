@@ -1438,7 +1438,6 @@ class Bunsen:
                 found_unknown = True
                 continue
             opts.add_opt(key, m.group('arg'))
-            opts.__dict__[key] = m.group('arg')
         if found_unknown:
             self._print_usage(info, args, usage,
                               required_args, optional_args)
@@ -1450,11 +1449,15 @@ class Bunsen:
             if j >= len(unnamed_args):
                 check_required = True
                 break
+            if required_args[i] in opts.__dict__:
+                continue # added by keyword already
             opts.add_opt(required_args[i], unnamed_args[j])
             j += 1
         for i in range(len(optional_args)):
             if j >= len(unnamed_args):
                 break
+            if optional_args[i] in opts.__dict__:
+                continue # added by keyword already
             opts.add_opt(optional_args[i], unnamed_args[j])
             j += 1
         if j < len(unnamed_args):
@@ -1539,6 +1542,8 @@ class BunsenOpts:
         '''Parse a comma-separated list.'''
         if key not in self.__dict__ or self.__dict__[key] is None:
             return default
+        if isinstance(self.__dict__[key], list): # XXX already parsed
+            return self.__dict__[key]
         items = []
         for val in self.__dict__[key].split(","):
             if val == "": continue
