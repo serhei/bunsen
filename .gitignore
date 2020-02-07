@@ -9,3 +9,6 @@ wd-*
 binutils-gdb
 systemtap
 gcc
+
+# temporary cache
+regressions-*
