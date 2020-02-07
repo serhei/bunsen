@@ -1,37 +1,53 @@
 #!/usr/bin/env python3
-# WIP -- Walk the history of the specified branch (default master) of the Git
-# repo source_repo. For each commit in the branch, diff testruns under
-# specified project with testruns for the parent commits. Report all
-# regressions that did not already appear within the prior
-# novelty_threshold (default infinity) commits. More precisely, report
-# the first occurrence of a failed change ('first failed') and the
-# last occurrence of a fixed change ('last fixed').
-usage = "+new_regressions [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tags>] [novelty_threshold=<num>] [sort=[least_]recent] [show_empty_commits=yes|no] [show_both_ends=no|yes] [diff_earlier=yes|no] [diff_baseline=no|yes] [cached_data=<path>] [update_cache=yes|no] [rebuild_cache=no|yes] [restrict_training=<num>] [restrict=<num>] ..."
-default_args = {'project':None,         # restrict to testruns under <tags>
-                'key':None,             # restrict to testcases matching <glob>
-                'source_repo':None,     # scan commits from source_repo
-                'branch':'master',      # scan commits in branch <name>
-                'novelty_threshold':-1, # distance at which to merge changes (-1 denotes infinity)
-                'sort':'recent',        # sort by date of commit
-                # TODOXXX: Need to still mark empty commits as known (or they won't be cached).
-                'show_empty_commits':True, # list a commit even if it has no associated changes
-                'show_both_ends':False, # also consider 'last failed' and 'first fixed'
-                # XXX note that diff_earlier takes precedence over diff_baseline
-                'diff_earlier':True,    # diff against earlier commit if same configuration is missing
-                'diff_baseline':False,  # diff against probable baseline if same configuration is missing
-                'cached_data':None,     # <path> of JSON cached data from prior runs
-                # TODO default update_cache to no ??
-                'update_cache':True,    # update cache with previously unseen testruns
-                'rebuild_cache':False,  # compute each diff even if already present in cache
-                'verbose':False,        # report progress of 'training' (# testcases added vs. merged)
-                # TODO automatically enable restrict_training if restrict and sort=least_recent enabled
-                'restrict_training':-1, # limit the number of scanned commits (-1 denotes unlimited)
-                'restrict':-1,          # limit the number of displayed commits (-1 denotes unlimited)
-                # TODO: add option pretty=yes/html
-                'pretty':True,
-                # TODO: add option profile ??
-               }
-# TODO: accept 'infinity/unlimited' as a value for novelty_threshold, restrict_training, restrict
+# TODO from common.cmdline_args import default_args
+info='''WIP Walk the history of the specified branch (default master) of the
+Git repo source_repo. For each commit in the branch, diff testruns
+under specified project with testruns for the parent commits. Report
+all regressions that did not already appear within the prior
+novelty_threshold (default infinity) commits. More precisely, report
+the first occurrence of a failed change ('first failed') and the last
+occurrence of a fixed change ('last fixed').'''
+cmdline_args = [
+    ('project', None, '<tags>',
+     "restrict to testruns under <tags>"),
+    ('key', None, '<glob>',
+     "restrict to testcases matching <glob>"),
+    ('source_repo', None, '<path>',
+     "scan commits from source_repo <path>"),
+    ('branch', 'master', '<name>',
+     "scan commits in branch <name>"),
+    ('novelty_threshold', -1, '<num>',
+     "distance at which to merge changes (-1 denotes infinity)"),
+    ('sort', 'recent', '[least_]recent',
+     "sort by chronological order of commit"),
+    # TODOXXX: Need to still mark empty commits as known (or they won't be cached).
+    ('show_empty_commits', True, None,
+     "list a commit even if it has no associated changes"),
+    ('show_both_ends', False, None,
+     "also consider 'last failed' and 'first fixed' changes"),
+    ('diff_baseline', False, None,
+     "diff against probable baseline if same configuration is missing"),
+    ('diff_earlier', True, None,
+     "diff against earlier commit if same configuration is missing " \
+     "(takes precedence over diff_baseline)"),
+    ('cached_data', None, '<path>',
+     "<path> of JSON cached data from prior runs"),
+    # TODOXXX: Default update_cache to 'no unless cachefile is missing'.
+    # TODO: Support combining info from multiple cachefiles?
+    ('update_cache', True, None,
+     "update cache with previously unseen testruns"),
+    ('rebuild_cache', False, None,
+     "compute each diff even when already present in cache"),
+    ('verbose', False, None,
+     "report progress of 'training' (num testcases added vs merged)"),
+    # TODOXXX: automatically enable restrict_training if restrict and sort=least_recent enabled
+    ('restrict_training', -1, '<num>',
+     "limit the number of scanned commits (-1 denotes unlimited)"),
+    ('restrict', -1, '<num>',
+     "limit the number of displayed commits (-1 denotes unlimited)"),
+    ('pretty', True, 'yes|html',
+     "pretty-print or output HTML"),
+]
 
 # XXX Some stats on how much information is filtered out:
 # - 216 commit_pairs from GDB project, novelty_threshold=50, summary 8539 changes of 37784 total (filter out 77.4%) over 3h20min (full rebuild)
@@ -431,8 +447,8 @@ class ChangeSet:
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
-    opts = b.cmdline_args(sys.argv, usage=usage, required_args=[],
-                          optional_args=['key', 'source_repo'], defaults=default_args)
+    opts = b.cmdline_args(sys.argv, info=info, args=cmdline_args,
+                          optional_args=['key', 'source_repo'])
     out = get_formatter(b, opts)
 
     tags = opts.get_list('project', default=b.tags)
