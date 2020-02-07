@@ -1379,9 +1379,9 @@ class Bunsen:
             else:
                 arg_desc = "[{}={}]".format(name, cookie)
             arg_width = 1 + len(arg_desc) # XXX includes a space before
-            if offset + arg_width > LINE_WIDTH + 1:
+            if offset + arg_width >= LINE_WIDTH:
                 usage += "\n" + indent
-                offset = len(indent)
+                offset = len(indent) + arg_width
             else:
                 usage += " "
                 offset += arg_width
