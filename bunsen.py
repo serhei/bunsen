@@ -65,7 +65,7 @@ INDEX_SEPARATOR = '\n---\n' # XXX YAML separator between JSON objects in index
 cursor_regex = re.compile(r"(?:(?P<commit_id>[0-9A-Fa-f]+):)?(?P<path>.*):(?P<start>\d+)(?:-(?P<end>\d+))?")
 
 # XXX Format for command line args:
-cmdline_regex = re.compile(r"(?:(?P<keyword>[0-9A-Za-z_]+)=)?(?P<arg>.*)")
+cmdline_regex = re.compile(r"(?:(?P<keyword>[0-9A-Za-z_-]+)=)?(?P<arg>.*)")
 
 # One level up from os.path.basename:
 def basedirname(path):
@@ -1442,6 +1442,8 @@ class Bunsen:
             if key is None:
                 unnamed_args.append(m.group('arg'))
                 continue
+            # PR25090: Allow e.g. +source-repo= instead of +source_repo=
+            key = key.replace('-','_')
             if key not in defaults:
                 warn_print("Unknown keyword argument '{}'".format(key))
                 found_unknown = True
