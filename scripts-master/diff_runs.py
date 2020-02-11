@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-# Compare the specified testruns.
-usage = "+diff_runs [baseline=]<bunsen_commit> [latest=]<bunsen_commit>\n" \
-        "                  [pretty=yes|no|html]"
-default_args = {'baseline':None, # baseline testrun to compare against
-                'latest':None,   # testrun to compare; TODO support multiple testruns?
-                'pretty':True,   # pretty-print info instead of showing JSON
-               }
+# TODO from common.cmdline_args import default_args
+info='''Compare the specified testruns.'''
+cmdline_args = [
+    ('baseline', None, '<bunsen_commit>', "baseline testrun to compare against"),
+    ('latest', None, '<bunsen_commit>', "testrun to compare"),
+    # TODO: support multiple testruns for latest?
+    ('pretty', True, None, "pretty-print instead of showing JSON"),
+]
 
 # TODOXXX Add filtering option as in diff_commits.
 fail_outcomes = {'FAIL','KFAIL','XFAIL','UNTESTED','UNSUPPORTED','ERROR'}
@@ -204,8 +205,8 @@ def diff_2or(diff_baseline, diff_latest, key=None):
 
 b = Bunsen()
 if __name__=='__main__':
-    opts = b.cmdline_args(sys.argv, usage=usage, required_args=['baseline','latest'],
-                          defaults=default_args)
+    opts = b.cmdline_args(sys.argv, info=info, args=cmdline_args,
+                          required_args=['baseline','latest'])
     out = get_formatter(b, opts)
     baseline = b.testrun(opts.baseline)
     testrun = b.testrun(opts.latest)

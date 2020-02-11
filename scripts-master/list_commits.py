@@ -1,20 +1,27 @@
 #! /usr/bin/env python3
-# List the testruns in the Bunsen repo for each commit in a specified
-# branch (default master) of the Git repo source_repo.
-usage = "+list_commits [[source_repo=]<path>] [branch=<name>] [project=<tags>]\n" \
-        "                     [verbose=yes|no] [compact=yes|no] [pretty=yes|no|html]\n" \
-        "                     [sort=[least_]recent] [restrict=<num>]\n" \
-        "                     [header_fields=<field1>,<field2>,...]"
-default_args = {'source_repo':None,   # scan commits from source_repo
-                'branch':'master',    # scan commits in branch <name>
-                'project':None,       # restrict to testruns under <tags>
-                'verbose':False,      # show info for each testrun
-                'compact':False,      # for pretty=html only -- show one row per commit
-                'pretty':True,        # pretty-print info instead of showing JSON
-                'sort':'recent',      # sort by date of commit
-                'restrict':-1,        # restrict output to N commits
-                'header_fields':None, # fields to use for testrun header / compact view config
-               }
+# TODO from common.cmdline_args import default_args
+info='''List the testruns in the Bunsen repo for each commit in a specified
+branch (default master) of the Git repo source_repo.'''
+cmdline_args = [
+    ('source_repo', None, '<path>',
+     "scan commits from source repo <path>"),
+    ('branch', 'master', '<name>',
+     "scan commits in branch <name>"),
+    ('project', None, '<tags>',
+     "restrict to testruns under <tags>"),
+    ('verbose', False, None,
+     "show details for each testrun"),
+    ('compact', False, None,
+     "for pretty=html only -- show one row per commit"),
+    ('pretty', True, None,
+     "pretty-print info instead of showing JSON"),
+    ('sort', 'recent', '[least_]recent',
+     "sort by date of commit"),
+    ('restrict', -1, None,
+     "restrict output to <num> commits"),
+    ('header_fields', None, '<field1>,<field2>,...',
+     "list of fields to use for testrun header or compact=yes rows"),
+]
 
 import sys
 import bunsen
@@ -103,8 +110,9 @@ def iter_adjacent(b, repo, testruns_map=None, hexsha_lens=None,
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
-    opts = b.cmdline_args(sys.argv, usage=usage, required_args=['source_repo'],
-                          optional_args=['project'], defaults=default_args)
+    opts = b.cmdline_args(sys.argv, info=info, args=cmdline_args,
+                          required_args=['source_repo'],
+                          optional_args=['project'])
     out = get_formatter(b, opts)
 
     tags = opts.get_list('project', default=b.tags)

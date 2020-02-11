@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # WIP one-off -- Check which GDB test logs are present in a Bunsen git repo.
-usage = "+check_logs [raw_logs=]<path>"
-default_args = {'raw_logs':None, # raw buildbot log repository
-               }
+info='''WIP one-off -- Check which GDB test logs are present in a Bunsen git repo.'''
+cmdline_args = [('raw_logs', None, '<path>', "raw buildbot log repository")]
 
 # This assumes the format of the public GDB buildbot data:
 # - https://gdb-buildbot.osci.io/results/
@@ -77,6 +76,6 @@ def check_logs(b, log_src):
 
 b = Bunsen()
 if __name__=='__main__':
-    opts = b.cmdline_args(sys.argv, usage=usage, required_args=['raw_logs'],
-                          defaults=default_args)
+    opts = b.cmdline_args(sys.argv, info=info, args=cmdline_args,
+                          required_args=['raw_logs'])
     check_logs(b, opts.raw_logs)

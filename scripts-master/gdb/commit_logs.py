@@ -1,30 +1,22 @@
 #!/usr/bin/env python3
-# WIP -- Commit GDB test logs to a Bunsen git repo. Some assembly required.
-usage = "+commit_logs [raw_logs=]<path> ... (see source code)"
-default_args = {
-# - raw buildbot log repository
-    'raw_logs':None,
-# - project tag for the created logs
-    'tag':'gdb',
-# - enable to ignore BUNSEN_COMMIT files. Bunsen should still prevent
-#   duplication of testlog data, but the process of checking will be
-#   slower.
-    'rebuild':True,
-# - enable to only commit testruns whose year_month tag belongs to
-#   this set. This requires gdb_label_year_month.py to be run first in
-#   order to add year_month.txt to the buildbot raw log directories.
-# e.g. timeslice:'2019-08,2019-09'
-    'timeslice':None,
-# - enable to push + recreate all working directories every few logs
-# e.g. push_every:250
-    'push_every':-1,
-# - enable to skip all testruns until you reach a certain log
-#   directory (whose path ends in skip_until). This is handy if your
-#   commit_logs process was interrupted, but assumes os.listdir()
-#   ordering is stable.
-#skip_until = 'Fedora-x86_64-native-extended-gdbserver-m64/a0/a051e2f3e0c1cedf4be0e1fedcd383fd203c769c'
-    'skip_until':None,
-}
+info='''WIP -- Commit GDB test logs to a Bunsen git repo. Some assembly required.'''
+cmdline_args = [
+    ('raw_logs', None, '<path>',
+     '''raw buildbot log repository'''),
+    ('tag', 'gdb', '<name>',
+     '''project tag for the created logs'''),
+    ('rebuild', True, None,
+     '''enable to ignore BUNSEN_COMMIT files. Bunsen should still prevent duplication of testlog data, but the process of checking will be slower.'''),
+    ('timeslice', None, '<year_month>,...',
+     '''enable to only commit testruns whose year_month tag belongs to this set. Requires gdb_label_year_month.py to be run first in order to add year_month.txt to the buildbot raw log directories.
+e.g. timeslice=2019-08,2019-09'''),
+    ('push_every', -1, '<num>',
+     '''enable to push + recreate all working directories every few logs.
+e.g. push_every=250'''),
+    ('skip_until', None, '<path>',
+     '''enable to skip all testruns until you reach a certain log directory (whose path ends in <path>). This is handy if your commit_logs process was interrupted, but assumes os.listdir() ordering is stable.
+e.g. skip_until=Fedora-x86_64-native-extended-gdbserver-m64/a0/a051e2f3e0c1cedf4be0e1fedcd383fd203c769c'''),
+]
 
 # This assumes the format of the public GDB buildbot data:
 # - https://gdb-buildbot.osci.io/results/
@@ -159,8 +151,8 @@ def commit_repo_logs(b, log_src, opts=None):
 
     Log files can also be compressed with .xz.
     '''
-    global default_args
-    if opts is None: opts = b.opts(default_args)
+    global cmdline_args
+    if opts is None: opts = b.opts(cmdline_args)
 
     # TODO: Turn this into a command line option. Or we should be able to
     # just give the subdirectory and have the traversal look one level down.
@@ -323,7 +315,7 @@ def commit_repo_logs(b, log_src, opts=None):
 
 b = Bunsen()
 if __name__=='__main__':
-    opts = b.cmdline_args(sys.argv, usage=usage, required_args=['raw_logs'],
-                          defaults=default_args)
+    opts = b.cmdline_args(sys.argv, info=info, args=cmdline_args,
+                          required_args=['raw_logs'])
     opts.timeslice = opts.get_list('timeslice')
     commit_repo_logs(b, opts.raw_logs, opts=opts)

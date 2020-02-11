@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-# Compare all testruns for two commits in the Git repo source_repo
-# and summarize regressions.
-usage = "+diff_commits [baseline=]<source_commit> [latest=]<source_commit> [[source_repo=]<path>]\n" \
-        "                     [exclude={new,unresolved,f2f}] [pretty=yes|no|html]"
-default_args = {'source_repo':None, # obtain commits from source_repo
-                'baseline':None,    # baseline commit to compare against
-                'latest':None,      # commit to compare
-                'exclude':None,     # list of exclusions (see below)
-                'pretty':True,      # pretty-print info instead of showing JSON
-                # TODO 'diff_baseline':True, # diff against probable baseline if same configuration is missing
-               }
+# TODO from common.cmdline_args import default_args
+info='''Compare all testruns for two commits in the Git repo source_repo
+and summarize regressions.'''
+cmdline_args = [
+    ('source_repo', None, '<path>',
+     "obtain commits from source repo <path>"),
+    ('baseline', None, '<source_commit>', "baseline commit to compare against"),
+    ('latest', None, '<source_commit>', "commit to compare"),
+    ('exclude', None, '{new,unresolved,f2f}',
+     "list of exclusions (see source code of script)"),
+    ('pretty', True, None,
+     "pretty-print instead of showing JSON"),
+    # TODO ('diff_baseline', True, None, "diff against probable baseline if same configuration is missing"),
+]
 
 # List of exclusions 'new', 'unresolved', 'f2f' (XXX values overridden by opts):
 filter_new = False # XXX e.g. null->PASS type of regressions
@@ -349,10 +352,9 @@ def diff_all_testruns(baseline_runs, latest_runs,
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
-    opts = b.cmdline_args(sys.argv, usage=usage,
+    opts = b.cmdline_args(sys.argv, info=info, args=cmdline_args
                           required_args=['baseline','latest'],
-                          optional_args=['source_repo'],
-                          defaults=default_args)
+                          optional_args=['source_repo'])
     out = get_formatter(b, opts)
     repo = Repo(opts.source_repo)
 

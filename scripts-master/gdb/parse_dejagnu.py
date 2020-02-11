@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# WIP -- Example parsing library for GDB buildbot DejaGNU test logs.
-usage = "+parse_dejagnu [logdir=]<path> [verbose=yes|no]"
-default_args = {'logdir':None,   # buildbot log folder
-                'verbose':False, # show less-important warnings
-               }
+info='''WIP -- Example parsing library for GDB buildbot DejaGNU test logs.'''
+cmdline_args = [
+    ('logdir', None, '<path>', "buildbot log folder"),
+    ('verbose', False, None, "show less-important warnings"),
+]
 
 # logdir example (individual files may be .xz):
 # $ ls gdb-sample-logs/
@@ -374,8 +374,8 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
 b = Bunsen()
 if __name__ == '__main__':
     # TODO: enable cwd as the default logdir argument
-    opts = b.cmdline_args(sys.argv, usage=usage, required_args=['logdir'],
-                          defaults=default_args)
+    opts = b.cmdline_args(sys.argv, info=info, args=cmdline_args,
+                          required_args=['logdir'])
 
     # TODO: use Bunsen library to load testlogs
     # TODO: support reading testlogs from script's cwd or Bunsen repo

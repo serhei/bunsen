@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-# Walk the history of the specified branch (default master) of the Git
-# repo source_repo. For every commit, compare testruns under specified
-# project with testruns for the parent commit. Print a summary of how
-# test results change for testcases whose name contains the specified
-# substring <key>.
-usage = "+when_failed [[key=]<glob>] [[source_repo=]<path>] [branch=<name>] [project=<tags>]"
-default_args = {'project':None,     # restrict to testruns under <tags>
-                'key':None,         # restrict to testcases matching <glob>
-                'source_repo':None, # scan commits from source_repo
-                'branch':'master',  # scan commits in branch <name>
-               }
+# TODO from common.cmdline_args import default_args
+info='''Walk the history of the specified branch (default master) of the
+Git repo source_repo. For every commit, compare testruns under
+specified project with testruns for the parent commit. Print a summary
+of how test results change for testcases whose name matches the
+specified key.'''
+cmdline_args = [
+    ('project', None, '<tags>',
+     "restrict to testruns under <tags>"),
+    ('key', None, '<glob>',
+     "restrict to testcases matching <glob>"),
+    ('source_repo', None, '<path>',
+     "scan commits from source_repo <path>"),
+    ('branch', 'master', '<name>',
+     "scan commits in branch <name>"),
+]
 
 # TODO: Suggested options:
 # - increase/decrease verbosity
@@ -67,8 +72,8 @@ class Totals:
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
-    opts = b.cmdline_args(sys.argv, usage=usage, required_args=[],
-                          optional_args=['key', 'source_repo'], defaults=default_args)
+    opts = b.cmdline_args(sys.argv, info=info, args=cmdline_args,
+                          required_args=[], optional_args=['key', 'source_repo'])
     # TODO: out = get_formatter(b, opts)
 
     tags = opts.get_list('project', default=b.tags)

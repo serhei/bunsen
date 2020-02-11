@@ -1329,6 +1329,13 @@ class Bunsen:
             assert False
 
     def opts(self, defaults={}):
+        if isinstance(defaults, list):
+            # XXX Handle new cmdline_args format:
+            args = defaults; defaults = {}
+            for t in args:
+                name, default_val, cookie, description = t
+                defaults[name] = default_val
+        assert(isinstance(defaults, dict))
         return BunsenOpts(self, defaults)
 
     def _print_usage(self, info, args, usage=None,

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-# WIP -- Example parsing library for SystemTap DejaGNU test logs.
-# Based on some DejaGNU parsing code written in C++ by Martin Cermak.
-usage = "+parse_dejagnu [logfile=]<path> [sumfile=]<path> [verbose=yes|no]"
-default_args = {'logfile':None,  # SystemTap log file
-                'sumfile':None,  # SystemTap sum file
-                'verbose':False, # show less-important warnings
-               }
+info='''WIP -- Example parsing library for SystemTap DejaGNU test logs.
+Based on some DejaGNU parsing code written in C++ by Martin Cermak.'''
+cmdline_args = [
+    ('logfile', None, '<path>', "SystemTap log file"),
+    ('sumfile', None, '<path>', "SystemTap sum file"),
+    ('verbose', False, None, "show less-important warnings"),
+]
 
 # TODO: Additional information & fields to parse (harmonize with gdb):
 # - source_commit (extract from version field?)
@@ -429,9 +429,8 @@ b = Bunsen()
 if __name__ == '__main__':
     # TODO: enable the following default command line arguments
     #wd_defaults = ['systemtap.log', 'systemtap.sum']
-    opts = b.cmdline_args(sys.argv, usage=usage,
-                          required_args=['logfile', 'sumfile'],
-                          defaults=default_args)
+    opts = b.cmdline_args(sys.argv, info=info, args=cmdline_args,
+                          required_args=['logfile', 'sumfile'])
     # TODO: use Bunsen library to load testlogs
     # TODO: support reading testlogs from script's cwd or Bunsen repo
     #logfile = b.logfile(opts.logfile)
