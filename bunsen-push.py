@@ -15,6 +15,7 @@ cmdline_args = [
      "URL to find more info about this bunsen-push service."),
 ]
 
+import importlib
 import sys
 import web
 from bunsen import Bunsen, BunsenError
@@ -26,11 +27,13 @@ import io
 urls = ('/upload', 'upload',
         '/manifest', 'manifest',
         '/gorilla', 'gorilla')
-app = web.application(urls, globals())
+
+# XXX must disable autoreload for app to see correct globals
+app = web.application(urls, globals(), autoreload=False)
 
 # XXX application globals
-_commit_logs = None # XXX dynamically configure from bunsen-push command line
 opts = None # XXX set by b.cmdline_args() below
+_commit_logs = None # XXX configured from bunsen-push command line
 
 # TODO: Disable web.py's config.debug stacktraces, or control with an option.
 
@@ -38,7 +41,6 @@ opts = None # XXX set by b.cmdline_args() below
 def _log_tarfile(tar):
     # TODOXXX: Also log: what's in the manifest, what's rejected,
     # target project, result of adding the testlogs to the Bunsen repo....
-    global opts
     print("{} received a payload:".format(opts.service_id),
           file=sys.stderr)
     for tarinfo in tar:
@@ -49,19 +51,18 @@ def _log_tarfile(tar):
             kind = "directory"
         print("* {} ({} bytes, {})".format(tarinfo.name, tarinfo.size, kind),
               file=sys.stderr)
+    sys.stderr.flush()
 
 class upload:
     def GET(self):
-        global opts
         return 'This is the Bunsen {} test results uploader.\n' \
             'Please POST a tarball of test results to this endpoint to add it into the Bunsen repo.\n' \
             'Please see {} for more information.' \
             .format(opts.service_id, opts.service_info_url)
 
-    # XXX test e.g. tar cvzf - test.sum test.log | curl ???
+    # XXX test e.g. tar cvzf - test.sum test.log | curl -X POST --data-binary '@-' http://bunsen.target:8012/upload
     def POST(self):
         # TODOXXX: Support upload?project=<tag> (check against a whitelist)
-        global _commit_logs, opts
         dat = web.data()
         bio = io.BytesIO(dat)
         tar = tarfile.open(fileobj=bio)
@@ -74,9 +75,11 @@ class upload:
         tar.close()
         bio.close()
 
+        # TODOXXX: Return a more useful message based on outcome of commit_logs:
+        return 'ok\n'
+
 class manifest:
     def GET(self):
-        global opts
         s = ''
         for pat in opts.manifest:
             s += pat + '\n'
@@ -102,11 +105,14 @@ if __name__=='__main__':
     opts.add_config('bunsen-push') # TODOXXX: Also handle [bunsen-push "<tag>"]!
     # TODOXXX Also allow standard options for _commit_logs.commit_logs()!
     opts.manifest = opts.get_list('manifest')
+
     sys.path += b.default_pythonpath
-    _commit_logs = __import__(to_module_name(opts.commit_module))
+    module_name = to_module_name(opts.commit_module)
+    _commit_logs = importlib.import_module(module_name)
+    print("Found commit_logs module", _commit_logs)
     if 'commit_logs' not in _commit_logs.__dict__:
         raise BunsenError("Module '{}' does not provide commit_logs() function" \
-                          .format(to_module_name(opts.commit_module)))
+                          .format(module_name))
 
     # TODO: Isn't there a better way to specify the port for web.py?
     sys.argv = [sys.argv[0], str(opts.port)]

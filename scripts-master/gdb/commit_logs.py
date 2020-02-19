@@ -140,7 +140,9 @@ def traverse_logs(log_src, restrict=None):
                 yield osver, test_sha, testdir
 
 # TODOXXX Factor code from commit_repo_logs:
-def commit_logs(b, opts=None, push=False, *args):
+def commit_logs(b, *args, **kwargs):
+    opts = kwargs['opts'] # TODOXXX Default None
+    push = kwargs['push'] # TODOXXX Default False
     # TODO: Perhaps roll push into kwargs, default to push=True?
     pass # TODOXXX
 
