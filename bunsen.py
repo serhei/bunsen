@@ -783,19 +783,28 @@ class Bunsen:
         # XXX Search scripts/, scripts-*/ in these directories:
         self.scripts_search_path = [self.base_dir, bunsen_repo_dir]
 
-        # XXX Include Python modules from these directories:
         self.default_pythonpath = [bunsen_repo_dir]
-        for parent_dir in self.scripts_search_path:
-            if not os.path.isdir(parent_dir):
-                continue
-            for candidate_dir in os.listdir(parent_dir):
-                candidate_path = os.path.join(parent_dir, candidate_dir)
-                # TODO: Also consider 'modules', 'modules-'?
-                if candidate_dir == 'scripts' \
-                   or candidate_dir.startswith('scripts-'):
-                    if not os.path.isdir(candidate_path):
-                        continue
-                    self.default_pythonpath.append(candidate_path)
+        # XXX Search recursively for 'scripts-' directories,
+        # e.g. .bunsen/scripts-internal/scripts-master
+        search_path = self.scripts_search_path
+        while len(search_path) > 0:
+            next_search_path = []
+            for parent_dir in search_path:
+                if not os.path.isdir(parent_dir):
+                    continue
+                for candidate_dir in os.listdir(parent_dir):
+                    candidate_path = os.path.join(parent_dir, candidate_dir)
+                    if candidate_dir == 'scripts' \
+                       or candidate_dir == 'modules' \
+                       or candidate_dir.startswith('scripts-') \
+                       or candidate_dir.startswith('scripts_') \
+                       or candidate_dir.startswith('modules-') \
+                       or candidate_dir.startswith('modules_'):
+                        if not os.path.isdir(candidate_path):
+                            continue
+                        self.default_pythonpath.append(candidate_path)
+                        next_search_path.append(candidate_path)
+            search_path = next_search_path
         # TODO: Also allow invoking Python scripts from shell scripts via $PATH.
 
         # XXX Add the following environment variables to a running script:
