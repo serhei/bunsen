@@ -25,6 +25,7 @@ import tarfile
 import io
 
 urls = ('/upload', 'upload',
+        # TODOXXX: Support upload-<tag> (for a fixed set of tags)
         '/manifest', 'manifest',
         '/gorilla', 'gorilla')
 
@@ -62,21 +63,20 @@ class upload:
 
     # XXX test e.g. tar cvzf - test.sum test.log | curl -X POST --data-binary '@-' http://bunsen.target:8012/upload
     def POST(self):
-        # TODOXXX: Support upload?project=<tag> (check against a whitelist)
         dat = web.data()
         bio = io.BytesIO(dat)
         tar = tarfile.open(fileobj=bio)
 
         # TODOXXX: Check payload against opts.manifest.
         _log_tarfile(tar)
-        _commit_logs.commit_logs(b, tar, opts=opts, push=True)
-        # TODOXXX: Perhaps default commit_logs() to push=True?
+        commit_id = _commit_logs.commit_logs(b, wd, tar, tarfile=tar,
+                                             opts=opts, push=True)
 
         tar.close()
         bio.close()
 
         # TODOXXX: Return a more useful message based on outcome of commit_logs:
-        return 'ok\n'
+        return 'failed\n' if commit_id is None else 'ok {}\n'.format(commit_id)
 
 class manifest:
     def GET(self):
@@ -96,6 +96,7 @@ def to_module_name(commit_module):
     return commit_module
 
 b = Bunsen()
+wd = b.checkout_wd('master') # XXX branch does not matter
 if b.script_name is None or b.script_name == "<unknown>":
     b.script_name = 'bunsen-push' # XXX not set when bunsen-push invoked directly
 if __name__=='__main__':
@@ -105,6 +106,7 @@ if __name__=='__main__':
     opts.add_config('bunsen-push') # TODOXXX: Also handle [bunsen-push "<tag>"]!
     # TODOXXX Also allow standard options for _commit_logs.commit_logs()!
     opts.manifest = opts.get_list('manifest')
+    opts.tag = opts.project # XXX alias for Bunsen.commit()
 
     sys.path += b.default_pythonpath
     module_name = to_module_name(opts.commit_module)

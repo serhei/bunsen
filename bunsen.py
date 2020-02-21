@@ -4,6 +4,7 @@
 
 import os
 import sys
+import tarfile
 import shutil
 import time
 import subprocess
@@ -115,11 +116,29 @@ class Testlog:
         self.blob = blob
         self._input_file = input_file
         self._input_file_cleanup = False
+        self._has_input_file = input_file is not None
 
         # XXX Populate on demand:
         self._tag = None
         self._year_month = None
         self._lines = None
+
+    def copy_to(self, dirpath):
+        if self._has_input_file:
+            # TODO: Would be better to produce a GitPython commit directly?
+            # !!! TODOXXX Sanitize testlog_name to avoid '../../../dir' !!!
+            # For now, just stick to the basename for safety. This
+            # won't work for more complex testsuites whose results are
+            # organized in subdirectories.
+            target_name = os.path.basename(self.path)
+            target_path = os.path.join(dirpath, target_name)
+            f = open(target_path, 'wb')
+            content = self._data_stream.read()
+            # TODO: Handle isinstance(content,str)
+            f.write(content)
+            f.close()
+        else:
+            shutil.copy(self.path, dirpath)
 
     @property
     def tag(self):
@@ -136,7 +155,7 @@ class Testlog:
     # Keep private to ensure open fds are cleaned up correctly:
     @property
     def _data_stream(self):
-        if self._bunsen is None:
+        if self._bunsen is None and self._input_file is None:
             self._input_file_cleanup = True
             self._input_file = open(self.path, 'r')
         if self._input_file is not None:
@@ -170,7 +189,13 @@ class Testlog:
             self._lines = self._data_stream_readlines()
             # XXX: Could clear _lines if too many TestLog objects are
             # in memory, but did not observe any problem in practice.
-        return self._lines[line_no-1]
+        try:
+            line = self._lines[line_no-1]
+            if isinstance(line, bytes): line = line.decode('utf8')
+        except UnicodeDecodeError: # yes, it happens
+            warn_print("UnicodeDecodeError in TestLog, path={}, line={}".format(self.path, line_no))
+            return ""
+        return line
 
     def __len__(self):
         if self._lines is None:
@@ -198,6 +223,10 @@ class Cursor:
         if isinstance(source, str):
             assert from_str is None and commit_id is None
             testlog = Testlog(None, source, input_file=input_file)
+        # - Cursor (source=tarfile.ExFileObject, optional start=int, optional end=int) -> testlog=None
+        elif isinstance(source, tarfile.ExFileObject):
+            assert from_str is None and commit_id is None
+            testlog = Testlog(None, input_file=source)
         # - Cursor (source=Testlog, optional start=int, optional end=int)
         elif isinstance(source, Testlog):
             assert from_str is None and commit_id is None
@@ -678,7 +707,7 @@ class Workdir(Repo):
                 #dbug_print("should be active branch (not many) --", commit.hexsha)
                 #_bunsen._known_hexshas[commit.tree.hexsha] = commit
                 if commit.tree.hexsha == index_tree.hexsha:
-                    warn_print("proposed commit {}\n.. is a duplicate of already existing commit {} ({})".format(commit_msg, commit.summary, commit.hexsha))
+                    warn_print("proposed commit {}\n.. is a duplicate of already existing commit {} ({}), skipping".format(commit_msg, commit.summary, commit.hexsha))
                     return commit.hexsha
         commit = self.index.commit(commit_msg)
         return commit.hexsha
@@ -958,13 +987,16 @@ class Bunsen:
         '''
         return (self._staging_testlogs, self._staging_testruns)
 
-    def add_testlog(self, testlog_or_path):
+    def add_testlog(self, testlog_or_path, testlog_name=None):
         '''
         Stage a Testlog to commit to the repo.
         '''
         if isinstance(testlog_or_path, Testlog):
             testlog = testlog_or_path
             assert testlog.path is not None
+        elif isinstance(testlog_or_path, tarfile.ExFileObject):
+            assert testlog_name is not None
+            testlog = Testlog(self, testlog_name, input_file=testlog_or_path)
         else:
             testlog = Testlog(self, testlog_or_path, commit_id=None)
         self._staging_testlogs.append(testlog)
@@ -1032,7 +1064,7 @@ class Bunsen:
             wd.checkout_branch(branch_name, skip_redundant_checkout=True)
             wd.clear_files()
             for testlog in self._staging_testlogs:
-                shutil.copy(testlog.path, wd.working_tree_dir)
+                testlog.copy_to(wd.working_tree_dir)
             commit_msg = branch_name # XXX Ensures commit msg contains year_month.
             commit_msg += ": testrun with {} testlogs".format(len(self._staging_testlogs))
             # XXX append testcase summary json to commit msg for testruns_branch lookup

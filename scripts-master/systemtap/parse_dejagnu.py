@@ -127,7 +127,7 @@ def get_running_exp(running_test):
     running_test = running_test[t1:t2]
     return running_test
 
-def parse_dejagnu_log(testrun, logfile_path, all_cases=None,
+def parse_dejagnu_log(testrun, logfile, logfile_name=None, all_cases=None,
                       consolidate_pass=True, verbose=True):
     '''
     Parse log or sum file. Sum files are more reliable since
@@ -160,7 +160,13 @@ def parse_dejagnu_log(testrun, logfile_path, all_cases=None,
     rhel7_base_seen = False
     rhel7_alt_seen = False
 
-    for cur in Cursor(logfile_path, name=os.path.basename(logfile_path)):
+    if logfile_name is None:
+        logfile_name = os.path.basename(logfile)
+    logfile_path = logfile
+    if not isinstance(logfile_path, str):
+        logfile_path = logfile_name
+
+    for cur in Cursor(logfile, name=logfile_name):
         line = cur.line
         # TODO: Also extract year_month
         if line.startswith("Snapshot: version"):
@@ -344,14 +350,18 @@ def parse_dejagnu_log(testrun, logfile_path, all_cases=None,
 # valid_hashes.append(testrun.logfile_hash)
 # foreach tc in testrun.testcases: valid_testcases.append(tc['name'])
 
-def annotate_dejagnu_log(testrun, logfile_path, outcome_lines=[],
-                         handle_reordering=False, verbose=True):
+def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
+                         logfile_name=None, handle_reordering=False,
+                         verbose=True):
     '''
     Annotate the testcases in a Testrun (presumably parsed from
     systemtap.sum) with their locations in a corresponding systemtap.log file.
 
     Here, outcome_lines is a list of all individual pass/fail lines in the file.
     '''
+    if logfile_name is None:
+        logfile_name = os.path.basename(logfile)
+
     # (1) Build a map of testcases.
     # XXX testcase_outcomes approach allows the parser to reorder subtests,
     # but may not work for some testsuites that use identical outcome lines
@@ -379,7 +389,7 @@ def annotate_dejagnu_log(testrun, logfile_path, outcome_lines=[],
     running_cur = None
     last_test_cur = None
     next_outcome = None # outcome of testcases[i]
-    for cur in Cursor(logfile_path, name=os.path.basename(logfile_path)):
+    for cur in Cursor(logfile, name=logfile_name):
         line = cur.line
         if (line.startswith("Running ") and ".exp ..." in line) \
            or "Summary ===" in line:
