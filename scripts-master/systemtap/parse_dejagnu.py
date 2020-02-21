@@ -109,7 +109,8 @@ distro_map = {"Ubuntu 18.04.1 LTS":"ubuntu-18-04",
               "Ubuntu 18.04 LTS":"ubuntu-18-04",
               "Fedora release 29 (Twenty Nine)":"fedora-29",
               "Fedora release 29 (Rawhide)":"fedora-29-rawhide",
-              "Fedora release 30 (Rawhide)":"fedora-30-rawhide"}
+              "Fedora release 30 (Rawhide)":"fedora-30-rawhide",
+              "Fedora release 31 (Thirty One)":"fedora-31"}
 
 # TODO: harmonize with GDB get_running_exp
 def get_running_exp(running_test):
