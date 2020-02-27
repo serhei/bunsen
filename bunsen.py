@@ -1617,7 +1617,7 @@ def bunsen_init(b):
     else:
         log_print("Initialized empty Bunsen repository in", b.base_dir)
 
-# Subcommand 'checkout-wd'
+# Subcommand 'checkout'
 
 def bunsen_checkout_wd(b, branch_name=None, checkout_path=None):
     if branch_name is None:
@@ -1638,17 +1638,15 @@ def bunsen_checkout_wd(b, branch_name=None, checkout_path=None):
         checkout_name = None
         checkout_dir = checkout_path
         # TODO Handle the case where checkout_path is already a Bunsen checkout.
-        # Requires checkout-wd to mark .git to distinguish from other Git repos.
+        # Requires checkout to mark .git to distinguish from other Git repos.
     else:
         # Checkout at checkout_path:
         checkout_name = os.path.basename(checkout_path)
         checkout_dir = os.path.dirname(checkout_path)
     wd = b.checkout_wd(branch_name, \
                        checkout_name=checkout_name, checkout_dir=checkout_dir)
-    # TODO Print one message if updating, another message if meant for human output (rather than a checkout-wd call from a bash script).
+    # TODO Print one message if updating, another message if meant for human output (rather than a checkout call from a bash script).
     print(wd.working_tree_dir)
-
-# TODO Subcommand 'destroy-wd'
 
 # Subcommand 'run'
 
@@ -1740,12 +1738,10 @@ def sub_init(parser, args):
     b = Bunsen(repo=args.repo)
     bunsen_init(b)
 
-def sub_checkout_wd(parser, args):
+def sub_checkout(parser, args):
     b = Bunsen(repo=args.repo, alternate_cookie=str(os.getppid()))
     branch_name = args.branch
     bunsen_checkout_wd(b, branch_name)
-
-# TODO sub_destroy_wd
 
 def sub_run(parser, args):
     # Syntax: bunsen run host +script1 arg1 arg2 ... +script2 arg1 arg2 ... ...
@@ -1804,17 +1800,17 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(parents=[common_parser], add_help=False)
     subparsers = parser.add_subparsers(dest='cmd', metavar='<command>')
 
-    supported_commands = ['init', 'checkout-wd', 'run', 'gorilla', 'help']
+    supported_commands = ['init', 'checkout', 'run', 'gorilla', 'help']
 
     parser_init = subparsers.add_parser('init', \
         help='create directory for bunsen data')
     parser_init.set_defaults(func=sub_init)
 
-    parser_checkout_wd = subparsers.add_parser('checkout-wd', \
+    parser_checkout_wd = subparsers.add_parser('checkout', \
         help='check out a bunsen working directory')
     parser_checkout_wd.add_argument('branch', nargs='?', \
         metavar='<branch>', help='name of branch to check out', default='index')
-    parser_checkout_wd.set_defaults(func=sub_checkout_wd)
+    parser_checkout_wd.set_defaults(func=sub_checkout)
 
     parser_run = subparsers.add_parser('run', \
         help='run a script with bunsen env')
