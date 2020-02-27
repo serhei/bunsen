@@ -1456,7 +1456,13 @@ class Bunsen:
         The second format automatically generates a usage message
         which includes argument descriptions in the form
         "name=cookie \t Detailed description."'''
-        # TODO: Print usage when script is invoked with --help.
+
+        # Handle +script_name --help. XXX argv is assumed to be sys.argv
+        if argv[1] == '-h' or argv[1] == '--help':
+            self._print_usage(info, args, usage,
+                              required_args, optional_args)
+            exit(1)
+
         assert(usage is None or args is None) # XXX usage built from args
         assert(args is None or len(defaults) == 0)
 
@@ -1472,7 +1478,7 @@ class Bunsen:
 
         opts = self.opts(defaults)
 
-        # iterate through argv, assumed to be sys.argv
+        # Iterate through argv, XXX assumed to be sys.argv.
         argv = argv[1:] # Removes sys.argv[0].
         unnamed_args = [] # matched against required_args+optional_args
         check_required = False # need to find required_args not in unnamed_args
@@ -1782,8 +1788,13 @@ def sub_run_or_help(parser, args):
         sub_help(parser, args)
 
 def sub_help(parser, args):
-    # TODO Add support for 'help subcommand'.
-    parser.print_help()
+    # TODO: Add option for 'help subcommand'.
+    if args.arg is not None and \
+       len(args.arg) > 0 and args.arg[0] == '+':
+        args.args = [args.arg, '--help']
+        sub_run(parser, args)
+    else:
+        parser.print_help()
 
 if __name__=="__main__":
     common_parser = argparse.ArgumentParser()
@@ -1802,13 +1813,13 @@ if __name__=="__main__":
     parser_checkout_wd = subparsers.add_parser('checkout-wd', \
         help='check out a bunsen working directory')
     parser_checkout_wd.add_argument('branch', nargs='?', \
-        help='name of branch to check out', default='index')
+        metavar='<branch>', help='name of branch to check out', default='index')
     parser_checkout_wd.set_defaults(func=sub_checkout_wd)
 
     parser_run = subparsers.add_parser('run', \
         help='run a script with bunsen env')
-    parser_run.add_argument('args', nargs=argparse.REMAINDER,
-        help='arguments for analysis script')
+    parser_run.add_argument('args', nargs=argparse.REMAINDER, \
+        metavar='<args>', help='+name and arguments for analysis script')
     parser_run.set_defaults(func=sub_run)
 
     # XXX This was a sanity test for tqdm that got way out of hand.
@@ -1820,14 +1831,17 @@ if __name__=="__main__":
         exit(0)
 
     parser_help = subparsers.add_parser('help', \
-        help='show this help message and exit')
+        help='show the help message for a script')
+    parser_help.add_argument('arg', nargs='?', default=None, \
+        metavar='<script>', help='+name of analysis script to get help on')
     parser_help.set_defaults(func=sub_help)
 
     parser.set_defaults(func=sub_help)
 
     # XXX Handle $ bunsen +command similarly to $ bunsen run +command
     # TODO: Document bunsen +command shorthand in command line help.
-    basic_parser = argparse.ArgumentParser(parents=[common_parser], add_help=False)
+    basic_parser = \
+        argparse.ArgumentParser(parents=[common_parser], add_help=False)
     basic_parser.add_argument('args', nargs=argparse.REMAINDER)
     basic_parser.set_defaults(func=sub_run_or_help)
 
