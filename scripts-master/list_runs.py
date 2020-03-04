@@ -50,7 +50,7 @@ if __name__=='__main__':
                             .format(n_testruns))
                 break
             extra = {}
-            if upstream_repo is not None:
+            if upstream_repo is not None and 'source_commit' in testrun:
                 # TODOXXX Shorten source_commit automatically.
                 extra['source_commit'] = testrun.source_commit[:7] + '...'
                 try:
