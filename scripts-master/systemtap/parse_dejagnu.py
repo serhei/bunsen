@@ -95,7 +95,11 @@ osver_map = {".el6":"rhel-6",
              ".fc25.":"fedora-25",
              ".fc26.":"fedora-26",
              ".fc27.":"fedora-27",
-             ".fc28.":"fedora-28"}
+             ".fc28.":"fedora-28",
+             ".fc29.":"fedora-29",
+             ".fc30.":"fedora-30",
+             ".fc31.":"fedora-31",
+             ".fc32.":"fedora-32",}
 osver_filename_map = dict(osver_map)
 
 # XXX Divergences between log.filename, log.version
@@ -107,10 +111,14 @@ distro_map = {"Ubuntu 18.04.1 LTS":"ubuntu-18-04",
               "Ubuntu 18.04.2 LTS":"ubuntu-18-04",
               "Ubuntu 18.04.3 LTS":"ubuntu-18-04",
               "Ubuntu 18.04 LTS":"ubuntu-18-04",
-              "Fedora release 29 (Twenty Nine)":"fedora-29",
               "Fedora release 29 (Rawhide)":"fedora-29-rawhide",
+              "Fedora release 29 (Twenty Nine)":"fedora-29",
               "Fedora release 30 (Rawhide)":"fedora-30-rawhide",
-              "Fedora release 31 (Thirty One)":"fedora-31"}
+              "Fedora release 30 (Thirty)":"fedora-30",
+              "Fedora release 31 (Rawhide)":"fedora-31-rawhide",
+              "Fedora release 31 (Thirty One)":"fedora-31",
+              "Fedora release 32 (Rawhide)":"fedora-32-rawhide",
+              "Fedora release 32 (Thirty Two)":"fedora-32",}
 
 # TODO: harmonize with GDB get_running_exp
 def get_running_exp(running_test):
