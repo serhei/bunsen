@@ -1458,7 +1458,7 @@ class Bunsen:
         "name=cookie \t Detailed description."'''
 
         # Handle +script_name --help. XXX argv is assumed to be sys.argv
-        if argv[1] == '-h' or argv[1] == '--help':
+        if len(argv) > 1 and (argv[1] == '-h' or argv[1] == '--help'):
             self._print_usage(info, args, usage,
                               required_args, optional_args)
             exit(1)
