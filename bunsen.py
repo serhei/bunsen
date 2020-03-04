@@ -1794,7 +1794,8 @@ def sub_help(parser, args):
 
 if __name__=="__main__":
     common_parser = argparse.ArgumentParser()
-    common_parser.add_argument('--repo', help="path to bunsen git repo")
+    common_parser.add_argument('--repo', \
+        help="path to bunsen git repo (XXX defaults to $BUNSEN_DIR/bunsen.git or .bunsen/bunsen.git in the same directory as bunsen.py)") # TODO PR25074 pick a more general way of finding bunsen.git
     # TODO Add another option for bunsen_dir
 
     parser = argparse.ArgumentParser(parents=[common_parser], add_help=False)
