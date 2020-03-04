@@ -145,5 +145,5 @@ if __name__=='__main__':
     #         testrun = b.full_testrun(testrun) # XXX load testcases
     #         for tc in testrun.testcases:
     #             if opts.key is None or fnmatchcase(tc_name, opts.key):
-    #                 print ("  -", testrun.testcase_to_json(tc))
+    #                 print ("  -", tc.to_json())
     #     print()

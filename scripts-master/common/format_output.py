@@ -5,7 +5,7 @@
 
 import sys
 import html
-from bunsen import Testrun
+from bunsen import Testcase, Testrun
 
 # TODO: def short_hexsha(commit): ...
 # replace commit.hexsha[:7] -> short_hexsha(commit)
@@ -77,8 +77,7 @@ class PrettyPrinter:
                      show_all_details=True, **kwargs):
         self._section_has_output = True
         if not self.opts.pretty:
-            # TODOXXX add kwargs?
-            print(testrun.to_json())
+            print(testrun.to_json(extra_fields=kwargs))
             return
 
         info = dict(testrun)
@@ -113,16 +112,16 @@ class PrettyPrinter:
         self._section_has_output = True
         if testrun is None:
             testrun = Testrun()
+        if isinstance(tc, dict):
+            # TODO: temporarily disable this conversion and change the scripts to use Testcase class
+            tc = Testcase(tc, parent_testrun=testrun)
         if not self.opts.pretty:
-            # TODOXXX add kwargs?
-            print(testrun.testcase_to_json(tc))
+            print(tc.to_json(extra_fields=kwargs))
             return
 
         # TODO: group testcases by exp?
         # TODO: extend to 2or diffs
-        info = dict(tc)
-        info.update(kwargs)
-        info = testrun.testcase_to_json(info, as_dict=True)
+        info = tc.to_json(as_dict=True, extra_fields=kwargs)
 
         # header
         extra = field_summary(info, header_fields)
@@ -483,9 +482,10 @@ function details(s) {
         pass # TODOXXX via table_cell
 
     def testcase_row(self, testrun, tc, header_fields=[], **kwargs):
-        info = dict(tc)
-        info.update(kwargs)
-        info = testrun.testcase_to_json(info, as_dict=True)
+        if isinstance(tc, dict):
+            # TODO: temporarily disable this conversion and change the scripts to use Testcase class
+            tc = Testcase(tc, parent_testrun=testrun)
+        info = tc.to_json(as_dict=True, extra_fields=kwargs)
 
         tc_outcome = "null" if 'outcome' not in info else info['outcome']
         if tc_outcome is None: tc_outcome = "<none>"
