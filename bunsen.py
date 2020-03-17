@@ -435,6 +435,17 @@ class Testcase(dict):
 
     # TODOXXX def validate(self):
 
+    # XXX @property does not seem to work with the 'map' protocol
+    def outcome_line(self):
+        if 'origin_sum' not in self:
+            return None
+        cur = self.origin_sum
+        assert isinstance(cur, Cursor)
+        cur = Cursor(source=cur.testlog,
+                     start=cur.line_end, end=cur.line_end,
+                     name=cur.name)
+        return cur.line
+
     def to_json(self, pretty=False, as_dict=False,
                 extra_fields={}):
         '''

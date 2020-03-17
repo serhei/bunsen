@@ -28,14 +28,14 @@ For each testrun in a project `<project>`, the Bunsen Git repo stores data as fo
 ### JSON representation of testruns
 
 The JSON summary of a testrun is a JSON dict. The following fields are required:
-- `year_month`: the year and month when the test was carried out, e.g. `2019-09`. (If the test logs do not provide an exact timestamp, it's possible to substitute the year and month of the source commit being tested, or simply the year and month when the testrun was added to the Bunsen repo.)
+- `year_month`: the year and month when the test was carried out, e.g. `2019-09`. (If the test logs do not provide an exact timestamp, it's possible to substitute the year and month when the source commit was created, or simply the year and month when the testrun was added to the Bunsen repo.)
 - `bunsen_testlogs_branch`: the name of the branch containing the original test logs for this testrun.
 - `bunsen_testruns_branch`: the name of the branch containing the full JSON representation of this testrun.
 - `bunsen_commit_id`: hexsha of the commit under `bunsen_testlogs_branch` containing the original test logs.
-- TODO `bunsen_version`: the version of Bunsen used to generate this testrun.
+- `bunsen_version`: the version of Bunsen used to generate this testrun.
 
 In addition, the following fields are usually present in a JSON summary of a testrun:
-- TODO: `timestamp`: the date and time when the test was carried out.
+- `timestamp`: the date and time when the test was carried out. (If the test logs do not provide an exact timestamp, it's possible to substitute the time when the source commit was created, or simply the time when the testrun was added to the Bunsen repo.)
 - `version`: version (usually, major version and commit id) of the software being tested.
 - `source_commit`: commit id of the software being tested.
 - `source_branch`: the name of the branch containing `source_commit`.
@@ -44,6 +44,9 @@ In addition, the following fields are usually present in a JSON summary of a tes
 - `origin_host`: hostname or other identifier for the machine which generated this testrun.
 - `pass_count`: number of passing testcases.
 - `fail_count`: number of failing testcases.
+
+In addition:
+- `problems`: only present if the testrun was not validated by the parser. Documents any missing/unknown important fields. This allows testruns that are not yet correctly handled by the parser to be added to the repo and fixed later.
 
 TODO: Certain fields are *configuration fields* which identify the software configuration being tested. Describe how to distinguish these fields from non-configuration metadata such as `pass_count`. Additional configuration fields, e.g. `kernel_version`, `elfutils_version`, are added where relevant.
 
