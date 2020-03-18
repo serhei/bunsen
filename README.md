@@ -27,7 +27,6 @@ configurations.
     $ pip3 install --user tqdm # see https://github.com/tqdm/tqdm
     $ pip3 install --user GitPython # see https://github.com/gitpython-developers/GitPython
     $ pip3 install --user dateutil # see https://github.com/dateutil/dateutil/
-    $ TODOXXX REMOVE pip3 install --user dateparser # see https://github.com/scrapinghub/dateparser
 
 For the `bunsen-push` server:
 

@@ -21,7 +21,7 @@ import sys
 from bunsen import Bunsen, Testrun, Cursor
 
 from datetime import datetime
-import dateparser
+import dateutil.parser
 import os
 import re
 
@@ -262,7 +262,7 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
                 t1 = line.find(" completed at ") + len(" completed at ")
             datestamp = line[t1:].strip()
             try:
-                datestamp = dateparser.parse(datestamp)
+                datestamp = dateutil.parser.parse(datestamp)
                 # XXX Below turns out a bit brittle in practice.
                 #datestamp = datetime.strptime(datestamp, datestamp_format)
                 year_month = datestamp.strftime("%Y-%m")

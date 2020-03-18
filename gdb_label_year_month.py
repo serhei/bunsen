@@ -8,7 +8,7 @@
 
 import sys
 import os
-import dateparser
+import dateutil.parser
 import lzma
 
 # XXX Duplicates +gdb/parse_dejagnu openfile_or_xz():
@@ -85,7 +85,7 @@ if __name__=='__main__':
                                     + len(" completed at ")
                             datestamp = line[t1:].strip()
                             try:
-                                datestamp = dateparser.parse(datestamp)
+                                datestamp = dateutil.parser.parse(datestamp)
                                 # XXX datetime is a bit too brittle in practice.
                                 #datestamp = datetime.strptime(datestamp, datestamp_format)
                                 year_month = datestamp.strftime("%Y-%m")
