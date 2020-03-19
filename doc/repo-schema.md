@@ -70,19 +70,25 @@ TODO: Certain analysis scripts can produce other JSON artefacts, including diffs
 
 ### Procedure for adding a testrun
 
-Consider the following:
-- TODO Case 1a: testlogs and testrun is not present in the repo.
-- TODO Case 1b: committing a set of testlogs, but parsing the testrun later.
-- TODO Case 2: identical testlogs are present, but testrun is different.
-- TODO Case 3: identical testlogs and testrun are present.
+We commit the original testlogs as well as a JSON representation of the testrun. If the parsing ran into problems, we still commit a JSON representation, but add a `problems` field documenting any problems.
+
+Several possible cases to handle, depending on what's alread in the repo:
+
+- *Testlogs and testrun JSON are not present in the repo*. Commit new testlog and testrun files. Create a commit appending the JSON summary of the testrun to `<project>-<year>-<month>.json` under the `index` branch.
+
+- *Identical testlogs are already present in the repo, but the testrun JSON is not present.* TODO Leave testlogs branch unchanged. Commit new testrun file. Create a commit appending the JSON summary of the testrun to `<project>-<year>-<month>.json` under the `index` branch. (TODO Be sure to consider what happens if the `year-month` for the testlogs has changed.)
+
+- *Identical testlogs are already present in the repo, but the testrun JSON has changed.* TODO Leave testlogs branch unchanged. Create a commit replacing the testrun file in the testruns branch. Create a commit replacing the JSON summary of the testrun under `<project>-<year>-<month>.json` under the `index` branch. (TODO Be sure to consider what happens if the `year-month` for the testlogs has changed. Note that the JSON summary in the original commit message in the testlogs branch becomes obsolete.)
+
+- *Identical testlogs and testrun JSON are already present in the repo.* Leave testlogs branch unchanged -- this makes adding a testrun an idempotent operation.
 
 ### Procedure for updating a testrun
 
-TODOXXX
+See '*Identical testlogs are already present in the repo, but the testrun JSON has changed*' in the previous section.
 
 ### Procedure for deleting a testrun
 
-TODOXXX Since old Git commits are not deleted, data must be marked as obsolete.
+TODOXXX Since old Git commits are not deleted, data must be marked as obsolete, and the repo must be garbage-collected later.
 
 ## Configuration file
 
