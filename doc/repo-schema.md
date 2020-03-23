@@ -48,6 +48,8 @@ In addition, the following fields are usually present in a JSON summary of a tes
 In addition:
 - `problems`: only present if the testrun was not validated by the parser. Documents any missing/unknown important fields. This allows testruns that are not yet correctly handled by the parser to be added to the repo and fixed later.
 
+TODO: Provide examples of a valid testrun and of a testrun with `problems`.
+
 TODO: Certain fields are *configuration fields* which identify the software configuration being tested. Describe how to distinguish these fields from non-configuration metadata such as `pass_count`. Additional configuration fields, e.g. `kernel_version`, `elfutils_version`, are added where relevant.
 
 TODOXXX Add `bunsen.py` code to validate required fields in a testrun or testcase.
@@ -76,9 +78,9 @@ Several possible cases to handle, depending on what's alread in the repo:
 
 - *Testlogs and testrun JSON are not present in the repo*. Commit new testlog and testrun files. Create a commit appending the JSON summary of the testrun to `<project>-<year>-<month>.json` under the `index` branch.
 
-- *Identical testlogs are already present in the repo, but the testrun JSON is not present.* TODO Leave testlogs branch unchanged. Commit new testrun file. Create a commit appending the JSON summary of the testrun to `<project>-<year>-<month>.json` under the `index` branch. (TODO Be sure to consider what happens if the `year-month` for the testlogs has changed.)
+- *Identical testlogs are already present in the repo, but the testrun JSON is not present.* Leave testlogs branch unchanged. Commit new testrun file. Create a commit appending the JSON summary of the testrun to `<project>-<year>-<month>.json` under the `index` branch. (TODO Be sure to consider what happens if the `year-month` for the testlogs has changed.)
 
-- *Identical testlogs are already present in the repo, but the testrun JSON has changed.* TODO Leave testlogs branch unchanged. Create a commit replacing the testrun file in the testruns branch. Create a commit replacing the JSON summary of the testrun under `<project>-<year>-<month>.json` under the `index` branch. (TODO Be sure to consider what happens if the `year-month` for the testlogs has changed. Note that the JSON summary in the original commit message in the testlogs branch becomes obsolete.)
+- *Identical testlogs are already present in the repo, but the testrun JSON has changed.* Leave testlogs branch unchanged. Create a commit replacing the testrun file in the testruns branch. Create a commit replacing the JSON summary of the testrun under `<project>-<year>-<month>.json` under the `index` branch. (TODO Be sure to consider what happens if the `year-month` for the testlogs has changed. Note that the JSON summary in the original commit message in the testlogs branch becomes obsolete.)
 
 - *Identical testlogs and testrun JSON are already present in the repo.* Leave testlogs branch unchanged -- this makes adding a testrun an idempotent operation.
 

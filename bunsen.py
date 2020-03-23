@@ -92,7 +92,9 @@ class Index:
             data = blob.data_stream.read().decode('utf-8')
             for json_str in data.split(INDEX_SEPARATOR):
                 json_str = json_str.strip()
-                if json_str == '': continue
+                if json_str == '':
+                    # XXX extra trailing INDEX_SEPARATOR
+                    continue
                 yield Testrun(self._bunsen, from_json=json_str, summary=True)
 
     def __iter__(self):
@@ -1127,25 +1129,33 @@ class Bunsen:
             wd = self.checkout_wd()
         refspec = [] # -- list of modified branches.
 
-        testruns_branch_name = tag + '/testruns-' + year_month
-        # XXX For large repos, may need to split into a larger number of branches:
+        testruns_branch_postfix = '/testruns-' + year_month
+        # XXX For large Bunsen repos, we may need to split testruns
+        # among a larger number of branches:
         if branch_extra is not None:
             assert ':' not in branch_extra
-            testruns_branch_name += '-' + branch_extra
-
+            testruns_branch_postfix += '-' + branch_extra
+        testruns_branch_name = tag + testruns_branch_postfix
         testlogs_branch_name = tag + '/testlogs-' + year_month
 
         for testrun in self._staging_testruns:
-            # XXX: Some earlier repos named bunsen_testlogs_branch as
-            # bunsen_branch_name -- may need to temporarily check for
-            # both field names in analysis scripts until those repos
-            # are rebuilt.
+            # TODOXXX (1): Some earlier repos named
+            # bunsen_testlogs_branch as bunsen_branch_name -- may need
+            # to temporarily check for both field names in analysis
+            # scripts until those repos are rebuilt.
             testrun.bunsen_testlogs_branch = testlogs_branch_name
 
             # XXX: Record the branches where we stored this testrun.
             # This info will also be added to the index allowing
             # fast lookup of a full Testrun object and its logs.
-            testrun.bunsen_testruns_branch = testruns_branch_name
+            if 'alternate_project' in testrun:
+                # When committing many testruns for the same set of
+                # testlogs, they should be able to override the tag.
+                testrun.bunsen_testruns_branch = \
+                    testrun.alternate_project + testruns_branch_postfix
+                del testrun['alternate_project'] # XXX remove from JSON
+            else:
+                testrun.bunsen_testruns_branch = testruns_branch_name
 
         if True:
             branch_name = testlogs_branch_name
@@ -1155,7 +1165,14 @@ class Bunsen:
                 testlog.copy_to(wd.working_tree_dir)
             commit_msg = branch_name # XXX Ensures commit msg contains year_month.
             commit_msg += ": testrun with {} testlogs".format(len(self._staging_testlogs))
-            # XXX append testcase summary json to commit msg for testruns_branch lookup
+            # XXX append testcase summary json to commit msg for
+            # testruns_branch lookup.
+            #
+            # TODOXXX (2): In other respects, this summary will be
+            # outdated once the testrun JSON is updated by a
+            # subsequent commit. Need to make sure that
+            # testruns_branch+year_month is not changed or that the
+            # change is handled correctly.
             commit_msg += INDEX_SEPARATOR
             commit_msg += testrun.to_json(summary=True)
             commit_id = wd.commit_all(commit_msg, allow_duplicates=allow_duplicates)
@@ -1165,52 +1182,73 @@ class Bunsen:
             for testrun in self._staging_testruns:
                 testrun.bunsen_commit_id = commit_id
 
-        testrun_tag = None
-        if True:
-            # XXX: Duplicate testruns will overwrite previous json with a
-            # freshly parsed one. This behaviour is probably desirable.
-            if wd_testruns is None: wd_testruns = wd
-            branch_name = testruns_branch_name
-            wd_testruns.checkout_branch(branch_name, skip_redundant_checkout=True)
-            have_primary = False
-            for testrun in self._staging_testruns:
-                testrun_tag = testrun.tag if 'tag' in testrun else tag
-                if tag is None or testrun_tag == tag:
-                    if have_primary:
-                        raise BunsenError('conflicting testrun tags in one commit')
-                    have_primary = True
-                json_name = testrun_tag + "-" + commit_id + ".json"
-                json_path = os.path.join(wd_testruns.working_tree_dir, json_name)
-                with open(json_path, 'w') as out:
-                    out.write(testrun.to_json())
-            if not have_primary:
-                raise BunsenError('missing primary testrun in new commit')
-            commit_msg = branch_name
-            commit_msg += ": {} index files for commit {}" \
-                .format(len(self._staging_testruns), commit_id)
-            wd_testruns.commit_all(commit_msg)
-            refspec.append(branch_name)
+        added_testruns = {} # maps testrun_commit_id -> testrun
+        updated_testruns = {} # maps testrun_commit_id -> testrun
 
-        if True:
-            # TODOXXX: Duplicate testrun data can still be added here,
-            # although they will refer to the same testlogs commits.
-            # This behaviour is probably undesireable -- should skip.
-            if wd_index is None: wd_index = wd
-            wd_index.checkout_branch('index', skip_redundant_checkout=True)
-            for testrun in self._staging_testruns: # XXX reuse modified testrun
-                if testrun_tag is None:
-                    testrun_tag = testrun.tag if 'tag' in testrun else tag
-                if 'tag' in testrun and testrun.tag != tag:
-                    continue # XXX Do not put secondary json files in the index.
-                json_name = testrun_tag + "-" + year_month + ".json"
-                json_path = os.path.join(wd_index.working_tree_dir, json_name)
-                with open(json_path, 'a') as out:
-                    out.write(testrun.to_json(summary=True))
-                    out.write(INDEX_SEPARATOR)
-            commit_msg = branch_name # XXX reuse testruns branch name
-            commit_msg += ": summary index for commit {}".format(commit_id)
-            wd_index.commit_all(commit_msg)
-            refspec.append('index')
+        # XXX: Duplicate testruns will overwrite previous json with a
+        # freshly parsed one to allow updates in response to parser changes.
+        if wd_testruns is None: wd_testruns = wd
+        for testrun in self._staging_testruns:
+            testrun_tag = testrun.tag if 'tag' in testrun else tag
+            branch_name = testrun.bunsen_testruns_branch
+
+            # TODO: Use GitPython to make the commit without checking out?
+            wd_testruns.checkout_branch(branch_name, skip_redundant_checkout=True)
+
+            json_name = testrun_tag + "-" + commit_id + ".json"
+            json_path = os.path.join(wd_testruns.working_tree_dir, json_name)
+            updating_testrun = os.path.isfile(json_path)
+            with open(json_path, 'w') as out:
+                out.write(testrun.to_json())
+
+            # TODOXXX (3): Check if the index file is unchanged.
+            commit_msg = branch_name
+            updating_testrun_str = "updating " if updating_testrun else ""
+            commit_msg += ": {}index files for commit {}" \
+                .format(updating_testrun_str, testrun.bunsen_commit_id)
+            wd_testruns.commit_all(commit_msg)
+            if branch_name not in refspec:
+                refspec.append(branch_name)
+
+            added_testruns[testrun_commit_id] = testrun
+            updated_testrun[testrun_commit_id] = updating_testrun
+
+        if wd_index is None: wd_index = wd
+        wd_index.checkout_branch('index', skip_redundant_checkout=True)
+        updating_index = False
+        for testrun_commit_id, testrun in added_testruns.items():
+            testrun_tag = testrun.tag if 'tag' in testrun else tag
+
+            json_name = testrun_tag + "-" + year_month + ".json"
+            json_path = os.path.join(wd_index.working_tree_dir, json_name)
+
+            # XXX Delete old data from existing json + set updating_index:
+            json_path2 = json_path + "_REPLACE"
+            with open(json_path, 'r') as infile:
+                with open(json_path2, 'w') as outfile:
+                    # TODO: Merge this logic with Index._iter_basic():
+                    data = infile.read().decode('utf-8')
+                    for json_str in data.split(INDEX_SEPARATOR):
+                        json_str = json_str.strip()
+                        if json_str == '':
+                            # XXX extra trailing INDEX_SEPARATOR
+                            continue
+                        other_run = Testrun(self, from_json=json_str, summary=True)
+                        if other_run.bunsen_commit_id == commit_id:
+                            updating_index = True
+                            # TODOXXX (3): Check if testrun is unchanged.
+                            # XXX don't add this run to outfile
+                            continue
+
+                        outfile.write(other_run.to_json(summary=True))
+                        outfile.write(INDEX_SEPARATOR)
+
+                    outfile.write(testrun.to_json(summary=True))
+                    outfile.write(INDEX_SEPARATOR)
+        updating_index_str = "updating " if updating_index else ""
+        commit_msg = "summary index for commit {}".format(commit_id)
+        wd_index.commit_all(commit_msg)
+        refspec.append('index')
 
         if push:
             wd.push_all(refspec)
