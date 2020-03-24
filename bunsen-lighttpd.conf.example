@@ -1,0 +1,32 @@
+# lighttpd -D -f ./bunsen-lighttpd.conf
+
+server.modules += ( "mod_cgi", "mod_redirect", "mod_setenv" )
+
+# XXX replace this with the location of your Bunsen checkout:
+var.bunsen_root = "/path/to/bunsen-checkout"
+
+var.bunsen_pythonpath = var.bunsen_root
+# TODO var.bunsen_pythonpath = env.PYTHONPATH + ":" + var.bunsen_root ?
+
+server.document-root = var.bunsen_root + "/server" 
+server.breakagelog = var.bunsen_root + "/breakage.log"
+server.port = 8013
+
+setenv.add-environment = (
+  "BUNSEN_ROOT" => var.bunsen_root,
+  "PYTHONPATH" => var.bunsen_pythonpath,
+  "PATH" => env.PATH
+)
+
+mimetype.assign = (
+  ".html" => "text/html", 
+  ".txt" => "text/plain",
+  ".jpg" => "image/jpeg",
+  ".png" => "image/png" 
+)
+
+cgi.assign = (
+  ".py" => "/usr/bin/python3"
+)
+
+url.redirect = ( "^/$" => "/bunsen-cgi.py" )

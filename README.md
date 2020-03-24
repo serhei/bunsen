@@ -28,9 +28,15 @@ configurations.
     $ pip3 install --user GitPython # see https://github.com/gitpython-developers/GitPython
     $ pip3 install --user dateutil # see https://github.com/dateutil/dateutil/
 
-For the `bunsen-push` server:
+*TODO* For the `bunsen-push` server:
 
     $ pip3 install --user web.py # see https://webpy.org/
+
+*TODO* Example setup for the `server/bunsen-cgi.py` dashboard script with `lighttpd`:
+
+    $ cp bunsen-lighttpd.conf.example bunsen-lighttpd.conf
+    $ vim bunsen-lighttpd.conf # edit var.bunsen_root
+    $ lighttpd -D -f ./bunsen-lighttpd.conf
 
 ## Development
 

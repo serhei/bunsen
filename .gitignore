@@ -10,5 +10,9 @@ binutils-gdb
 systemtap
 gcc
 
+# bunsen-cgi.py server via lighttpd
+*.log
+bunsen-lighttpd.conf
+
 # temporary cache
 regressions-*
