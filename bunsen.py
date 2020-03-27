@@ -1210,8 +1210,8 @@ class Bunsen:
             if branch_name not in refspec:
                 refspec.append(branch_name)
 
-            added_testruns[testrun_commit_id] = testrun
-            updated_testrun[testrun_commit_id] = updating_testrun
+            added_testruns[testrun.bunsen_commit_id] = testrun
+            updated_testrun[testrun.bunsen_commit_id] = updating_testrun
 
         if wd_index is None: wd_index = wd
         wd_index.checkout_branch('index', skip_redundant_checkout=True)
