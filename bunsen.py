@@ -1605,7 +1605,8 @@ class Bunsen:
         opts = self.opts(defaults)
 
         # Iterate through argv, XXX assumed to be sys.argv.
-        argv = argv[1:] # Removes sys.argv[0].
+        if len(argv) > 0:
+            argv = argv[1:] # Removes sys.argv[0].
         unnamed_args = [] # matched against required_args+optional_args
         check_required = False # need to find required_args not in unnamed_args
         found_unknown = False # warn about unknown option

@@ -4,6 +4,7 @@ server.modules += ( "mod_cgi", "mod_redirect", "mod_setenv" )
 
 # XXX replace this with the location of your Bunsen checkout:
 var.bunsen_root = "/path/to/bunsen-checkout"
+# XXX configure additional options in ${var.bunsen_root}/.bunsen/config
 
 var.bunsen_pythonpath = var.bunsen_root
 # TODO var.bunsen_pythonpath = env.PYTHONPATH + ":" + var.bunsen_root ?
