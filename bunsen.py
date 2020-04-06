@@ -1,7 +1,5 @@
 #! /usr/bin/env python3
 
-# TODO Show git command output / progress.
-
 import os
 import sys
 import tarfile
@@ -137,6 +135,8 @@ class Testlog:
             f = open(target_path, 'wb')
             content = self._data_stream.read()
             # TODO: Handle isinstance(content,str)
+            if isinstance(content, str):
+                content = content.encode('utf-8')
             f.write(content)
             f.close()
         else:
@@ -670,6 +670,7 @@ class Workdir(Repo):
     A temporary clone of a Bunsen git repo. Includes some higher-level
     functionality for safely working with Bunsen data.
     '''
+    # TODO Add an option to show git command output / progress.
 
     def __init__(self, bunsen, path_or_repo):
         self._bunsen = bunsen
@@ -1211,7 +1212,7 @@ class Bunsen:
                 refspec.append(branch_name)
 
             added_testruns[testrun.bunsen_commit_id] = testrun
-            updated_testrun[testrun.bunsen_commit_id] = updating_testrun
+            updated_testruns[testrun.bunsen_commit_id] = updating_testrun
 
         if wd_index is None: wd_index = wd
         wd_index.checkout_branch('index', skip_redundant_checkout=True)
@@ -1224,27 +1225,40 @@ class Bunsen:
 
             # XXX Delete old data from existing json + set updating_index:
             json_path2 = json_path + "_REPLACE"
-            with open(json_path, 'r') as infile:
-                with open(json_path2, 'w') as outfile:
-                    # TODO: Merge this logic with Index._iter_basic():
-                    data = infile.read().decode('utf-8')
-                    for json_str in data.split(INDEX_SEPARATOR):
-                        json_str = json_str.strip()
-                        if json_str == '':
-                            # XXX extra trailing INDEX_SEPARATOR
-                            continue
-                        other_run = Testrun(self, from_json=json_str, summary=True)
-                        if other_run.bunsen_commit_id == commit_id:
-                            updating_index = True
-                            # TODOXXX (3): Check if testrun is unchanged.
-                            # XXX don't add this run to outfile
-                            continue
 
-                        outfile.write(other_run.to_json(summary=True))
-                        outfile.write(INDEX_SEPARATOR)
+            with open(json_path2, 'w') as outfile:
+                infile = None
+                try:
+                    infile = open(json_path, 'r')
+                except OSError:
+                    pass # index file will be newly created
+                if infile is None:
+                    data = ''
+                else:
+                    data = infile.read()
+                    if isinstance(data, bytes):
+                        data = data.decode('utf-8')
+                    infile.close()
+                # TODO: Merge this logic with Index._iter_basic():
+                for json_str in data.split(INDEX_SEPARATOR):
+                    json_str = json_str.strip()
+                    if json_str == '':
+                        # XXX extra trailing INDEX_SEPARATOR
+                        continue
+                    other_run = Testrun(self, from_json=json_str, summary=True)
+                    if other_run.bunsen_commit_id == commit_id:
+                        updating_index = True
+                        # TODOXXX (3): Check if testrun is unchanged.
+                        # XXX don't add this run to outfile
+                        continue
 
-                    outfile.write(testrun.to_json(summary=True))
+                    outfile.write(other_run.to_json(summary=True))
                     outfile.write(INDEX_SEPARATOR)
+
+                outfile.write(testrun.to_json(summary=True))
+                outfile.write(INDEX_SEPARATOR)
+
+            os.rename(json_path2, json_path)
         updating_index_str = "updating " if updating_index else ""
         commit_msg = "summary index for commit {}".format(commit_id)
         wd_index.commit_all(commit_msg)
