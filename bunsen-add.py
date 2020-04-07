@@ -74,11 +74,14 @@ if __name__=='__main__':
         f = io.BytesIO(sys.stdin.buffer.read())
         tar = tarfile.open(fileobj=f)
     else:
-        f = open(opts.tar, 'r')
+        fh = open(opts.tar, 'rb')
+        f = io.BytesIO(fh.read())
+        fh.close()
         tar = tarfile.open(fileobj=f)
     log_tarfile(tar)
     commit_id = _commit_logs.commit_logs(b, wd, tar, tarfile=tar,
-                                         opts=opts, push=True)
+                                         opts=opts, push=True,
+                                         tarballname=opts.tar)
     tar.close()
 
     print("failed" if commit_id is None else "ok {}".format(commit_id))
