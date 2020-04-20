@@ -1926,7 +1926,8 @@ def sub_run_or_help(parser, args):
 
 def sub_help(parser, args):
     # TODO: Add option for 'help subcommand'.
-    if args.arg is not None and \
+    if 'arg' in args and \
+       args.arg is not None and \
        len(args.arg) > 0 and args.arg[0] == '+':
         args.args = [args.arg, '--help']
         sub_run(parser, args)
