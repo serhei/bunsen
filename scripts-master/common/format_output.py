@@ -104,7 +104,8 @@ class PrettyPrinter:
             suppress = suppress.union(uninteresting_fields)
         info = suppress_fields(info, suppress)
         for k, v in info.items():
-            while v.endswith('\n'): v = v[:-1]
+            if isinstance(v,str):
+              while v.endswith('\n'): v = v[:-1]
             print("  - {}: {}".format(k,v))
 
     def show_testcase(self, testrun, tc, header_fields=[],
