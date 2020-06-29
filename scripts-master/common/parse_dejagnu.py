@@ -497,7 +497,8 @@ class DejaGNUParser:
 
 def parse_dejagnu_log(testrun, logfile, logfile_name=None,
                       outcomes=None, consolidate_pass=True,
-                      verbose=True, validate=True):
+                      verbose=True, validate=True,
+                      reject_problems=False):
     '''Parse a DejaGNU log or sum file with no special characteristics.
 
     Log files are less reliable since 'PASS:'/'FAIL:' lines in a log
@@ -529,7 +530,7 @@ def parse_dejagnu_log(testrun, logfile, logfile_name=None,
     # XXX populate additional metadata here
 
     success = base_parser.validate() if validate else True
-    return testrun if success else None
+    return testrun if success or not reject_problems else None
 
 # XXX mcermak's idea when iterating multiple logfiles
 # all_testruns.append(testrun)
@@ -546,7 +547,8 @@ commit_release_regex = re.compile(r"commit release\S+-g(?P<source_commit>[0-9a-f
 # TODOXXX move to systemtap/parse_dejagnu.py
 def parse_dejagnu_log_SYSTEMTAP(testrun, logfile, logfile_name=None,
                                 outcomes=None, consolidate_pass=True,
-                                verbose=True, validate=True):
+                                verbose=True, validate=True,
+                                reject_problems=False):
     # SystemTap metadata lines:
 
     host_is = None           # Host: Linux <hostname> <kernel_uname> ... <timestamp>
@@ -710,12 +712,13 @@ def parse_dejagnu_log_SYSTEMTAP(testrun, logfile, logfile_name=None,
     if validate and testrun.kernel_version is None:
         testrun.kernel_version = 'unknown'
     success = base_parser.validate() if validate else True
-    return testrun if success else None
+    return testrun if success or not reject_problems else None
 
 # TODOXXX incorporate numerous tweaks for gdb
 def annotate_dejagnu_log(testrun, logfile, logfile_name=None,
                          outcomes=[], handle_reordering=False,
-                         verbose=True, validate=True):
+                         verbose=True, validate=True,
+                         reject_problems=False):
     '''Annotate the testcases in a Testrun with information from a log file.
 
     Here, outcomes is a list of all individual pass/fail lines in the
@@ -731,7 +734,7 @@ def annotate_dejagnu_log(testrun, logfile, logfile_name=None,
         pass
 
     success = base_parser.validate() if validate else True
-    return testrun if success else None
+    return testrun if success or not reject_problems else None
 
 # TODOXXX collect_testlogs :: various arguments -> list of Testlog
 def collect_testlogs(*args):
