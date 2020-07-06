@@ -155,6 +155,8 @@ class Index:
 class Testlog:
     """Represents a plaintext log file containing test results.
 
+    <TODO: May belong to one or more Testruns.>
+
     The log file may belong to a Testrun and be stored in the Bunsen repo,
     or it may be external to the Bunsen repo.
 
@@ -202,6 +204,69 @@ class Testlog:
         self._project = None
         self._year_month = None
         self._extra_label = None
+
+    @classmethod
+    def from_source(cls, source, path=None, input_stream=None):
+        """Produce a Testlog from a Testlog, path, or tarfile.ExFileObject.
+
+        Args:
+            source: Testlog, absolute path, or tarfile.ExFileObject.
+            path (str or PurePath, optional): Intended path of this log file
+                within a Bunsen git tree. Should not be an absolute path.
+                Will override an existing path specified by source.
+            input_stream: specify the input_stream for this Testlog;
+                will override any existing input_stream specified by source."""
+        if isinstance(source, str) or isinstance(source, Path):
+            assert path is not None
+            testlog = Testlog(None, path=path, commit_id=None, input_path=source)
+        elif isinstance(source, tarfile.ExFileObject):
+            assert path is not None
+            testlog = Testlog(None, path=path, input_stream=source)
+        elif isinstance(source, Testlog):
+            testlog = Testlog.adjust_path(source, path)
+            assert testlog.path is not None
+        else:
+            raise BunsenError("Unknown source '{}' for staging testlog." \
+                .format(source))
+        if input_stream is not None:
+            testlog = Testlog.adjust_input(input_stream=input_stream)
+        return testlog
+
+    @classmethod
+    def adjust_path(cls, testlog, path):
+        """If path does not match, copy testlog and adjust to match.
+
+        Otherwise, return the original testlog.
+
+        Args:
+            path (str or PurePath): Path of this log file in a Bunsen git tree.
+                Should not be an absolute path, even for an external log file.
+        """
+        if path is None or str(path) == str(testlog.path):
+            return testlog
+        return Testlog(bunsen=testlog.bunsen, path=path,
+            commit_id=testlog.commit_id, blob=testlog.blob,
+            input_path=testlog.input_path, input_stream=testlog.input_stream)
+
+    @classmethod
+    def adjust_input(cls, testlog, input_path=None, input_stream=None):
+        """If input parameters don't match, copy testlog and adjust to match.
+
+        Otherwise, return the original testlog.
+
+        Args:
+            input_path: An absolute path for an external log file.
+            input_stream: A seekable stream for an external log file.
+        """
+        if input_path is not None or str(input_path) != str(testlog.input_path):
+            testlog = Testlog(bunsen=testlog.bunsen, path=path,
+                commit_id=testlog.commit_id, blob=testlog.blob,
+                input_path=input_path) # XXX reset input_stream
+        if input_stream is not None:
+             testlog = Testlog(bunsen=testlog.bunsen, path=path,
+                commit_id=testlog.commit_id, blob=testlog.blob,
+                input_stream=input_stream) # XXX reset input_stream
+        return testlog
 
     @property
     def external(self):
@@ -354,8 +419,6 @@ class Cursor:
 
     Attributes:
         testlog (:obj:`Testlog`): The log file referenced by this Cursor object.
-        path (str, optional): The path of the log file within a Bunsen git tree;
-            will override any existing path specified by source.
         line_start (int): The (one-indexed) line number at the start
             of this Cursor object's range.
         line_end (int): The (one-indexed) line number at the end
@@ -386,7 +449,8 @@ class Cursor:
         a single-line cursor covering start.
 
         Args:
-            source (optional): Testlog, Bunsen, or absolute path specifying the
+            source (optional): Testlog, Bunsen, absolute path, or
+                tarfile.ExFileObject specifying the
                 the log file referenced by this Cursor object.
             from_str (str, optional): Specify attributes as a
                 string of the form '[<commit_id>:]<path>:<start>[-<end>]'.
@@ -408,21 +472,13 @@ class Cursor:
         """
 
         # Cursor(source=input_path, path=path, optional start, optional end)
-        if isinstance(source, str) or isinstance(source, Path):
-            assert from_str is None and commit_id is None # Cursor from input_path
-            assert path is not None # Cursor from input_path
-            testlog = Testlog(None, path=path,
-                input_path=source, input_stream=input_stream)
-        # Cursor(source=tarfile.ExFileObject, optional start, optional end)
-        elif isinstance(source, tarfile.ExFileObject):
-            assert from_str is None and commit_id is None # Cursor from tarfile.ExFileObject
-            assert path is not None # Cursor from tarfile.ExFileObject
-            testlog = Testlog(None, path=path, input_stream=source)
+        # Cursor(source=tarfile.ExFileObject, path=path, optional start, optional end)
         # Cursor(source=Testlog, optional start, optional end)
-        elif isinstance(source, Testlog):
-            assert from_str is None and commit_id is None # Cursor from Testlog
-            assert input_stream is None # XXX would overwrite testlog's input_stream
-            testlog = source
+        if isinstance(source, str) or isinstance(source, Path) or \
+            isinstance(source, tarfile.ExFileObject) or \
+            isinstance(source, Testlog):
+            assert from_str is None and commit_id is None # Cursor from source
+            testlog = Testlog.from_source(source, path=path, input_stream=input_stream)
         # Cursor(source=Bunsen, from_str=str, optional commit_id=hexsha)
         elif isinstance(source, Bunsen):
             assert start is None and end is None # Cursor from_str
@@ -463,11 +519,10 @@ class Cursor:
         elif start is None:
             start = 1
 
+        if path is not None and str(testlog.path) != str(path):
+            testlog = Testlog.adjust_path(testlog, path=path)
+        testlog = Testlog.adjust_input(testlog, input_stream=input_stream)
         self.testlog = testlog
-        if path is not None and str(self.testlog.path) != str(path):
-            self.path = PurePath(path)
-        if input_stream is not None:
-            testlog._input_stream = input_stream
         self.line_start = start
         self.line_end = end
         self.ephemeral = ephemeral
@@ -679,8 +734,12 @@ class Testcase(dict):
         if from_json is not None:
             self._deserialize_testcase(from_json=from_json, bunsen=bunsen)
 
-    def _deserialize_testcase(self, deserialized_testcase=self, from_json={},
+    def _deserialize_testcase(self, deserialized_testcase=None, from_json={},
                               bunsen=None):
+
+        if deserialized_testcase is None:
+            deserialized_testcase = self
+
         json_data = from_json # XXX handles from_json(dict)
         if isinstance(from_json, str) or isinstance(from_json, bytes):
             json_data = json.loads(from_json)
@@ -827,7 +886,9 @@ class Testrun(dict):
     fields or as attributes. These fields will be serialized together with the
     standard Testrun attributes.
 
-    <TODO> Attributes:
+    <TODOXXX Document attributes from the standard schema.>
+
+    Attributes:
         bunsen (Bunsen): Bunsen repo that this Testrun belongs to.
         testcases (list, optional): List of Testcase objects recording
             individual testcase outcomes.
