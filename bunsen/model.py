@@ -358,8 +358,8 @@ class Testlog:
         return self.blob.data_stream
 
     def __del__(self):
-        if self._input_file_cleanup:
-            self._input_file.close()
+        if self._input_stream_cleanup:
+            self._input_stream.close()
 
     def _data_stream_readlines(self):
         if not self.external:
