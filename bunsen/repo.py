@@ -223,7 +223,446 @@ class Bunsen:
     Provides methods to query and manage Testruns and Testlogs within the repo and
     to run analysis scripts.
     """
-    pass # TODO
+
+    # TODO def __init__
+    def __init__(self):
+        """<TODO: Docstring.>"""
+
+        # TODOXXX self.git_repo -- need path lookup
+
+        # Global cache of Testlog contents.
+        # Safe to cache since log files are not modified after being added.
+        self._testlog_lines = {} # maps (commit_id, path) -> list of str/bytes
+
+        # Collect logs which self.commit_all() will commit to the repo.
+        self._staging_testlogs = [] # <- list of Testlog
+        self._staging_testruns = [] # <- list of Testrun
+
+    ##############################################
+    # Methods for querying testlogs and testruns #
+    ##############################################
+
+    @property
+    def projects(self):
+        """List of names of projects in the repo."""
+
+        # XXX: We could cache this data at the risk of it becoming out-of-date
+        # when the repository is modified. Recomputing is tolerably quick.
+
+        found_testruns = set() # found <tag>/testruns-<yyyy>-<mm>(-<extra>)?
+        found_testlogs = set() # found <tag>/testruns-<yyyy>-<mm>(-<extra>)?
+        for candidate_branch in self.git_repo.branches:
+            m = branch_regex.fullmatch(candidate_branch.name)
+            if m is None:
+                continue
+            project = m.group('project')
+            if m.group['kind'] == 'runs':
+                found_testruns.add(project)
+            if m.group['kind'] == 'logs':
+                found_testlogs.add(project)
+
+        found_projects = []
+        warned_indexfiles = False
+        for project in found_testruns:
+            if project not in found_testlogs:
+                continue
+
+            # Check for a master index file in the index branch:
+            commit = self.git_repo.commit('index')
+            found_index = False
+            for blob in commit.tree:
+                m = indexfile_regex.fullmatch(blob.path)
+                if m is not None and m.group('project') == project:
+                    found_index = True
+                    break
+            if found_index:
+                found_projects.append(projects)
+            elif not warned_indexfiles:
+                warn_print("found tag '{}' but no indexfiles in branch index" \
+                    .format(project))
+                warned_indexfiles = True
+
+        return found_projects
+
+    @property
+    def tags(self):
+        """<TODO: Deprecated. Go through the scripts and change tags() to projects().>"""
+        return self.projects
+
+    def commit_tag(self, commit_id=None, commit=None):
+        """Return (project, year_month, extra_label) for a testlogs commit.
+
+        Each testlogs commit is tagged with a project, a year_month, and
+        an optional extra_label which are used to select the branch
+        where it should be stored.
+
+        Args:
+            commit_id (str, optional): Hexsha of the testlogs commit.
+            commit (git.objects.commit.Commit, optional): GitPython Commit
+                object representing the testlogs commit. Can be provided
+                instead of commit_id, in which case the commit_id argument
+                is ignored.
+        """
+        if commit is None:
+            assert commit_id is not None
+            commit = self.git_repo.commit(commit_id)
+
+        # The testlogs branch does not include testrun metadata,
+        # (and should not, since the metadata can be updated separately)
+        # so we use one of two strategies to find the tag.
+
+        # (1) Use git branch --contains to find the branch of this commit:
+        branches = self.git_repo.git \
+            .branch('--contains', commit.hexsha) \
+            .split('\n')
+        if len(branches) > 0:
+            warn_print("Testlogs commit {} is present in multiple branches {}" \
+                .format(commit.hexsha, branches))
+        for branch in branches:
+            m = branch_regex.search(branch)
+            if m is None:
+                continue
+            project = m.group('project')
+            year_month = m.group('year_month')
+            extra_label = m.group('extra_label')
+            return project, year_month, extra_label
+
+        # (2) Fallback: Parse commit message, which usually includes the tag:
+        m = commitmsg_regex.fullmatch(commit.summary)
+        if m is None:
+            raise BunsenError("could not find branch name for commit {}" \
+                .format(commit.hexsha))
+        project = m.group('project')
+        year_month = m.group('year_month')
+        extra_label = m.group('extra_label')
+        return project, year_month, extra_label
+
+    # <TODO> More complex queries need to be supported.
+    def testruns(self, project, key_function=None, reverse=False):
+        """Return an Index object for the specified project in this Bunsen repo.
+
+        Args:
+            project: The name of the project for which to return an Index.
+            key_function (optional): Sort the index according to key_function.
+            reverse (bool, optional): Iterate in reverse of the usual order.
+        """
+        return Index(self, tag, key_function=key_function, reverse=reverse)
+
+    # <TODO> More complex queries need to be supported.
+    def testrun(self, testrun_or_commit_id, project=None, summary=False):
+        """Retrieve a Testrun from the repo.
+
+        <TODO: Document args.>"""
+        pass # TODOXXX
+
+    def full_testrun(self, testrun_or_commit_id, project=None, summary=False):
+        """Given a summary Testrun, retrieve the corresponding full Testrun.
+
+        (This method is an alias of testrun(), provided for readability.)
+
+        <TODO: Go through the scripts and change
+            testrun = b.full_testrun(testrun)
+        to
+            testrun = b.full_testrun(summary)
+        for further readability.>
+        """
+        return self.testrun(self, testrun_or_commit_id, project, summary)
+
+    # <TODO> More complex queries need to be supported.
+    def testlog(self, testlog_id, commit_id=None, parse_commit_id=True):
+        """Retrieve a Testlog from the repo.
+
+        Supports the following:
+        - testlog_id='<path>', commit_id=None -- <path> outside repo;
+        - testlog_id='<path>', commit_id='<commit>' -- <path> in <commit>;
+        - testlog_id='<commit>:<path>', commit_id=None -- <path> in <commit>,
+          only if parse_commit_id is enabled.
+
+        <TODO: Document args.>
+        """
+        pass # TODOXXX
+
+    # Provides a way for separate Testlogs referencing the same log file
+    # to avoid redundant reads of that log file:
+    def _testlog_readlines(self, commit_id, path):
+        if (commit_id, path) in self._testlog_lines:
+            return self._testlog_lines[(commit_id, path)]
+        commit = self.git_repo.commit(commit_id)
+        blob = commit.tree[path]
+        lines = read_decode_lines(blob.data_stream)
+        # XXX prefer to decode utf-8 later in Testlog.line()
+        self._testlog_lines[(commit_id, path)] = lines
+        return self._testlog_lines[(commit_id, path)]
+
+    ############################################
+    # Methods for adding testlogs and testruns #
+    ############################################
+
+    @property
+    def staging(self):
+        """Lists of Testlog and Testrun objects to commit to the Bunsen repo."""
+        return self._staging_testlogs, self._staging_testruns
+
+    @property
+    def staging_testlogs(self):
+        """List of Testlog objects to commit to the Bunsen repo."""
+        return self._staging_testlogs
+
+    @property
+    def staging_testruns(self):
+        """List of Testrun objects to commit to the Bunsen repo.
+
+        All staged testruns will refer to the same testlog commit.
+        This is useful for data sources such as the GCC Jenkins server,
+        which includes testsuites from several projects in the same set of test
+        logs.
+
+        <TODO: the commit() method should take a parameter specifying which
+        project should be used for the Testlog commit.
+        Otherwise, default to the first Testrun that was staged.>
+        """
+        return self._staging_testruns
+
+    def add_testlog(self, source, path=None):
+        """Stage a Testlog or external log file to commit to the Bunsen repo.
+
+        Args:
+            source: Testlog, absolute path, or tarfile.ExFileObject
+                specifying the log file to stage.
+            path (str or PurePath, optional): Intended path of this log file
+                within a Bunsen git tree. Should not be an absolute path.
+                Will override an existing path specified by source.
+        """
+        testlog = Testlog.from_source(testlog, path)
+        self._staging_testlogs.append(testlog)
+
+    def add_testrun(self, testrun):
+        """Stage a Testrun to commit to the Bunsen repo."""
+        self._staging_testruns.append(testrun)
+
+    def reset_all(self):
+        """Remove all staged Testlog and Testrun objects."""
+        self._staging_testlogs = []
+        self._staging_testruns = []
+
+    # TODO def _serialize_testrun
+    # TODO def _serialize_testrun_summary
+
+    def commit(self, project=None, year_month=None, extra_label=None,
+               wd=None, push=True, allow_duplicates=False,
+               testruns_wd=None, index_wd=None,
+               primary_testrun=None, testlogs_commit_id=None):
+        """Commit all staged Testlog and Testrun objects to the Bunsen repo.
+
+        One of the Testrun objects (by default, the first Testrun staged
+        for this commit) is used as the primary testrun. If
+        (project, year_month, extra_label) arguments are not specified,
+        the primary testrun's (project, year_month, extra_label) commit_tag
+        values (or already specified bunsen_testlogs_branch field) will be used
+        to select the branch where the Testlog objects are stored.
+
+        Any Testrun objects for which commit_tag value cannot be derived
+        (i.e. by parsing an already-specified bunsen_testruns_branch field)
+        will be modified to use the same fields as the primary Testrun.
+
+        All Testrun objects in the same commit must have the same year_month.
+
+        If the primary testrun does not provide commit_tag values, these values
+        must be specified as arguments to the commit() invocation.
+
+        Args:
+            project (str, optional): The project under which to store the
+                Testlog objects and any Testruns whose project was not
+                specified.
+            year_month (str, optional): The year_month for the Testlog and
+                Testrun objects. If a Testrun with a different year_month was
+                staged, the commit() invocation results in an error.
+            extra_label (str, optional): Optional extra_label to append to the
+                branch name for the Testlog objects.
+            wd (Workdir, optional): <TODO>
+            push (bool, optional): <TODO>
+            allow_duplicates (bool, optional): <TODO>
+            testruns_wd (Workdir, optional): Separate Workdir to use for
+                committing to the testruns branches. Defaults to using wd.
+            index_wd (Workdir, optional): Separate Workdir to use for
+                committing to the index branch. Defaults to using wd.
+            primary_testrun (Testrun, optional): Testrun object to use
+                as the testrun providing (project, year_month, extra_label)
+                for testlogs branch selection.
+                Should be one of the Testrun objects staged for this commit.
+                Defaults to the first Testrun staged for this commit.
+            testlogs_commit_id (str, optional): <TODO>
+        """
+
+        # Identify the primary testrun:
+        if self._staging_testruns.empty():
+            raise BunsenError('no testruns in commit')
+        if primary_testrun is None:
+            primary_testrun = self._staging_testruns[0]
+
+        # Identify project, year_month, extra_label from primary testrun:
+        testrun_project, testrun_year_month, testrun_extra_label = \
+            primary_testrun.commit_tag()
+        if project is None and testrun_project is not None:
+            project = testrun_project
+        if year_month is None and testrun_year_month is not None:
+            year_month = testrun_year_month
+        if extra_label is None and testrun_extra_label is not None:
+            extra_label = testrun_extra_label
+
+        if project is None:
+            raise BunsenError('missing project for Bunsen commit')
+        if year_month is None:
+            raise BunsenError('missing year_month for Bunsen commit')
+
+        # Generate bunsen_testlogs_branch for primary testrun:
+        if 'bunsen_testlogs_branch' not in primary_testrun:
+            testlogs_branch_name = '{}/testlogs-{}' \
+                .format(project, year_month)
+            if extra_label is not None:
+                testlogs_branch_name += '-' + extra_label
+            if ':' in testlogs_branch_name:
+                raise BunsenError("malformed branch name '{}', contains ':'" \
+                    .format(testlogs_branch_name))
+                pass # TODOXXX signal error
+            primary_testrun.bunsen_testlogs_branch = testlogs_branch_name
+
+        for testrun in self._staging_testruns:
+            # Validate/populate metadata; commit even if there are problems,
+            # unless we are not able to identify commit_tag metadata:
+            testrun.validate(project, year_month, extra_label,
+                cleanup_metadata=True)
+
+            # In addition, all testruns should have the same year_month:
+            testrun_project, testrun_year_month, testrun_extra_label = \
+                testrun.commit_tag()
+            if testrun.year_month != year_month:
+                raise BunsenError("")
+
+        # TODO: We may also want to add references to all secondary
+        # testrun branches to the primary testrun's summary.
+
+        # Obtain a working directory:
+        temporary_wd = None
+        if temporary_wd:
+            wd = self.checkout_wd()
+            temporary_wd = wd
+        testlogs_wd = wd
+        if testruns_wd is None:
+            testruns_wd = wd
+        if index_wd is None:
+            index_wd = wd
+
+        # Create git commit from _staging_testlogs:
+        wd = testlogs_wd
+        testlogs_branch_name = None
+        if not self._staging_testlogs.empty():
+            assert testlogs_commit_id is None # staged testlogs -> must not pass as arg
+            testlogs_branch_name = primary_testrun.bunsen_testlogs_branch
+            wd.checkout_branch(testlogs_branch_name, skip_redundant_checkout=True)
+            wd.clear_files() # remove log files from previous commit
+            for testlog in self._staging_testlogs:
+                testlog.copy_to(wd.working_tree_dir)
+            commit_msg = testlogs_branch_name
+            commit_msg += ": testsuite run with '{}' testlogs" \
+                .format(len(self._staging_testlogs))
+            commit_msg += INDEX_SEPARATOR
+            commit_msg += primary_testrun.to_json(summary=True)
+            testlogs_commit_id = wd.commit_all(commit_msg)
+        assert testlogs_commit_id is not None # no staged testlogs -> must pass as arg
+        if testlogs_branch_name is None:
+            testlogs_branch_name = primary_testrun.bunsen_testlogs_branch
+
+        # Add bunsen_testlogs_branch, bunsen_commit_id to testrun metadata:
+        for testrun in self._staging_testruns:
+            if 'bunsen_commit_id' not in testrun:
+                testrun.bunsen_commit_id = testlogs_commit_id
+            if 'bunsen_testlogs_branch' not in testrun:
+                testrun.bunsen_testlogs_branch = testlogs_branch_name
+
+        # Create git commits from _staging_testruns:
+        wd = testruns_wd
+        for testrun in self._staging_testruns:
+            testrun_project, testrun_year_month, testrun_extra_label = \
+                testrun.commit_tag()
+            testrun_branch_name = testrun.bunsen_testruns_branch
+            wd.checkout_branch(testrun_branch_name, skip_redundant_checkout=True)
+            json_name = "{}-{}.json".format(testrun_project, testrun.bunsen_commit_id)
+            updated_testrun = _serialize_testrun(testrun, \
+                os.path.join(wd.working_tree_dir, json_name)) # TODOXXX
+            commit_msg = testrun_branch_name
+            updating_testrun_str += "updating " if updated_testrun else ""
+            commit_msg += ": {}index file for commit {}" \
+                .format(updating_testrun_str, testrun.bunsen_commit_id)
+            wd.commit_all(commit_msg)
+
+        # Create git commit for index branch:
+        wd = index_wd
+        wd.checkout_branch('index', skip_redundant_checkout=True)
+        for testrun in self._staging_testruns:
+            testrun_project, testrun_year_month, testrun_extra_label = \
+                testrun.commit_tag()
+            json_name = "{}-{}.json".format(testrun_project, testrun_year_month)
+            updated_index = _serialize_testrun_summary(testrun, \
+                os.path.join(wd.working_tree_dir, json_name)) # TODOXXX
+            commit_msg = testrun_branch_name
+            updating_testrun_str += "updating " if updating_index else ""
+            commit_msg += ": {}summary index for commit {}" \
+                .format(updating_index_str, testrun.bunsen_commit_id)
+            wd.commit_all(commit_msg)
+
+        if push:
+            testlogs_wd.push_all()
+            if wd_testruns is not wd: wd_testruns.push_all()
+            if wd_index is not wd: wd_index.push_all()
+
+        if temporary_wd is not None:
+            temporary_wd.destroy()
+
+        self.reset_all()
+        return testlogs_commit_id
+
+    # TODO def copy_testrun - copy a testrun from another Bunsen repo
+
+    ##############################################
+    # Methods for removing testlogs and testruns #
+    ##############################################
+
+    # TODO def delete_testrun - remove a testrun from all indices
+    # TODO def delete_commit - remove all testruns for a testlogs commit
+    # <- <TODO: need to be sure this interacts properly with deduplication>
+    # TODO def _cleanup_testlogs_branch - delete orphaned testlog commits
+    # TODO def _cleanup_testruns_branch - delete old commit history
+    # TODO def gc_repo - cleanup deleted content from all branches; invalidates existing clones/workdirs
+
+    ########################################
+    # Methods for managing the Bunsen repo #
+    ########################################
+
+    # TODO def _init_git_repo
+    # TODO def init_repo
+    # TODO def checkout_wd
+    # TODO def cleanup_wds
+
+    # TODO def clone_repo
+    # TODO def pull_repo
+
+    #####################################################
+    # Methods for locating and running analysis scripts #
+    #####################################################
+
+    # TODO def find_script
+    # TODO def run_script -> run_command (using BunsenCommand)
+    # TODO def show_command - show cached results from a command
+    # TODO opts, _print_usage, cmdline_args -> redesign using BunsenCommand
+
+    # TODO additional Bunsen commands that are handled by analysis scripts:
+    # - 'bunsen add': import tarball, log file, or set of log files
+    # - 'bunsen list' / 'bunsen ls': list testruns or log files
+    # - 'bunsen show': display testrun, log file, or set of log files
+    # - 'bunsen rebuild': regenerate repo to parse (all or subset) of testruns
+
+    pass # TODOXXX
 
 class BunsenCommand:
     """
