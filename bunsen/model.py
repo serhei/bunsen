@@ -20,15 +20,17 @@ import git
 # TODO need to see the Sphinx output to solve the following issues
 # TODO: internal links between objects and variables -- e.g. :obj:`MyClass`?
 
+# TODO: turn global variables into class variables?
+
 #########################
 # schema for JSON index #
 #########################
 
-branch_regex = re.compile(r"(?P<tag>.*)/test(?P<kind>runs|logs)-(?P<year_month>\d{4}-\d{2})(?:-(?P<extra>.*))?")
+branch_regex = re.compile(r"(?P<project>.*)/test(?P<kind>runs|logs)-(?P<year_month>\d{4}-\d{2})(?:-(?P<extra>.*))?")
 """Format for testruns and testlogs branch names."""
 
-commitmsg_regex = re.compile(r"(?P<tag>.*)/test(?P<kind>runs|logs)-(?P<year_month>\d{4}-\d{2})(?:-(?P<extra>[^:]*))?:(?P<note>.*)")
-"""Format for commit messages created by bunsen."""
+commitmsg_regex = re.compile(r"(?P<project>.*)/test(?P<kind>runs|logs)-(?P<year_month>\d{4}-\d{2})(?:-(?P<extra>[^:]*))?:(?P<note>.*)")
+"""Format for commit message summaries created by Bunsen."""
 
 indexfile_regex = re.compile(r"(?P<project>.*)-(?P<year_month>\d{4}-\d{2}).json")
 """Format for indexfile paths in the 'index' branch."""
@@ -333,7 +335,9 @@ class Testlog:
 
     @property
     def extra_label(self):
-        """The extra_label of this Testlog object's testrun."""
+        """The extra_label of this Testlog object's testrun.
+
+        May be None if the testrun was stored without an extra_label."""
         if self._extra_label is None: self._get_commit_tag()
         return self._extra_label
 
@@ -367,13 +371,9 @@ class Testlog:
             # in separate Testlog objects created by separate Cursor objects.
             return self._bunsen._testlog_readlines(self.commit_id, self.path)
 
-        if hasattr(self._input_stream,'readlines') and \
-            callable(getattr(self._input_stream,'readlines')):
-            # Prefer readlines() since decoding errors can be localized:
-            lines = self._input_stream.readlines()
-            return lines # XXX decode utf-8 later in line()
         try:
-            return read_decode(self._input_stream).split('\n')
+            return read_decode_lines(self._input_stream, must_decode=False)
+            # XXX prefer to decode utf-8 later in line()
         except UnicodeDecodeError:
             warn_print("UnicodeDecodeError in Testlog {}".format(self.path))
             return [""]
@@ -1055,16 +1055,82 @@ class Testrun(dict):
             return False
         return True
 
-    def validate(self):
+    # XXX: To avoid confusion, don't mark this as a property:
+    def commit_tag(self):
+        """The (project, year_month, extra_label) values for this Testrun.
+
+        These values are used to select a branch name for storing the Testrun's
+        JSON representation in the Bunsen repo.
+        """
+        project, year_month, extra_label = None
+        if 'project' in self: project = self.project
+        if 'year_month' in self: year_month = self.year_month
+        if 'extra_label' in self: extra_label = self.extra_label
+        if (project is None or year_month is None) \
+        # if (project is None or year_month is None or extra_label is None) \
+            and 'bunsen_testruns_branch' in self:
+            m = branch_regex.fullmatch(self.bunsen_testruns_branch)
+            assert m is not None # bunsen_testruns_branch
+            if project is None: project = m.group['project']
+            if year_month is None: year_month = m.group['year_month']
+            if extra_label is None: extra_label = m.group['extra_label']
+        return project, year_month, extra_label
+
+    def validate(self, project=None, year_month=None, extra_label=None,
+                 cleanup_metadata=False, validate_testcases=False):
         """Verify that this Testrun includes required fields for serialization.
 
         If there are problems, store an explanation in self.problems.
+
+        Args:
+            project (str, optional): The project to use for this testrun,
+                only if one is not already specified.
+            year_month (str, optional): The year_month to use for this Testrun,
+                only if one is not already specified.
+            extra_label (str, optional): Additional extra_label to use for this
+                Testrun, only if one is not already specified.
+            cleanup_metadata (bool, optional): Modify Testrun for serialization.
+                In particular, replace any (project, year_month, extra_label)
+                fields with a single bunsen_testruns_branch field containing
+                the same information. Defaults to False.
+            validate_testcases (bool, optional): Also validate any testcases
+                within this Testrun. Defaults to False.
 
         Returns:
             bool
         """
         valid, problems = True, ""
-        # <TODO Validate required metadata e.g. bunsen_branch, bunsen_commit_id, year_month? before committing a testcase.>
+
+        if cleanup_metadata:
+            project, year_month, extra_label = None
+            if 'project' in self:
+                project = self.project; del self['project']
+            if 'year_month' in self:
+                year_month = self.year_month; del self['year_month']
+            if 'extra_label' in self:
+                extra_label = self.extra_label; del self['extra_label']
+
+            if project is None:
+                raise BunsenError('missing project for Bunsen Testrun')
+            if year_month is None:
+                raise BunsenError('missing year_month for Bunsen Testrun')
+
+            if bunsen_testruns_branch not in self:
+                # XXX testruns branches don't use extra_label
+                self.bunsen_testruns_branch = '{}/testruns-{}' \
+                    .format(project, year_month)
+
+            # XXX bunsen_testlogs_branch, bunsen_commit_id will be
+            # populated by Bunsen.commit()
+
+            if ':' in self.bunsen_testruns_branch:
+                raise BunsenError("malformed branch name '{}', contains ':'" \
+                    .format(self.bunsen_testruns_branch))
+
+        if validate_testcases and 'testcases' in self:
+            for testcase in self.testcases:
+                testcase.validate()
+
         if problems.endswith(", "):
             problems = problems[:-2]
         if not valid:
