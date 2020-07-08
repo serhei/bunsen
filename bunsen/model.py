@@ -26,6 +26,11 @@ import git
 # schema for JSON index #
 #########################
 
+BUNSEN_REPO_VERSION = '0.9'
+"""Current version of the Bunsen repo schema.
+
+<TODO: Should coincide with the Bunsen release version.>"""
+
 branch_regex = re.compile(r"(?P<project>.*)/test(?P<kind>runs|logs)-(?P<year_month>\d{4}-\d{2})(?:-(?P<extra>.*))?")
 """Format for testruns and testlogs branch names."""
 
@@ -157,9 +162,8 @@ class Index:
 class Testlog:
     """Represents a plaintext log file containing test results.
 
-    <TODO: May belong to one or more Testruns.>
-
-    The log file may belong to a Testrun and be stored in the Bunsen repo,
+    The log file may belong to one (or more) testruns
+    and be stored in the Bunsen repo,
     or it may be external to the Bunsen repo.
 
     Attributes:
@@ -672,7 +676,7 @@ class Testcase(dict):
     Subclasses dict to support reading and writing arbitrary fields as dict
     fields or as attributes. These fields will be serialized together with the
     standard Testcase attributes.
-    
+
     Attributes:
         name (str): The name of the testcase.
         outcome (str): Outcome code of the testcase (e.g. PASS, FAIL, etc.).
@@ -686,11 +690,11 @@ class Testcase(dict):
         origin_sum (Cursor, optional): Locates this testcase in a test summary
             file (e.g. a file in DejaGnu '.sum' format).
         parent_testrun (Testrun, optional): The Testrun object that
-            this Testcase belongs to.
+            this Testcase belongs to. Not serialized.
         field_types (dict): Dictionary of fields (names and types
             from valid_field_types) which will receive special treatment
             during serialization. Includes all testcase_field_types
-            by default.
+            by default. Not serialized.
         problems (str, optional): After running validate(), will contain a
             description of any problems that make this Testcase unsuitable
             for serialization, or None if there aren't any problems.
@@ -886,23 +890,53 @@ class Testrun(dict):
     fields or as attributes. These fields will be serialized together with the
     standard Testrun attributes.
 
-    <TODOXXX Document attributes from the standard schema.>
+    <TODO> Example of JSON representation for Testrun, Testrun with problems.
+
+    <TODO> Regenerate project, year_month, extra_label when deserializing? Will simplify commit_tag.
 
     Attributes:
         bunsen (Bunsen): Bunsen repo that this Testrun belongs to.
+            Not serialized.
+        project (str, optional): Used to specify the project this Testrun
+            belongs to. Removed when the testrun is committed.
+            Used to generate the bunsen_testruns_branch for this Testrun
+            if one was not provided (as well as the bunsen_testlogs_branch
+            for a primary testrun).
+        year_month (str, optional): Used to specify the year_month for this
+            Testrun. Removed when the testrun is committed.
+            Used to generate the bunsen_testruns_branch for this Testrun
+            if one was not provided (as well as the bunsen_testlogs_branch
+            for a primary Testrun).
+        extra_label (str, optional): Used to specify an extra_label for a
+            primary Testrun in a Bunsen commit. Removed when the Testrun is
+            committed. Used to generate the bunsen_testlogs_branch for a
+            primary testrun.
+        bunsen_version (str): The version of Bunsen used to originally generate
+            this testrun. Added automatically when the testrun is committed.
+        bunsen_commit_id (str): The hexsha of the commit in the Bunsen Git repo
+            storing the test log files corresponding to this Testrun.
+            Added automatically when the Testrun is committed.
+        bunsen_testlogs_branch (str): Name of the branch in the Bunsen Git repo
+            storing the test log files corresponding to this Testrun.
+            Added automatically when the Testrun is committed,
+            unless the commit does not include any test log files.
+        bunsen_testruns_branch (str): Name of the branch in the Bunsen Git repo
+            storing the full representation of this testrun.
+            Added automatically when the Testrun is committed.
         testcases (list, optional): List of Testcase objects recording
             individual testcase outcomes.
         summary (bool): If True, this Testrun is a summary of the testsuite run
             and does not include individual testcase outcomes.
-            (Summary Testruns are stored within index files.)
+            (Summary Testruns are stored within index files.) Not serialized.
         field_types (dict): Dictionary of fields (names and type
             from valid_field_types) which will receive special treament
             during serialization. Includes all testrun_field_types
-            by default.
+            by default. Not serialized.
         testcase_field_types (dict): Dictionary of additional fields
             in nested Testcase objects which will receive special treatment
             during serialization. Does not include default fields from
             testcase_field_types, which will be added by the Testcase class.
+            Not serialized.
         problems (str, optional): After running validate(), will contain a
             description of any problems that make this Testrun unsuitable
             for serialization, or None if there aren't any problems.
@@ -1067,13 +1101,17 @@ class Testrun(dict):
         if 'year_month' in self: year_month = self.year_month
         if 'extra_label' in self: extra_label = self.extra_label
         if (project is None or year_month is None) \
-        # if (project is None or year_month is None or extra_label is None) \
+        # XXX if (project is None or year_month is None or extra_label is None) \
             and 'bunsen_testruns_branch' in self:
             m = branch_regex.fullmatch(self.bunsen_testruns_branch)
             assert m is not None # bunsen_testruns_branch
             if project is None: project = m.group['project']
             if year_month is None: year_month = m.group['year_month']
             if extra_label is None: extra_label = m.group['extra_label']
+        # XXX extra_label is usually only present in bunsen_testlogs_branch
+        if 'extra_label' is None and 'bunsen_testlogs_branch' in self:
+            m = branch_regex.fullmatch(self.bunsen_testlogs_branch)
+            extra_label = m.group['extra_label']
         return project, year_month, extra_label
 
     def validate(self, project=None, year_month=None, extra_label=None,
@@ -1083,24 +1121,29 @@ class Testrun(dict):
         If there are problems, store an explanation in self.problems.
 
         Args:
-            project (str, optional): The project to use for this testrun,
-                only if one is not already specified.
+            project (str, optional): The project to use for this Testrun,
+                only if one is not already specified in the Testrun's fields.
             year_month (str, optional): The year_month to use for this Testrun,
-                only if one is not already specified.
-            extra_label (str, optional): Additional extra_label to use for this
+                only if one is not already specified in the Testrun's fields.
+            extra_label (str, optional): Optional extra_label to use for this
                 Testrun, only if one is not already specified.
-            cleanup_metadata (bool, optional): Modify Testrun for serialization.
-                In particular, replace any (project, year_month, extra_label)
-                fields with a single bunsen_testruns_branch field containing
-                the same information. Defaults to False.
-            validate_testcases (bool, optional): Also validate any testcases
-                within this Testrun. Defaults to False.
+            cleanup_metadata (bool, optional): If True, modify this
+                Testrun for serialization in the Bunsen Git repo.
+                In particular, removee any (project, year_month, extra_label)
+                fields and create (if not alreay present) a single
+                bunsen_testruns_branch field containing the same information.
+                Raise a BunsenError if any problems will prevent the Testrun
+                from being serialized. Defaults to False.
+            validate_testcases (bool, optional): If True, also validate all
+                testcases within this Testrun. Defaults to False.
 
         Returns:
             bool
         """
         valid, problems = True, ""
+        raise_error = False
 
+        # Populate required metadata:
         if cleanup_metadata:
             project, year_month, extra_label = None
             if 'project' in self:
@@ -1110,31 +1153,67 @@ class Testrun(dict):
             if 'extra_label' in self:
                 extra_label = self.extra_label; del self['extra_label']
 
-            if project is None:
-                raise BunsenError('missing project for Bunsen Testrun')
-            if year_month is None:
-                raise BunsenError('missing year_month for Bunsen Testrun')
+            if project is None and 'bunsen_testruns_branch' not in self:
+                problems += "missing project, "
+                raise_error = True
+            if year_month is None and 'bunsen_testlogs_branch' not in self:
+                problems += "missing year_month, "
+                raise_error = True
 
-            if bunsen_testruns_branch not in self:
+            if 'bunsen_testruns_branch' not in self:
                 # XXX testruns branches don't use extra_label
                 self.bunsen_testruns_branch = '{}/testruns-{}' \
                     .format(project, year_month)
 
-            # XXX bunsen_testlogs_branch, bunsen_commit_id will be
-            # populated by Bunsen.commit()
+            if 'bunsen_version' not in self:
+                self.bunsen_version = BUNSEN_REPO_VERSION
 
-            if ':' in self.bunsen_testruns_branch:
-                raise BunsenError("malformed branch name '{}', contains ':'" \
-                    .format(self.bunsen_testruns_branch))
+        if 'bunsen_testruns_branch' not in self \
+            and ('project' not in self and 'year_month' not in self):
+            problems += "missing bunsen_testruns_branch (or equivalent project/year_month), "
+            # XXX guaranteed to be populated by cleanup_metadata
+        elif 'bunsen_testruns_branch' not in self:
+            pass # XXX don't care if (project, year_month) is not present
+        elif ':' in self.bunsen_testruns_branch:
+            problems += "malformed bunsen_testruns_branch (contains ':'), "
+            if cleanup_metadata: raise_error = True
+        elif branch_regex.fullmatch(self.bunsen_testruns_branch) is None:
+            problems += "malformed bunsen_testruns_branch, "
+            if cleanup_metadata: raise_error = True
+
+        if 'bunsen_version' not in self:
+            problems += "no bunsen_version, "
+            # XXX guaranteed to be populated by cleanup_metadata
+
+        # XXX bunsen_testlogs_branch, bunsen_commit_id may be
+        # populated later on by Bunsen.commit() -- don't validate now
+        if not cleanup_metadata:
+            if 'bunsen_testlogs_branch' not in self:
+                problems += "missing bunsen_testlogs_branch, "
+            elif ':' in self.bunsen_testlogs_branch:
+                problems += "malformed bunsen_testlogs_branch (contains ':'), "
+            elif branch_regex.fullmatch(self.bunsen_testlogs_branch) is None:
+                problems += "malformed bunsen_testlogs_branch, "
+
+            if 'bunsen_commit_id' not in self:
+                problems += "missing bunsen_commit_id, "
 
         if validate_testcases and 'testcases' in self:
             for testcase in self.testcases:
                 testcase.validate()
 
+        # TODO: Provide a way to check other desirable metadata:
+        # - testcases: subtest field for failing tests?
+        # - required architecture fields (e.g. arch, osver)
+        # - timestamp
+
         if problems.endswith(", "):
             problems = problems[:-2]
         if not valid:
             self.problems = problems
+        if raise_error:
+            raise BunsenError("could not validate Testrun for inclusion: {}" \
+                .format(self.problems))
         return valid
 
     def to_json(self, summary=False, pretty=False, as_dict=False,
