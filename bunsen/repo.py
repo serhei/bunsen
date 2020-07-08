@@ -149,7 +149,8 @@ class Workdir(git.Repo):
             if path not in keep_files:
                 raise BunsenError("BUG: file {} was not removed from working directory".format(path))
 
-    def commit_all(self, commit_msg, allow_duplicates=False):
+    def commit_all(self, commit_msg, allow_duplicates=False,
+            skip_empty=False):
         """Commit almost all files in the working directory.
 
         Excludes only the .bunsen_workdir lockfile.
@@ -161,9 +162,11 @@ class Workdir(git.Repo):
             commit_msg (str): The commit message to use.
             allow_duplicates (bool, optional): Create a new commit even if
                 a similar commit is already present. If allow_duplicates
-                is false, try to find a previous commit in the same branch
+                is False, try to find a previous commit in the same branch
                 with the same files and return its commit hexsha instead
                 of committing the same files again.
+            skip_empty (bool, optional): <TODO> Don't attempt to create the
+                commit if it would be empty, but instead return None.
 
         Returns:
             str: The hexsha of the new or already existing commit.
@@ -181,6 +184,7 @@ class Workdir(git.Repo):
         log_print("Adding {} to index...".format(paths),
             prefix="bunsen.Workdir:") # <TODO: HIGH verbosity level>
         self.index.add(paths)
+        # <TODOXXXX: Handle skip_empty.>
 
         if not allow_duplicates:
             index_tree = self.index.write_tree() # compute the tree's hexsha
@@ -228,7 +232,7 @@ class Bunsen:
     def __init__(self):
         """<TODO: Docstring.>"""
 
-        # TODOXXX self.git_repo -- need path lookup
+        # TODOXXX self.git_repo -- need path lookup + document attribute
 
         # Global cache of Testlog contents.
         # Safe to cache since log files are not modified after being added.
@@ -343,7 +347,8 @@ class Bunsen:
 
         Args:
             project: The name of the project for which to return an Index.
-            key_function (optional): Sort the index according to key_function.
+            key_function (optional): Sort the index according to
+                key_function applied to the Testrun objects.
             reverse (bool, optional): Iterate in reverse of the usual order.
         """
         return Index(self, tag, key_function=key_function, reverse=reverse)
@@ -416,10 +421,6 @@ class Bunsen:
         This is useful for data sources such as the GCC Jenkins server,
         which includes testsuites from several projects in the same set of test
         logs.
-
-        <TODO: the commit() method should take a parameter specifying which
-        project should be used for the Testlog commit.
-        Otherwise, default to the first Testrun that was staged.>
         """
         return self._staging_testruns
 
@@ -445,8 +446,62 @@ class Bunsen:
         self._staging_testlogs = []
         self._staging_testruns = []
 
-    # TODO def _serialize_testrun
-    # TODO def _serialize_testrun_summary
+    # Save a full representation of the testrun into path.
+    # Overwrite any existing testrun summary at that path.
+    # Return True if an existing summary was overwritten.
+    def _serialize_testrun(self, testrun, json_path):
+        updated_testrun = os.path.isfile(json_path)
+        with open(json_path, 'w') as out:
+            out.write(testrun.to_json())
+        return updated_testrun
+
+    # Insert a summary of the testrun into an indexfile at index_path.
+    # Overwrite any existing testrun summary with the same bunsen_commit_id.
+    # Return True if an existing summary was overwritten.
+    def _serialize_testrun_summary(self, testrun, index_path):
+        updated_testrun, need_update_index = False, False
+        update_path = index_path + "_UPDATING"
+
+        try:
+            index = Index(self, project, index_source=index_path)
+            index_iter = index.iter_raw()
+        except OSError as err: # index does not exist yet
+            if os.path.isfile(index_path):
+                warn_print("unexpected error when opening {}: {}" \
+                    .format(index_path, err))
+            index_iter = []
+
+        updated_testruns = []
+        found_matching = False
+        for json_str in index_iter:
+            other_run = Testrun(self, from_json=json_str, summary=True)
+            next_run_str = json_str
+            if other_run.bunsen_commit_id == commit_id and found_matching:
+                warn_print("duplicate/multiple testrun summaries" \
+                    "found in {} (bunsen_commit_id={})" \
+                    .format(os.path.basename(index_path),
+                        other_run.bunsen_commit_id))
+            elif other_run.bunsen_commit_id == commit_id:
+                next_run_str = testrun.to_json(summary=True)
+                found_matching = True
+                # Avoid modifying an unchanged testrun:
+                if next_run_str != json_str:
+                    updated_testrun = True # will replace other_run
+                    need_update_index = True
+            updated_testruns.append(next_run_str)
+        if not found_matching:
+            next_run_str = testrun.to_json(summary=True)
+            updated_testruns.append(next_run_str)
+            need_update_index = True
+
+        if need_update_index:
+            with open(update_path, 'w') as updated_file:
+                for json_str in updated_testruns:
+                    updated_file.write(json_str)
+                    updated_file.write(INDEX_SEPARATOR)
+            os.rename(update_path, index_path)
+
+        return updated_testrun
 
     def commit(self, project=None, year_month=None, extra_label=None,
                wd=None, push=True, allow_duplicates=False,
@@ -467,8 +522,11 @@ class Bunsen:
 
         All Testrun objects in the same commit must have the same year_month.
 
-        If the primary testrun does not provide commit_tag values, these values
-        must be specified as arguments to the commit() invocation.
+        If the primary testrun does not provide commit_tag values, commit_tag
+        values must be specified as arguments to the commit() invocation.
+
+        Raise BunsenError if it was not possible to commit the Testlog and
+        Testrun objects to the repo.
 
         Args:
             project (str, optional): The project under which to store the
@@ -479,9 +537,19 @@ class Bunsen:
                 staged, the commit() invocation results in an error.
             extra_label (str, optional): Optional extra_label to append to the
                 branch name for the Testlog objects.
-            wd (Workdir, optional): <TODO>
-            push (bool, optional): <TODO>
-            allow_duplicates (bool, optional): <TODO>
+            wd (Workdir, optional): Workdir to use for committing to the Bunsen
+                Git repo. If not provided, will create a temporary wd.
+            push (bool, optional): Whether to push the contents of the Workdir
+                after making the commits. If False, the Workdir must be
+                provided in the wd argument and the caller must push its
+                contents later in order to add the newly committed Testlog
+                and Testrun objects to the actual repo. This is useful when
+                adding a large number of testruns to the Bunsen repo at once.
+            allow_duplicates (bool, optional): Create a new commit in the
+                testlogs branch even if a similar commit is already present.
+                If allow_duplicates is False, try to find a previous commit
+                in the same branch with the same files and return its commit
+                hexsha instead of committing the same files again.
             testruns_wd (Workdir, optional): Separate Workdir to use for
                 committing to the testruns branches. Defaults to using wd.
             index_wd (Workdir, optional): Separate Workdir to use for
@@ -491,7 +559,16 @@ class Bunsen:
                 for testlogs branch selection.
                 Should be one of the Testrun objects staged for this commit.
                 Defaults to the first Testrun staged for this commit.
-            testlogs_commit_id (str, optional): <TODO>
+            testlogs_commit_id (str, optional): If no test logs are staged,
+                this argument must provide the bunsen_commit_id of an
+                existing commit in a testlogs branch. Note that, when writing
+                a testrun, any existing testruns with the same commit_tag and
+                bunsen_commit_id will be overwritten. This may be useful for
+                updating the contents of a parsed testrun when it is known
+                that the associated log files do not need to be replaced.
+
+        Returns:
+            The bunsen_commit_id for the committed Testlog and Testrun objects.
         """
 
         # Identify the primary testrun:
@@ -521,32 +598,43 @@ class Bunsen:
                 .format(project, year_month)
             if extra_label is not None:
                 testlogs_branch_name += '-' + extra_label
-            if ':' in testlogs_branch_name:
-                raise BunsenError("malformed branch name '{}', contains ':'" \
-                    .format(testlogs_branch_name))
-                pass # TODOXXX signal error
+            # XXX will validate bunsen_testlogs_branch in the next step
             primary_testrun.bunsen_testlogs_branch = testlogs_branch_name
 
+        found_primary_testrun = False
+        related_testrun_refs = []
         for testrun in self._staging_testruns:
             # Validate/populate metadata; commit even if there are problems,
-            # unless we are not able to identify commit_tag metadata:
+            # unless we are not able to fill in mandatory metadata:
             testrun.validate(project, year_month, extra_label,
                 cleanup_metadata=True)
+            # XXX This clears extra_label, but we don't care since we
+            # only use the extra_label from the primary testrun.
+
+            # Collect list of references to related testruns:
+            bunsen_commit_id = None
+            if 'bunsen_commit_id' in testrun:
+                bunsen_commit_id = testrun.bunsen_commit_id
+            if testrun is primary_testrun:
+                found_primary_testrun = True
+            if testrun is not primary_testrun:
+                related_testrun_refs = \
+                    (testrun.bunsen_testruns_branch, bunsen_commit_id)
 
             # In addition, all testruns should have the same year_month:
             testrun_project, testrun_year_month, testrun_extra_label = \
                 testrun.commit_tag()
             if testrun.year_month != year_month:
-                raise BunsenError("")
-
-        # TODO: We may also want to add references to all secondary
-        # testrun branches to the primary testrun's summary.
+                raise BunsenError("conflicting testrun year_months in commit")
+        if not found_primary_testrun:
+            raise BunsenError("primary_testrun was not staged for commit")
 
         # Obtain a working directory:
         temporary_wd = None
         if temporary_wd:
             wd = self.checkout_wd()
             temporary_wd = wd
+            assert push
         testlogs_wd = wd
         if testruns_wd is None:
             testruns_wd = wd
@@ -558,6 +646,7 @@ class Bunsen:
         testlogs_branch_name = None
         if not self._staging_testlogs.empty():
             assert testlogs_commit_id is None # staged testlogs -> must not pass as arg
+            testruns_branch_name = primary_testrun.bunsen_testruns_branch
             testlogs_branch_name = primary_testrun.bunsen_testlogs_branch
             wd.checkout_branch(testlogs_branch_name, skip_redundant_checkout=True)
             wd.clear_files() # remove log files from previous commit
@@ -566,9 +655,16 @@ class Bunsen:
             commit_msg = testlogs_branch_name
             commit_msg += ": testsuite run with '{}' testlogs" \
                 .format(len(self._staging_testlogs))
+            # If the full testrun summary is included here, it may end up
+            # being out of date. So we only include its bunsen_testruns_branch
+            # field, which is sufficient for finding the rest of the summary:
+            extra_info = {'bunsen_testruns_branch': testruns_branch_name}
+            extra_info = Testrun(self, from_json=extra_info, summary=True)
             commit_msg += INDEX_SEPARATOR
-            commit_msg += primary_testrun.to_json(summary=True)
-            testlogs_commit_id = wd.commit_all(commit_msg)
+            commit_msg += extra_info.to_json(summary=True) # don't validate
+            testlogs_commit_id = wd.commit_all(commit_msg, \
+                # reuse existing log files if possible:
+                allow_duplicates=allow_duplicates)
         assert testlogs_commit_id is not None # no staged testlogs -> must pass as arg
         if testlogs_branch_name is None:
             testlogs_branch_name = primary_testrun.bunsen_testlogs_branch
@@ -580,6 +676,16 @@ class Bunsen:
             if 'bunsen_testlogs_branch' not in testrun:
                 testrun.bunsen_testlogs_branch = testlogs_branch_name
 
+        # Also add references to all related testruns to the primary testrun:
+        if len(related_testrun_refs) > 0:
+            primary_testrun.related_testruns = []
+            for branchname, bunsen_commit_id in related_testrun_refs:
+                if bunsen_commit_id is None:
+                    bunsen_commit_id = testlogs_commit_id
+                related_testrun_ref = '{}:{}' \
+                    .format(branchname, bunsen_commit_id)
+                primary_testrun.related_testruns.append(related_testrun_ref)
+
         # Create git commits from _staging_testruns:
         wd = testruns_wd
         for testrun in self._staging_testruns:
@@ -589,7 +695,7 @@ class Bunsen:
             wd.checkout_branch(testrun_branch_name, skip_redundant_checkout=True)
             json_name = "{}-{}.json".format(testrun_project, testrun.bunsen_commit_id)
             updated_testrun = _serialize_testrun(testrun, \
-                os.path.join(wd.working_tree_dir, json_name)) # TODOXXX
+                os.path.join(wd.working_tree_dir, json_name))
             commit_msg = testrun_branch_name
             updating_testrun_str += "updating " if updated_testrun else ""
             commit_msg += ": {}index file for commit {}" \
@@ -602,19 +708,21 @@ class Bunsen:
         for testrun in self._staging_testruns:
             testrun_project, testrun_year_month, testrun_extra_label = \
                 testrun.commit_tag()
+            testrun_branch_name = testrun.bunsen_testruns_branch
             json_name = "{}-{}.json".format(testrun_project, testrun_year_month)
             updated_index = _serialize_testrun_summary(testrun, \
-                os.path.join(wd.working_tree_dir, json_name)) # TODOXXX
+                os.path.join(wd.working_tree_dir, json_name))
             commit_msg = testrun_branch_name
             updating_testrun_str += "updating " if updating_index else ""
             commit_msg += ": {}summary index for commit {}" \
                 .format(updating_index_str, testrun.bunsen_commit_id)
-            wd.commit_all(commit_msg)
+            # Don't make a commit if nothing was changed:
+            wd.commit_all(commit_msg, skip_empty=True)
 
         if push:
             testlogs_wd.push_all()
-            if wd_testruns is not wd: wd_testruns.push_all()
-            if wd_index is not wd: wd_index.push_all()
+            if wd_testruns is not testlogs_wd: wd_testruns.push_all()
+            if wd_index is not testlogs_wd: wd_index.push_all()
 
         if temporary_wd is not None:
             temporary_wd.destroy()
