@@ -1216,12 +1216,16 @@ class Testrun(dict):
             if 'bunsen_version' not in self:
                 self.bunsen_version = BUNSEN_REPO_VERSION
 
+        if 'bunsen_version' not in self and not cleanup_metadata:
+            problems += "no bunsen_version, "
+        else:
+            pass # XXX guaranteed to be populated by cleanup_metadata
+
         if 'bunsen_testruns_branch' not in self \
-            and ('project' not in self and 'year_month' not in self):
+            and ('project' not in self or 'year_month' not in self):
             problems += "missing bunsen_testruns_branch (or equivalent project/year_month), "
-            # XXX guaranteed to be populated by cleanup_metadata
         elif 'bunsen_testruns_branch' not in self:
-            pass # XXX don't care if (project, year_month) is not present
+            pass # XXX don't care as long as project/year_month are present
         elif ':' in self.bunsen_testruns_branch:
             problems += "malformed bunsen_testruns_branch (contains ':'), "
             if cleanup_metadata: raise_error = True
@@ -1229,18 +1233,16 @@ class Testrun(dict):
             problems += "malformed bunsen_testruns_branch, "
             if cleanup_metadata: raise_error = True
 
-        if 'bunsen_version' not in self:
-            problems += "no bunsen_version, "
-            # XXX guaranteed to be populated by cleanup_metadata
-
         if 'bunsen_testlogs_branch' not in self and not cleanup_metadata:
             problems += "missing bunsen_testlogs_branch, "
         elif 'bunsen_testlogs_branch' not in self:
             pass # may be populated later on by Bunsen.commit()
         elif ':' in self.bunsen_testlogs_branch:
             problems += "malformed bunsen_testlogs_branch (contains ':'), "
+            if cleanup_metadata: raise_error = True
         elif branch_regex.fullmatch(self.bunsen_testlogs_branch) is None:
             problems += "malformed bunsen_testlogs_branch, "
+            if cleanup_metadata: raise_error = True
 
         if 'bunsen_commit_id' not in self and not cleanup_metadata:
             problems += "missing bunsen_commit_id, "
@@ -1251,16 +1253,19 @@ class Testrun(dict):
             pass # optional
         elif not isinstance(self.related_testruns, list):
             problems += "malformed related_testruns (must be a list), "
+            if cleanup_metadata: raise_error = True
         else:
             for related_testrun in self.related_testruns:
                 if not related_testrun_regex.fullmatch(related_testrun):
                     problems += "malformed related_testruns, "
                     break
+            if cleanup_metadata: raise_error = True
 
         if 'testcases' not in self:
             pass # optional
         elif not isinstance(self.testcases, list):
             problems += "malformed testcases (must be a list), "
+            if cleanup_metadata: raise_error = True
         elif validate_testcases:
             testcases_valid = True
             for testcase in self.testcases:
