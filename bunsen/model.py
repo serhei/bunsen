@@ -46,6 +46,9 @@ INDEX_SEPARATOR = '\n---\n' # XXX YAML separator between JSON objects in index
 cursor_regex = re.compile(r"(?:(?P<commit_id>[0-9A-Fa-f]+):)?(?P<path>.*):(?P<start>\d+)(?:-(?P<end>\d+))?")
 """Serialized representation of a Cursor object."""
 
+related_testrun_regex = re.compile(r"(?P<branchname>.*):(?P<commit_id>[0-9A-Fa-f]+)")
+"""Serialized reference to a related Testrun object."""
+
 #####################################
 # schema for testruns and testcases #
 #####################################
@@ -923,6 +926,10 @@ class Testrun(dict):
         bunsen_testruns_branch (str): Name of the branch in the Bunsen Git repo
             storing the full representation of this testrun.
             Added automatically when the Testrun is committed.
+        related_testruns (list of str, optional): The names of branches storing
+            related testruns in other projects.
+            Added automatically when this Testrun is committed
+            as a primary testrun.
         testcases (list, optional): List of Testcase objects recording
             individual testcase outcomes.
         summary (bool): If True, this Testrun is a summary of the testsuite run
@@ -1140,12 +1147,12 @@ class Testrun(dict):
         Returns:
             bool
         """
-        valid, problems = True, ""
+        problems = ""
         raise_error = False
 
         # Populate required metadata:
         if cleanup_metadata:
-            project, year_month, extra_label = None
+            # Testrun commit_tag fields will override commit_tag args:
             if 'project' in self:
                 project = self.project; del self['project']
             if 'year_month' in self:
@@ -1185,22 +1192,43 @@ class Testrun(dict):
             problems += "no bunsen_version, "
             # XXX guaranteed to be populated by cleanup_metadata
 
-        # XXX bunsen_testlogs_branch, bunsen_commit_id may be
-        # populated later on by Bunsen.commit() -- don't validate now
-        if not cleanup_metadata:
-            if 'bunsen_testlogs_branch' not in self:
-                problems += "missing bunsen_testlogs_branch, "
-            elif ':' in self.bunsen_testlogs_branch:
-                problems += "malformed bunsen_testlogs_branch (contains ':'), "
-            elif branch_regex.fullmatch(self.bunsen_testlogs_branch) is None:
-                problems += "malformed bunsen_testlogs_branch, "
+        if 'bunsen_testlogs_branch' not in self and not cleanup_metadata:
+            problems += "missing bunsen_testlogs_branch, "
+        elif 'bunsen_testlogs_branch' not in self:
+            pass # may be populated later on by Bunsen.commit()
+        elif ':' in self.bunsen_testlogs_branch:
+            problems += "malformed bunsen_testlogs_branch (contains ':'), "
+        elif branch_regex.fullmatch(self.bunsen_testlogs_branch) is None:
+            problems += "malformed bunsen_testlogs_branch, "
 
-            if 'bunsen_commit_id' not in self:
-                problems += "missing bunsen_commit_id, "
+        if 'bunsen_commit_id' not in self and not cleanup_metadata:
+            problems += "missing bunsen_commit_id, "
+        elif 'bunsen_commit_id' not in self:
+            pass # may be populated later on by Bunsen.commit()
 
-        if validate_testcases and 'testcases' in self:
+        if 'related_testruns' not in self:
+            pass # optional
+        elif not isinstance(self.related_testruns, list):
+            problems += "malformed related_testruns (must be a list), "
+        else:
+            for related_testrun in self.related_testruns:
+                if not related_testrun_regex.fullmatch(related_testrun):
+                    problems += "malformed related_testruns, "
+                    break
+
+        if 'testcases' not in self:
+            pass # optional
+        elif not isinstance(self.testcases, list):
+            problems += "malformed testcases (must be a list), "
+        elif validate_testcases:
+            testcases_valid = True
             for testcase in self.testcases:
-                testcase.validate()
+                testcases_valid = testcates_valid and testcase.validate()
+            if not testcases_valid:
+                problems += "problems in testcases, "
+
+        # TODO: Could be more strict at checking types
+        # (e.g. where str expected for regex match, hexsha for commit_id).
 
         # TODO: Provide a way to check other desirable metadata:
         # - testcases: subtest field for failing tests?
@@ -1209,9 +1237,15 @@ class Testrun(dict):
 
         if problems.endswith(", "):
             problems = problems[:-2]
-        if not valid:
+        valid = (problems == "")
+        if not valid and 'problems' in self: # append to existing problems
+            self.problems = self.problems + ", " + problems
+        elif not valid:
             self.problems = problems
+        elif 'problems' in self:
+            valid = False # already existing problems
         if raise_error:
+            # TODO: Should also provide the full testrun -- would need to catch the error.
             raise BunsenError("could not validate Testrun for inclusion: {}" \
                 .format(self.problems))
         return valid
