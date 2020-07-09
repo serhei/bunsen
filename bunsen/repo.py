@@ -341,9 +341,10 @@ class Bunsen:
         extra_label = m.group('extra_label')
         return project, year_month, extra_label
 
-    # <TODO> More complex queries need to be supported.
     def testruns(self, project, key_function=None, reverse=False):
         """Return an Index object for the specified project in this Bunsen repo.
+
+        More complex queries are supported by BunsenCommand.
 
         Args:
             project: The name of the project for which to return an Index.
@@ -353,12 +354,141 @@ class Bunsen:
         """
         return Index(self, tag, key_function=key_function, reverse=reverse)
 
-    # <TODO> More complex queries need to be supported.
-    def testrun(self, testrun_or_commit_id, project=None, summary=False):
+    def testrun(self, testrun_or_commit_id, project=None,
+                summary=False, raise_error=True):
         """Retrieve a Testrun from the repo.
 
-        <TODO: Document args.>"""
-        pass # TODOXXX
+        More complex queries are supported by BunsenCommand.
+
+        Args:
+            testrun_or_commit_id (Testrun or str): The bunsen_commit_id
+                or Testrun object (presumably a summary Testrun)
+                corresponding to the Testrun that should be retrieved.
+            project (str, optional): The name of the project the retrieved
+                Testrun should belong to. Necessary if retrieving by commit id
+                and the same bunsen_commit_id has several associated testruns
+                in different projects. Will override any project value
+                specified by testrun_or_commit_id.
+            summary (bool, optional): If True, strip the 'testcases' field
+                from the Testrun and return a summary Testrun only.
+                <TODOXXX: Testrun() should strip other fields if other fields are of testcases type.>
+            raise_error (bool, optional): If True, raise a BunsenError if
+                the Testrun was not found in the repo.
+                If False, return None in that case.
+                Defaults to True.
+        """
+        testrun_summary = None
+        bunsen_commit_id = None
+        candidate_branches = []
+        year_month = None
+        extra_label = None
+        # have {testrun_or_commit_id, maybe project}
+
+        if isinstance(testrun_or_commit_id, Testrun):
+            testrun_summary = testrun_or_commit_id
+        else:
+            bunsen_commit_id = testrun_or_commit_id
+        if testrun_summary is not None and 'bunsen_commit_id' in testrun_summary:
+            bunsen_commit_id = testrun_summary.bunsen_commit_id
+        if bunsen_commit_id is None:
+            raise BunsenError("no bunsen_commit_id provided in Testrun lookup")
+        # have {maybe testrun_summary, bunsen_commit_id, maybe project}
+
+        # Use one of several strategies to find project, candidate_branches:
+        candidate_branches = []
+
+        # Option 1a: get project,bunsen_testruns_branch from testrun_summary.
+        if testrun_summary is not None \
+            and 'bunsen_testruns_branch' in testrun_summary:
+            testrun_project, testrun_year_month, testrun_extra_label = \
+                testrun_summary.commit_tag()
+            if project is None: project = testrun_project
+            if project == testrun_project:
+                candidate_branches.append(testrun_summary.bunsen_testruns_branch)
+            else:
+                year_month, extra_label = \
+                    testrun_year_month, testrun_extra_label
+                # XXX compute candidate_branches manually below
+
+        # Option 1b: get project,year_month from testrun_summary.
+        elif project is None and testrun_summary is not None:
+            testrun_project, testrun_year_month, testrun_extra_label = \
+                testrun_summary.commit_tag()
+            if project is None: project = testrun_project
+            year_month = testrun_year_month
+            # XXX ignore extra_label -- as a field, it would refer to testlogs
+            # XXX compute candidate_branches manually below
+
+        # Option 2: get project,bunsen_testruns_branch from commit message JSON
+        extra_info = None
+        if project is None:
+            commit = self.git_repo.commit(bunsen_commit_id)
+            msg = commit.message
+            t1 = msg.rfind(INDEX_SEPARATOR) + len(INDEX_SEPARATOR)
+            msg = msg[t1:]
+            extra_info = Testrun(self, from_json=msg, summary_summary)
+        if project is None and extra_info is not None \
+            and 'bunsen_testruns_branch' in extra_info:
+            testrun_project, testrun_year_month, testrun_extra_label = \
+                extra_info.commit_tag()
+            project = testrun_project
+            candidate_branches.append(testrun_summary.bunsen_testruns_branch)
+
+        # Option 3: get project,year_month from commit message header.
+        if project is None:
+            commit_project, commit_year_month, commit_extra_label = \
+                self.commit_tag(bunsen_commit_id)
+            project = commit_project
+            year_month = commit_year_month
+            # XXX ignore extra_label
+            # XXX compute candidate_branches manually below
+
+        if project is None:
+            raise BunsenError("no project provided in Testrun lookup")
+
+        # Fallback: a value for candidate_branches was not specified explicitly,
+        # or the project was overridden by the project argument;
+        # we need to construct the branch name manually from the commit_tag:
+        if len(candidate_branches) == 0 and year_month is not None:
+            default_branch_name = '{}/testruns-{}'.format(project, year_month)
+            if extra_label is not None:
+                default_branch_name += '-' + extra_label
+            candidate_branches.append(default_branch_name)
+            # In rare cases we may want to store testrun data in separate
+            # branches with an extra_label. In this case our fallback must
+            # search through all branch names prefixed by default_branch_name.
+            if extra_label is None:
+                for branch in self.git_repo.branches:
+                    if branch_name != default_branch_name \
+                        and branch.name.startswith(default_branch_name):
+                        possible_branch_names.append(branch_name)
+
+        # need {bunsen_commit_id, project, candidate_branches matching project}
+        blob = None
+        for branch_name in candidate_branches:
+            try:
+                commit = self.git_repo.commit(branch_name)
+            except Exception as ex: # XXX except gitdb.exc.BadName
+                if ex.__module__ != 'gitdb.exc' \
+                    or ex.__name__ != 'BadName':
+                    warn_print("unexpected GitPython exception '{}'" \
+                        .format(ex))
+                # otherwise, skip any nonexistent branch
+                continue
+            try:
+                json_path = '{}-{}.json'.format(project, bunsen_commit_id)
+                blob = commit.tree[json_path]
+                break
+            except KeyError:
+                continue
+        if blob is None:
+            if raise_error:
+                raise BunsenError("no Testrun with project '{}', " \
+                    "bunsen_commit_id '{}'" \
+                    .format(project, bunsen_commit_id))
+            return None
+
+        return Testrun(self, from_json=blob.data_stream.read(), summary=summary)
 
     def full_testrun(self, testrun_or_commit_id, project=None, summary=False):
         """Given a summary Testrun, retrieve the corresponding full Testrun.
@@ -366,26 +496,36 @@ class Bunsen:
         (This method is an alias of testrun(), provided for readability.)
 
         <TODO: Go through the scripts and change
+            testrun = ...
             testrun = b.full_testrun(testrun)
         to
-            testrun = b.full_testrun(summary)
+            testrun_summary = ...
+            testrun = b.full_testrun(testrun_summary)
         for further readability.>
         """
         return self.testrun(self, testrun_or_commit_id, project, summary)
 
-    # <TODO> More complex queries need to be supported.
-    def testlog(self, testlog_id, commit_id=None, parse_commit_id=True):
-        """Retrieve a Testlog from the repo.
+    def testlog(self, testlog_path, commit_id=None):
+        """Retrieve Testlog from repo or create Testlog for an external log file.
 
-        Supports the following:
-        - testlog_id='<path>', commit_id=None -- <path> outside repo;
-        - testlog_id='<path>', commit_id='<commit>' -- <path> in <commit>;
-        - testlog_id='<commit>:<path>', commit_id=None -- <path> in <commit>,
-          only if parse_commit_id is enabled.
+        More complex queries are supported by BunsenCommand.
 
-        <TODO: Document args.>
+        <TODO> BunsenCommand query should suppoert
+        testlog_id='<commit>:<path>', commit_id=None -- <path> in <commit>.
+
+        Args:
+            testlog_path (str or Path or PurePath): Path of the log file
+                within the Bunsen git tree,
+                or an absolute path for an external log file.
+            commit_id (str, optional): Commit which stores the log file
+                within a testlogs branch of the Bunsen git repo,
+                or None for an external log file.
         """
-        pass # TODOXXX
+        if commit_id is None:
+            return Testlog(self, path=testlog_path)
+        commit = self.git_repo.commit(commit_id)
+        blob = commit.tree[testlog_path]
+        return Testlog(self, path=testlog_path, commit_id=commit_id, blob=blob)
 
     # Provides a way for separate Testlogs referencing the same log file
     # to avoid redundant reads of that log file:
@@ -659,10 +799,11 @@ class Bunsen:
             # being out of date. So we only include its bunsen_testruns_branch
             # field, which is sufficient for finding the rest of the summary:
             extra_info = {'bunsen_testruns_branch': testruns_branch_name}
+            # TODO: Maybe also add related_testrun_refs to extra_info?
             extra_info = Testrun(self, from_json=extra_info, summary=True)
             commit_msg += INDEX_SEPARATOR
             commit_msg += extra_info.to_json(summary=True) # don't validate
-            testlogs_commit_id = wd.commit_all(commit_msg, \
+            testlogs_commit_id = wd.commit_all(commit_msg,
                 # reuse existing log files if possible:
                 allow_duplicates=allow_duplicates)
         assert testlogs_commit_id is not None # no staged testlogs -> must pass as arg
@@ -776,4 +917,22 @@ class BunsenCommand:
     """
     Represents an invocation of a Bunsen analysis script.
     """
+
+    # TODO fields and methods for a testruns/testlogs query
+    # -- if the Git commands are any guide, queries can get very complex
+    # but all the particular script might care about is 'list of testruns'
+
+    # TODO fields and methods for proper output in different formats
+    # -- can take a formatter object from format_output.py?
+    # -- or should we import format_output.py directly?
+
+    # TODO methods for parsing command line arguments
+    # TODO methods for parsing CGI query strings
+
+    # TODO logic for chaining commands (one command outputs JSON
+    # passed as input to the next command)
+
+    # TODO logic for checking cgi_safe functionality
+
+    # TODO support shell autocompletion?
     pass # TODO
