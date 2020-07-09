@@ -214,7 +214,7 @@ class Testlog:
         path (PurePath): The path of this log file within a Bunsen git tree,
             or the intended path in the git tree for an external log file.
         commit_id (str): Commit hash of the commit which stores this log file
-            within a 'testlogs' branch of the Bunsen git repo,
+            within a testlogs branch of the Bunsen git repo,
             or None for an external log file.
         blob (git.objects.blob.Blob): A GitPython Blob object for this log file,
             or None for an external log file.
@@ -232,7 +232,7 @@ class Testlog:
             path (str or PurePath): Path of this log file within a Bunsen git tree.
                 Should not be an absolute path, even for an external log file.
             commit_id (str): Commit hash of the commit which stores this log file
-                within a 'testlogs' branch of the Bunsen repo,
+                within a testlogs branch of the Bunsen repo,
                 or None for an external log file.
             blob (git.objects.blob.Blob): A GitPython Blob object for this log file,
                 or None for an external log file.
@@ -1144,7 +1144,7 @@ class Testrun(dict):
         These values are used to select a branch name for storing the Testrun's
         JSON representation in the Bunsen repo.
         """
-        project, year_month, extra_label = None
+        project, year_month, extra_label = None, None, None
         if 'project' in self: project = self.project
         if 'year_month' in self: year_month = self.year_month
         if 'extra_label' in self: extra_label = self.extra_label
