@@ -14,7 +14,6 @@ import re
 from pathlib import Path, PurePath
 import git
 
-# TODO: comments on assertion-fail lines -- will they show up? -- test live
 # TODO: check/update format for pydoc and HTML documentation generation with Sphinx+Napoleon;
 # https://sphinx-rtd-tutorial.readthedocs.io/en/latest/docstrings.html
 # TODO need to see the Sphinx output to solve the following issues
@@ -224,7 +223,8 @@ class Testlog:
                  blob=None, input_path=None, input_stream=None):
         """Initialize a Testlog object.
 
-        Must specify path and one of {bunsen+commit_id+blob,input_path,input_stream}.
+        Must specify path and one of
+        {bunsen+commit_id+blob, input_path, input_stream}.
 
         Args:
             bunsen: The Bunsen repo containing this log file,
@@ -236,7 +236,7 @@ class Testlog:
                 or None for an external log file.
             blob (git.objects.blob.Blob): A GitPython Blob object for this log file,
                 or None for an external log file.
-            input_path: An absolute path for an external log file.
+            input_path: Path to an external log file.
             input_stream: A seekable stream for an external log file.
         """
 
@@ -264,17 +264,17 @@ class Testlog:
         """Produce a Testlog from a Testlog, path, or tarfile.ExFileObject.
 
         Args:
-            source: Testlog, absolute path, or tarfile.ExFileObject.
+            source: Testlog, external path, or tarfile.ExFileObject.
             path (str or PurePath, optional): Intended path of this log file
                 within a Bunsen git tree. Should not be an absolute path.
                 Will override an existing path specified by source.
             input_stream: specify the input_stream for this Testlog;
                 will override any existing input_stream specified by source."""
         if isinstance(source, str) or isinstance(source, Path):
-            assert path is not None
+            assert path is not None # must specify path in git tree
             testlog = Testlog(None, path=path, commit_id=None, input_path=source)
         elif isinstance(source, tarfile.ExFileObject):
-            assert path is not None
+            assert path is not None # must specify path in git tree
             testlog = Testlog(None, path=path, input_stream=source)
         elif isinstance(source, Testlog):
             testlog = Testlog.adjust_path(source, path)
@@ -309,7 +309,7 @@ class Testlog:
         Otherwise, return the original testlog.
 
         Args:
-            input_path: An absolute path for an external log file.
+            input_path: Path to an external log file.
             input_stream: A seekable stream for an external log file.
         """
         if input_path is not None or str(input_path) != str(testlog.input_path):
@@ -497,7 +497,7 @@ class Cursor:
         a single-line cursor covering start.
 
         Args:
-            source (optional): Testlog, Bunsen, absolute path, or
+            source (optional): Testlog, Bunsen, external path, or
                 tarfile.ExFileObject specifying the
                 the log file referenced by this Cursor object.
             from_str (str, optional): Specify attributes as a
@@ -776,7 +776,7 @@ class Testcase(dict):
         # Populate self.field_types from field_types, testcase_field_types:
         self.field_types = dict(testcase_field_types)
         for field, field_type in field_types.items():
-            assert field_type in valid_field_types
+            assert field_type in valid_field_types # BUG in testcase_field_types
             self.field_types[field] = field_type
 
         if from_json is not None:
@@ -1020,7 +1020,7 @@ class Testrun(dict):
         # Populate self.field_types from field_types, testrun_field_types:
         self.field_types = dict(testrun_field_types)
         for field, field_type in field_types.items():
-            assert field_type in valid_field_types
+            assert field_type in valid_field_types # BUG in testrun_field_types
             self.field_types[field] = field_type
 
         self.testcase_field_types = testcase_field_types
@@ -1076,7 +1076,7 @@ class Testrun(dict):
             value = self._deserialize_testrun_metadata(value)
         elif self.field_types[field] == 'cursor' \
             and not isinstance(value, Cursor):
-            assert self.bunsen is not None
+            assert self.bunsen is not None # Bunsen repo required for parsing Cursor
             commit_id = self.cursor_commit_id(field)
             value = Cursor(source=self.bunsen, from_str=value,
                 commit_id=commit_id)
@@ -1148,8 +1148,8 @@ class Testrun(dict):
         if 'project' in self: project = self.project
         if 'year_month' in self: year_month = self.year_month
         if 'extra_label' in self: extra_label = self.extra_label
-        if (project is None or year_month is None) \
         # XXX if (project is None or year_month is None or extra_label is None) \
+        if (project is None or year_month is None) \
             and 'bunsen_testruns_branch' in self:
             m = branch_regex.fullmatch(self.bunsen_testruns_branch)
             assert m is not None # bunsen_testruns_branch

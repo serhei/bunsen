@@ -426,7 +426,7 @@ class Bunsen:
             msg = commit.message
             t1 = msg.rfind(INDEX_SEPARATOR) + len(INDEX_SEPARATOR)
             msg = msg[t1:]
-            extra_info = Testrun(self, from_json=msg, summary_summary)
+            extra_info = Testrun(self, from_json=msg, summary=summary)
         if project is None and extra_info is not None \
             and 'bunsen_testruns_branch' in extra_info:
             testrun_project, testrun_year_month, testrun_extra_label = \
@@ -516,7 +516,7 @@ class Bunsen:
         Args:
             testlog_path (str or Path or PurePath): Path of the log file
                 within the Bunsen git tree,
-                or an absolute path for an external log file.
+                or path to an external log file.
             commit_id (str, optional): Commit which stores the log file
                 within a testlogs branch of the Bunsen git repo,
                 or None for an external log file.
@@ -568,7 +568,7 @@ class Bunsen:
         """Stage a Testlog or external log file to commit to the Bunsen repo.
 
         Args:
-            source: Testlog, absolute path, or tarfile.ExFileObject
+            source: Testlog, external path, or tarfile.ExFileObject
                 specifying the log file to stage.
             path (str or PurePath, optional): Intended path of this log file
                 within a Bunsen git tree. Should not be an absolute path.
@@ -774,7 +774,7 @@ class Bunsen:
         if temporary_wd:
             wd = self.checkout_wd()
             temporary_wd = wd
-            assert push
+            assert push # must push if wd is temporary
         testlogs_wd = wd
         if testruns_wd is None:
             testruns_wd = wd
