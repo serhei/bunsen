@@ -14,21 +14,15 @@ import re
 from pathlib import Path, PurePath
 import git
 
-# TODO: check/update format for pydoc and HTML documentation generation with Sphinx+Napoleon;
-# https://sphinx-rtd-tutorial.readthedocs.io/en/latest/docstrings.html
-# TODO need to see the Sphinx output to solve the following issues
-# TODO: internal links between objects and variables -- e.g. :obj:`MyClass`?
-
-# TODO: turn global variables into class variables?
+from bunsen.utils import *
+from bunsen.version import __version__
 
 #########################
 # schema for JSON index #
 #########################
 
-BUNSEN_REPO_VERSION = '0.9'
-"""Current version of the Bunsen repo schema.
-
-<TODO: Should coincide with the Bunsen release version.>"""
+BUNSEN_REPO_VERSION = __version__
+"""Current version of the Bunsen repo schema."""
 
 branch_regex = re.compile(r"(?P<project>.*)/test(?P<kind>runs|logs)-(?P<year_month>\d{4}-\d{2})(?:-(?P<extra>.*))?")
 """Format for testruns and testlogs branch names."""
