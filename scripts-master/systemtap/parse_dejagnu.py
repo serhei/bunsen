@@ -334,10 +334,13 @@ def parse_dejagnu_log(testrun, logfile, logfile_name=None, all_cases=None,
     elif testrun.osver is None:
         skip = True
         skip_reason = "unknown osver, "
+    if skip_reason.endswith(", "):
+        skip_reason = skip_reason[:-2]
     if skip:
         print("WARNING: skipping logfile", logfile_path,
               "("+skip_reason+")", file=sys.stderr)
-        return None
+        testrun.problems = skip_reason
+        return testrun # return None
 
     if testrun.version[-1] == ')':
         testrun.version = testrun.version[:-1]
