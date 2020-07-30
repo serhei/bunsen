@@ -100,6 +100,7 @@ osver_map = {".el6":"rhel-6",
              ".fc30.":"fedora-30",
              ".fc31.":"fedora-31",
              ".fc32.":"fedora-32",}
+# TODOXXX Add a general pattern that matches all future versions.
 osver_filename_map = dict(osver_map)
 
 # XXX Divergences between log.filename, log.version
@@ -110,6 +111,7 @@ osver_filename_map[".el8+"] = "rhel-8"
 distro_map = {"Ubuntu 18.04.1 LTS":"ubuntu-18-04",
               "Ubuntu 18.04.2 LTS":"ubuntu-18-04",
               "Ubuntu 18.04.3 LTS":"ubuntu-18-04",
+              "Ubuntu 18.04.4 LTS":"ubuntu-18-04",
               "Ubuntu 18.04 LTS":"ubuntu-18-04",
               "Fedora release 29 (Rawhide)":"fedora-29-rawhide",
               "Fedora release 29 (Twenty Nine)":"fedora-29",
@@ -118,7 +120,9 @@ distro_map = {"Ubuntu 18.04.1 LTS":"ubuntu-18-04",
               "Fedora release 31 (Rawhide)":"fedora-31-rawhide",
               "Fedora release 31 (Thirty One)":"fedora-31",
               "Fedora release 32 (Rawhide)":"fedora-32-rawhide",
-              "Fedora release 32 (Thirty Two)":"fedora-32",}
+              "Fedora release 32 (Thirty Two)":"fedora-32",
+              "Fedora release 33 (Rawhide)":"fedora-33-rawhide",}
+# TODOXXX: Add a general pattern that matches all future versions.
 
 # TODO: harmonize with GDB get_running_exp
 def get_running_exp(running_test):
