@@ -1225,7 +1225,6 @@ class Bunsen:
 
             # XXX Delete old data from existing json + set updating_index:
             json_path2 = json_path + "_REPLACE"
-
             with open(json_path2, 'w') as outfile:
                 infile = None
                 try:
@@ -1257,7 +1256,6 @@ class Bunsen:
 
                 outfile.write(testrun.to_json(summary=True))
                 outfile.write(INDEX_SEPARATOR)
-
             os.rename(json_path2, json_path)
         updating_index_str = "updating " if updating_index else ""
         commit_msg = "summary index for commit {}".format(commit_id)

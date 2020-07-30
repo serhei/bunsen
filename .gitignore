@@ -1,9 +1,11 @@
 .bunsen
 bunsen-data
 __pycache__
+*.pyc
 private-*
 wd-*
 *~
+.idea
 
 # example projects
 binutils-gdb
