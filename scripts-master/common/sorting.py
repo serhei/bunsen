@@ -63,16 +63,19 @@ def chronological_order(b, upstream_repo=None, reverse=False):
         k.add_key(testrun.year_month, reverse=reverse)
         commit_date = None
         not_found = False
+        commit_key = None
         if upstream_repo is not None:
             try:
+                commit_key = testrun.source_commit
                 upstream_commit = upstream_repo.commit(testrun.source_commit)
                 commit_date = upstream_commit.committed_date
-            except ValueError:
+            except KeyError: # TODOXXX also ValueError?
+                commit_key = testrun.bunsen_commit_id
                 bunsen_commit = b.git_repo.commit(testrun.bunsen_commit_id)
                 commit_date = bunsen_commit.committed_date
         else:
             pass # remove commit_date from ALL sort_keys
-        k.add_key(testrun.source_commit)
+        k.add_key(commit_key)
         return k
     return key_function
 
