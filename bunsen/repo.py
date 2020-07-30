@@ -1681,6 +1681,7 @@ class BunsenOptions:
 
     def print_help(self):
         """<TODO: Docstring.>"""
+        self.usage = None # TODOXXX should configure from script
         print("TODO: print help")
         pass # TODOXXX
 

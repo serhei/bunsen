@@ -56,6 +56,7 @@ The JSON summary of a testrun is a JSON dict. The following fields are required:
 - `bunsen_testruns_branch`: The name of the branch storing the full representation of this testrun. <!-- TODO: determines project, year_month, extra_label -->
 
 The following additional fields may be included:
+- `related_testruns_branches`: The names of branches storing related testruns in other projects. <!-- TODOXXX add to docstring -->
 - `source_commit_id` <!--TODO WAS `source_commit`-->
 - `timestamp`: Usually, this stores the date and time of the testsuite run. If the date and time could not be obtained, the parser may populate this field with any of: the timestamp of the source commit being tested, the date and time that the testsuite run was downloaded, or the date and time that the testsuite was added to the Bunsen repository.
 - `version`: The version of the software codebase being tested.
