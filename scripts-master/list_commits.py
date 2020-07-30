@@ -129,7 +129,7 @@ if __name__=='__main__':
                         .format(n_commits, n_testruns))
             break
 
-        # TODOXXX Improve commit_header formatting boilerplate here, and in +when_failed, +new_regressions
+        # TODOXXX Improve commit_header formatting boilerplate here, and in +when_failed, +new_regressions, +overview
         info = dict()
         # TODOXXX Shorten commit_id automatically, rename to source_commit
         info['commit_id'] = commit.hexsha[:7]+'...'

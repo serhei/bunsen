@@ -56,7 +56,7 @@ if __name__=='__main__':
                 try:
                     commit = upstream_repo.commit(testrun.source_commit)
                     extra['summary'] = commit.summary
-                except ValueError:
+                except KeyError: # TODOXXX also ValueError?
                     pass
             out.show_testrun(testrun, **extra)
             n_testruns += 1

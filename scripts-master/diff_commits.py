@@ -352,7 +352,7 @@ def diff_all_testruns(baseline_runs, latest_runs,
 
 b = bunsen.Bunsen()
 if __name__=='__main__':
-    opts = b.cmdline_args(sys.argv, info=info, args=cmdline_args
+    opts = b.cmdline_args(sys.argv, info=info, args=cmdline_args,
                           required_args=['baseline','latest'],
                           optional_args=['source_repo'])
     out = get_formatter(b, opts)
