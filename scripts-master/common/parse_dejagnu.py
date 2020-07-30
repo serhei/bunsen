@@ -787,4 +787,4 @@ if __name__=='__main__':
                           optional_args=['sumfile','logfile'])
     testlogs = collect_testlogs(opts.logfile, opts.sumfile, opts.logdir)
     testrun = parse_testlogs(testlogs)
-    print(testrun.to_json(pretty=True)) # TODOXXX
+    print(testrun.to_json(pretty=True))

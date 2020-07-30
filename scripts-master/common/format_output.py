@@ -24,6 +24,7 @@ def suppress_fields(testrun, suppress=set()):
 def html_sanitize(obj):
     return html.escape(str(obj))
 
+# TODOXXX: Rename to plain_field_summary, have field_summary() take opts and decide between regular/HTML output.
 def field_summary(testrun, fields=None, separator=" ", sanitize=False, suppress_keys=False):
     if fields is None:
         fields = testrun.keys()
@@ -286,6 +287,8 @@ class HTMLTable:
                     s += "<td class={1} onclick='s({0})'>".format(cell_id, td_class)
                 elif td_class is not None:
                     s += "<td class={}>".format(td_class)
+                elif field not in _this_row:
+                    s += "<td class=empty>"
                 else:
                     s += "<td>"
                 if field in _this_row: # if not, output an empty cell
@@ -336,8 +339,12 @@ class HTMLFormatter:
 .scommit { font-weight: bold; color: darkslategray; }
 .subtest { width: 40%; white-space: pre-wrap; }
 .h { writing-mode: tb-rl; width: 20px; font-size: xx-small; }
+table { font-size: 1em; table-layout: auto; }
+table.fixed { table-layout: fixed; width: 100%; }
 td,th { background-color: white; text-align: left;
-        padding: 3px; white-space: nowrap; }
+        padding: 3px; white-space: normal; overflow: hidden; }
+td.empty { background-color: lightgray; }
+td.clicky { background-color: beige; }
 td.clicky:hover { background-color: azure; }
 tr.clicky:hover > td { background-color: beige; }
 .detail { white-space: nowrap; text-align: left; display: none; }
@@ -439,7 +446,8 @@ function details(s) {
         info.update(kwargs)
 
         fields = ['pass_count','fail_count']
-        cell = html_field_summary(info, fields=fields, separator="<br/>")
+        #cell = html_field_summary(info, fields=fields, separator="<br/>")
+        cell = "{}&nbsp;pass<br/>{}&nbsp;fail".format(info['pass_count'],info['fail_count']) # TODOXXX text-align right
 
         suppress = set(fields)
         if not self.opts.verbose:
@@ -465,7 +473,7 @@ function details(s) {
         order = ['year_month', 'bunsen_commit_id', 'pass_count', 'fail_count']
         for k in header_fields:
             if row in order: continue # avoid duplicates
-            row[k] = html_sanitize(info[k])
+            row[k] = html_sanitize(info[k]) if k in info else ''
             order.append(k)
 
         # details
