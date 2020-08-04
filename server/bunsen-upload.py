@@ -82,6 +82,7 @@ if __name__=='__main__':
         # TODOXXX check against whitelist
         # TODOXXX this should be set before calling cmdline_args()
         opts.project = form['project'].value
+        opts.tag = opts.project # TODOXXX alias for _commit_logs.commit_logs()
     if 'tar' in form and form['tar'].file is not None:
         tar = tarfile.open(fileobj=form['tar'].file)
         # TODO: change outfile to go somewhere other than 'breakage.log'
