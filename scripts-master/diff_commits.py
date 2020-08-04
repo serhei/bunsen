@@ -59,6 +59,8 @@ def find_testruns(b, source_hexsha, msg='Finding testruns'):
                              total=num_testruns, leave=True, unit='run')
         for testrun_summary in b.testruns(tag):
             hexsha = get_source_commit(testrun_summary)
+            if hexsha is None:
+                continue
             if hexsha.startswith(source_hexsha) or source_hexsha.startswith(hexsha):
                 testrun = b.testrun(testrun_summary)
                 testruns.append(testrun)
@@ -173,13 +175,13 @@ def show_combination(opts, out, n_regressions, combination):
         s = ""
     else:
         s += " "
-    if not single and html:
+    if not single and to_html:
         out.message("<ul>", raw=True)
     for comparison in combination:
         s += make_comparison_str(comparison, single=single, html=to_html)
         out.message(s, raw=not single)
         s = ""
-    if not single and html:
+    if not single and to_html:
         out.message("</ul>", raw=True)
 
 # XXX for consistent indexing
@@ -480,11 +482,11 @@ if __name__=='__main__':
     out.message("Regressions by configuration")
     # TODO: Add 'compact' option?
     for combination_key, combination in regression_combos.items():
-        n_regressions = len(version_testcases[combination_key])
+        n_regressions = len(regression_testcases[combination_key])
         if n_regressions == 0: continue
         out.section(minor=True)
         show_combination(opts, out, n_regressions, combination)
-        for tc in version_testcases[combination_key]:
+        for tc in regression_testcases[combination_key]:
             out.show_testcase(None, tc) # XXX no testrun
 
     out.finish()
