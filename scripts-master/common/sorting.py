@@ -69,7 +69,7 @@ def chronological_order(b, upstream_repo=None, reverse=False):
                 commit_key = testrun.source_commit
                 upstream_commit = upstream_repo.commit(testrun.source_commit)
                 commit_date = upstream_commit.committed_date
-            except KeyError: # TODOXXX also ValueError?
+            except (KeyError, ValueError): # ValueError for upstream_repo lookup
                 commit_key = testrun.bunsen_commit_id
                 bunsen_commit = b.git_repo.commit(testrun.bunsen_commit_id)
                 commit_date = bunsen_commit.committed_date
