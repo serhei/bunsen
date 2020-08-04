@@ -29,7 +29,8 @@ e.g. skip_until=Fedora-x86_64-native-extended-gdbserver-m64/a0/a051e2f3e0c1cedf4
 # TODO: Suppress spurious progress bar and printing when used for cron jobs.
 
 import sys
-from bunsen import Bunsen, Testrun
+import tarfile
+from bunsen import Bunsen, BunsenError, Testrun
 
 # TODO: wrap in a Bunsen API e.g. start_progress(), Bunsen.progress(),
 # Bunsen.end_progress(), etc.?
@@ -74,12 +75,14 @@ def add_testlog_or_xz(b, tmpdir, logpath):
     '''
     if logpath.endswith('.xz'):
         assert os.path.isfile(logpath)
+        print("will decompress {}".format(logpath))
         subprocess.run(['xz', '--decompress', '--keep', '--force', logpath])
         logpath_unxz = logpath[:-len('.xz')]
         logname = os.path.basename(logpath_unxz)
         destination_path = os.path.join(tmpdir, logname)
-        remove_existing(destination_path)
-        shutil.move(logpath_unxz, tmpdir)
+        if destination_path != logpath_unxz:
+            remove_existing(destination_path)
+            shutil.move(logpath_unxz, tmpdir)
         logpath_unxz = destination_path
     elif logpath.endswith('.gz'): # XXX xfail tables
         assert os.path.isfile(logpath)
@@ -87,8 +90,9 @@ def add_testlog_or_xz(b, tmpdir, logpath):
         logpath_unxz = logpath[:-len('.gz')]
         logname = os.path.basename(logpath_unxz)
         destination_path = os.path.join(tmpdir, logname)
-        remove_existing(destination_path)
-        shutil.move(logpath_unxz, tmpdir)
+        if destination_path != logpath_unxz:
+            remove_existing(destination_path)
+            shutil.move(logpath_unxz, tmpdir)
         logpath_unxz = destination_path
     else:
         logpath_unxz = logpath
@@ -97,9 +101,11 @@ def add_testlog_or_xz(b, tmpdir, logpath):
 
 def pick_testlog(testdir, tmpdir, name):
     # '''Prefer already-uncompressed version of the file in tmpdir.'''
-    # testlog_path = os.path.join(tmpdir, name)
-    # if os.path.isfile(testlog_path):
-    #     return testlog_path
+    #testlog_path = os.path.join(tmpdir, name)
+    #if os.path.isfile(testlog_path):
+    #    return testlog_path
+    if testdir == '<tarfile>':
+        return os.path.join(tmpdir, name)
     testlog_path = os.path.join(testdir, name)
     return testlog_path
 
@@ -139,12 +145,103 @@ def traverse_logs(log_src, restrict=None):
                 if not is_testdir(testdir): continue
                 yield osver, test_sha, testdir
 
+# TODO: factor into a common utility function, also used by systemtap
+def flatten_logfiles(arglist):
+    curr_args = arglist
+    logfiles = []
+    while len(curr_args) > 0:
+        next_args = []
+        for arg in curr_args:
+            if isinstance(arg, str):
+                logfiles.append((arg, None))
+            elif isinstance(arg, list):
+                next_args += arg
+            elif isinstance(arg, tarfile.TarFile):
+                for tarinfo in arg:
+                    # XXX don't accept subdirectories for now
+                    if not tarinfo.isreg(): continue
+                    logfiles.append((tarinfo.name, tarinfo))
+            elif isinstance(arg, tarfile.TarInfo):
+                if not tarinfo.isreg(): continue
+                logfiles.append((tarinfo.name, tarinfo))
+            else:
+                raise BunsenError("unknown commit_logs arg {}".format(arg))
+        curr_args = next_args
+    return logfiles
+
 # TODOXXX Factor code from commit_repo_logs:
-def commit_logs(b, *args, **kwargs):
-    opts = kwargs['opts'] # TODOXXX Default None
-    push = kwargs['push'] # TODOXXX Default False
-    # TODO: Perhaps roll push into kwargs, default to push=True?
-    pass # TODOXXX
+def commit_logs(b, wd, *args, **kwargs):
+    opts = kwargs['opts'] if 'opts' in kwargs else None
+    push = kwargs['push'] if 'push' in kwargs else True
+    alt_year_month = kwargs['year_month'] if 'year_month' in kwargs else None
+    tarfile = kwargs['tarfile'] if 'tarfile' in kwargs else None
+    tarballname = kwargs['tarballname'] if 'tarballname' in kwargs else None
+
+    # for error reporting:
+    testdir = kwargs['testdir'] if 'testdir' in kwargs else None
+    if tarfile is not None and testdir is None: testdir = '<tarfile>'
+    # TODOXXX also extract datestamp for bunsen-push upload
+
+    # XXX tmpdir is required for unxzing
+    tmpdir = kwargs['tmpdir'] if 'tmpdir' in kwargs else None
+    if tmpdir is None: tmpdir = tempfile.mkdtemp()
+
+    # flatten list of args to list of (path, OPTIONAL tarfile.TarInfo)
+    logfiles = flatten_logfiles(args)
+
+    for logfile, tarinfo in logfiles:
+        if logfile == 'BUNSEN_COMMIT': continue # don't add to commit
+        if logfile == 'year_month.txt': continue # don't add to commit
+        if logfile.startswith('index.html'): continue # don't add to commit
+        if tarinfo is not None:
+            t = tarfile.extractfile(tarinfo)
+            logname = os.path.basename(logfile)
+            with open(os.path.join(tmpdir, logname), 'wb') as f:
+                f.write(t.read()) # TODOXXX read_decode utf-8?
+            logpath = os.path.join(tmpdir, logname)
+        else:
+            logpath = os.path.join(testdir, logfile)
+        if os.path.isdir(logpath): continue # don't add to commit
+        add_testlog_or_xz(b, tmpdir, logpath)
+
+    testrun = Testrun()
+    all_cases = []
+    gdb_README = pick_testlog(testdir, tmpdir, 'README.txt')
+    gdb_sum = pick_testlog(testdir, tmpdir, 'gdb.sum') # XXX parser autodetects .xz
+    gdb_log = pick_testlog(testdir, tmpdir, 'gdb.log') # XXX parser autodetects .xz
+    testrun = parse_README(testrun, gdb_README)
+    testrun = parse_dejagnu_sum(testrun, gdb_sum, all_cases=all_cases)
+    testrun = annotate_dejagnu_log(testrun, gdb_log, all_cases)
+
+    if testrun is None:
+        b.reset_all()
+        return None # TODOXXX Pass error message?
+
+    b.add_testrun(testrun)
+
+    if testrun.year_month is None and alt_year_month is not None:
+        testrun.year_month = alt_year_month
+    # TODOXXX handle year_month from tarballname
+    if testrun.year_month is None:
+        print("WARNING: skipped {} due to missing year_month"\
+              .format(testdir))
+        b.reset_all()
+        return None # TODOXXX Pass error message?
+
+    # XXX To avoid huge working copies, use branch_extra to split testruns branches by source buildbot:
+    if 'osver' in testrun:
+        commit_id = b.commit(opts.tag, wd=wd, push=False, allow_duplicates=False, branch_extra=testrun.osver)
+    else:
+        # TODOXXX Need to extract osver more diligently for tarfile submissions:
+        commit_id = b.commit(opts.tag, wd=wd, push=False, allow_duplicates=False)
+    #commit_id = b.commit(opts.tag, wd=wd, push=False, allow_duplicates=True, wd_index=wd_index, wd_testruns=wd_testruns)
+
+    if push:
+        wd.push_all()
+
+    if tmpdir is not None: shutil.rmtree(tmpdir)
+
+    return commit_id
 
 def commit_repo_logs(b, log_src, opts=None):
     '''
@@ -167,6 +264,7 @@ def commit_repo_logs(b, log_src, opts=None):
 
     # XXX Purely to have a progress bar:
     n_logdirs = 0
+    known_logdirs = set()
     skipping = opts.skip_until is not None
     for osver, test_sha, testdir in traverse_logs(log_src, restrict=restrict):
         if skipping and testdir.endswith(opts.skip_until):
@@ -183,6 +281,7 @@ def commit_repo_logs(b, log_src, opts=None):
            os.path.isfile(os.path.join(testdir,'BUNSEN_COMMIT')):
             continue # won't be processed
         n_logdirs += 1
+        known_logdirs.add(testdir)
 
     progress = tqdm(iterable=None, desc="Committing GDB testlogs",
                     total=n_logdirs, leave=False, unit='dir')
@@ -231,40 +330,15 @@ def commit_repo_logs(b, log_src, opts=None):
             total_dirs += 1
             continue
 
-        for logfile in os.listdir(testdir):
-            if logfile == 'BUNSEN_COMMIT': continue # don't add to commit
-            if logfile == 'year_month.txt': continue # don't add to commit
-            if logfile.startswith('index.html'): continue # don't add to commit
-            logpath = os.path.join(testdir, logfile)
-            if os.path.isdir(logpath): continue # don't add to commit
-            add_testlog_or_xz(b, tmpdir, logpath)
-        testrun = Testrun()
-        all_cases = []
-        gdb_README = pick_testlog(testdir, tmpdir, 'README.txt')
-        gdb_sum = pick_testlog(testdir, tmpdir, 'gdb.sum') # XXX parser autodetects .xz
-        gdb_log = pick_testlog(testdir, tmpdir, 'gdb.log') # XXX parser autodetects .xz
-        testrun = parse_README(testrun, gdb_README)
-        testrun = parse_dejagnu_sum(testrun, gdb_sum, all_cases=all_cases)
-        testrun = annotate_dejagnu_log(testrun, gdb_log, all_cases)
-        if testrun is None:
-            b.reset_all()
+        commit_id = commit_logs(b, wd, opts=opts, push=False,
+                                testdir=testdir, tmpdir=tmpdir,
+                                year_month=year_month,
+                                *os.listdir(testdir))
+
+        if commit_id is None:
+            if testdir in known_logdirs:
+                progress.update(n=1)
             total_dirs += 1
-            continue
-        testrun.osver = osver
-
-        b.add_testrun(testrun)
-
-        if testrun.year_month is None:
-            print("WARNING: skipped {} due to missing year_month"\
-                  .format(testdir))
-            b.reset_all()
-            progress.update(n=1) # XXX was included in n_logdirs
-            total_dirs += 1
-            continue
-
-        # XXX To avoid huge working copies, use branch_extra to split testruns branches by source buildbot:
-        commit_id = b.commit(opts.tag, wd=wd, push=False, allow_duplicates=False, branch_extra=testrun.osver)
-        #commit_id = b.commit(opts.tag, wd=wd, push=False, allow_duplicates=True, wd_index=wd_index, wd_testruns=wd_testruns)
 
         # XXX Create BUNSEN_COMMIT file to mark logs as committed:
         with open(os.path.join(testdir,"BUNSEN_COMMIT"), 'w') as f:
