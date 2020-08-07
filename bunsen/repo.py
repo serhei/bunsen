@@ -327,7 +327,7 @@ class Bunsen:
 
         # (4) Identify Bunsen repo location:
         if base_dir is not None:
-            self._opts.bunsen_dir = str(self.base_dir)
+            self._opts.bunsen_dir = str(base_dir)
         self.base_dir = None
         if self._opts.bunsen_dir is not None:
             self.base_dir = Path(self._opts.bunsen_dir).resolve()
@@ -1144,6 +1144,11 @@ class Bunsen:
             found_existing = True
         if not self.cache_dir.is_dir():
             self.cache_dir.mkdir()
+        else:
+            found_existing = True
+        if not (self.base_dir / "config").is_file():
+            # <TODO> If self.config_path is different, copy config?
+            open(str(self.base_dir / "config"), mode='w').close() # XXX empty file
         else:
             found_existing = True
         if not self._scripts_path.is_dir():
