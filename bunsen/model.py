@@ -1147,13 +1147,13 @@ class Testrun(dict):
             and 'bunsen_testruns_branch' in self:
             m = branch_regex.fullmatch(self.bunsen_testruns_branch)
             assert m is not None # bunsen_testruns_branch
-            if project is None: project = m.group['project']
-            if year_month is None: year_month = m.group['year_month']
-            if extra_label is None: extra_label = m.group['extra_label']
+            if project is None: project = m.group('project')
+            if year_month is None: year_month = m.group('year_month')
+            if extra_label is None: extra_label = m.group('extra_label')
         # XXX extra_label is usually only present in bunsen_testlogs_branch
-        if 'extra_label' is None and 'bunsen_testlogs_branch' in self:
+        if m.group('extra_label') is None and 'bunsen_testlogs_branch' in self:
             m = branch_regex.fullmatch(self.bunsen_testlogs_branch)
-            extra_label = m.group['extra_label']
+            extra_label = m.group('extra_label')
         return project, year_month, extra_label
 
     def validate(self, project=None, year_month=None, extra_label=None,
