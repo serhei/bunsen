@@ -335,6 +335,7 @@ class Bunsen:
             self._locate_repo(initializing)
         if self.base_dir is None:
             raise BunsenError("no Bunsen repo found or configured")
+        self._opts.set_option('bunsen_dir', self.base_dir, 'default')
 
         # (5) Parse local config file in Bunsen repo
         # (or local config file provided by --config option):
@@ -1469,6 +1470,13 @@ class BunsenOptions:
         if key in self.__dict__ and key in self.source \
             and not BunsenOptions.source_overrides(source, self.source[key]):
             return # XXX A value exists with higher priority.
+        if key not in self.default_values:
+            # TODOXXX: Several options:
+            # if source is config file, just warn and move on; identify which config file we are reading from?
+            # if source is cmdline option, and unknown cmdline not permitted, print usage
+            # otherwise, keep quiet.
+            warn_print("unknown option '{}={}'".format(key, value))
+            return
         if key in self.boolean_options or \
             isinstance(self.default_values[key], bool):
             if value in {'True','true','yes'}:
@@ -1705,6 +1713,16 @@ class BunsenOptions:
             items.append(val.strip())
         return items
 
+    def _show_results(self):
+        """For debugging: print the contents of this BunsenOptions object."""
+        print("OBTAINED OPTIONS")
+        # TODOXXX Filter by active options groups:
+        for key, val in self.__dict__.items():
+            if key in _options_base_fields:
+                continue
+            print ("{} = {} ({})".format(key, val, self.source[key]))
+        print()
+
     # TODO logic for checking cgi_safe functionality
 
 # Options for bunsen:
@@ -1733,7 +1751,7 @@ BunsenOptions.add_option('git_user_name', group={'init','commit'},
     help="Username to use for Git commits to the Bunsen repo.")
 BunsenOptions.add_option('git_user_email', group={'init', 'commit'},
     cmdline='git-user-email', cgi='git_user_email', default='unknown@email',
-    help="Email to use for Git commits to the bunsen repo.")
+    help="Email to use for Git commits to the Bunsen repo.")
 # XXX: These git options are set for working directory clones, not for
 # the main Bunsen git repo. Changing them does not affect an already cloned
 # working directory.

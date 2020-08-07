@@ -26,8 +26,17 @@ from bunsen.utils import err_print
 
 def cmd_init(args):
     b, opts = Bunsen.from_cmdline(args, script_name='init')
-    b.init_repo()
-    # TODO 'Initialized / reinitialized existing repo.'
+    found_existing = b.init_repo()
+    if found_existing:
+        print("Reinitialized existing Bunsen repo at {}".format(b.base_dir))
+    else:
+        print("Initialized Bunsen repo at {}".format(b.base_dir))
+
+# Subcommand 'add'
+
+def cmd_add(args):
+    b, opts = Bunsen.from_cmdline(args, script_name=None)
+    pass # TODOXXX
 
 # Subcommand 'run'
 
@@ -84,11 +93,12 @@ def cmd_help(args=[]):
         return
     # TODO: bunsen help -> prints general help
     # TODO: bunsen help subcommand -> equivalent to bunsen subcommand --help
+    print("TODO: print help")
     pass
 
 supported_commands = {
     'init':cmd_init,
-    # TODO: 'add':cmd_add,
+    'add':cmd_add,
     # TODO: 'ls':cmd_ls,
     # TODO: 'show':cmd_show,
     # TODO: 'diff':cmd_diff,
