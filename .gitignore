@@ -6,11 +6,15 @@ private-*
 wd-*
 *~
 .idea
+TODO.org
 
 # example projects
 binutils-gdb
 systemtap
 gcc
+
+# test data
+systemtap.*
 
 # bunsen-cgi.py server via lighttpd
 *.log
