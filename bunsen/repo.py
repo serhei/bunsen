@@ -1302,7 +1302,7 @@ class Bunsen:
         # (1b) Collect candidate script directories:
         candidate_dirs = []
         parent_dirs = {str(self.base_dir), str(BUNSEN_SCRIPTS_DIR)}
-        curr_search_dirs = self.scripts_search_path
+        curr_search_dirs = list(self.scripts_search_path)
         while len(curr_search_dirs) > 0:
             candidate_dir = curr_search_dirs.pop(0)
 
@@ -1404,19 +1404,17 @@ class Bunsen:
         return preferred_script_path
 
     def run_command(self):
-        """Run the command configured when this Bunsen object was initialized.
-
-        <TODO: Docstring>
-        """
+        """Run the command configured when this Bunsen object was created."""
         script_path = self.find_script(self._opts.script_name)
         script_env = self._opts.script_env()
-        script_args = [] # TODOXXX extract script_args from self._opts
-        print("FOUND {} {}\n".format(script_path, script_env))
+        script_args = self._opts.script_args()
+        #print("FOUND {} {} {}\n".format(script_path, script_env, script_args))
 
         # TODO(rx): Add job control, e.g. fork a long-running task in a tmux.
         # TODO(rx): Remote execution functionality to launch script inside vm.
         rc = subprocess.run([str(script_path)] + script_args, env=script_env)
-        # TODOXXX: Check rc and handle when script is not executable.
+        # TODO: Check rc and handle any unexpected results?
+        # TODO: Make sure command results are cached where appropriate.
 
     # TODO def show_command - show cached results from a command (invoke from bunsen-cgi?)
 
@@ -1504,6 +1502,16 @@ class BunsenOptions:
     boolean_options = set()
     """Set of options that are boolean flags."""
 
+    # TODO: accumulate=True for boolean_options should allow e.g. -vvvv => -v4
+    accumulate_options = set()
+    """Set of options whose command line args accumulate into a list.
+
+    New options are appended at the end if low priority,
+    at the start if high priority.
+
+    e.g. o=c,d -oa -ob => [a,b,c,d].
+    """
+
     @classmethod
     def _add_option_name(cls, opts_map, name, internal_name, override=False):
         if name in opts_map and not override:
@@ -1516,7 +1524,8 @@ class BunsenOptions:
                    cmdline=None, cmdline_short=None,
                    env=None, cgi=None, config=None,
                    nonconfig=False, boolean=False,
-                   default=None, help=None,
+                   accumulate=False, default=None,
+                   help=None,
                    override=False):
         """Define an option.
 
@@ -1566,9 +1575,12 @@ class BunsenOptions:
             cls._add_option_name(cls.long_options, cmdline, internal_name, override)
         if cmdline is not None and boolean:
             cls.boolean_flags[cmdline] = True
+            cls.boolean_flags["no"+cmdline] = False
             cls.boolean_flags["no-"+cmdline] = False
+            cls._add_option_name(cls.long_options, "no"+cmdline, internal_name, override)
             cls._add_option_name(cls.long_options, "no-"+cmdline, internal_name, override)
         if cmdline_short is not None:
+            assert(len(cmdline_short) == 1)
             cls._add_option_name(cls.short_options, cmdline_short, internal_name, override)
         if env is not None:
             cls._add_option_name(cls.env_options, env, internal_name, override)
@@ -1581,6 +1593,8 @@ class BunsenOptions:
             cls.nonconfig_options.add(internal_name)
         if boolean:
             cls.boolean_options.add(internal_name)
+        if accumulate:
+            cls.accumulate_options.add(internal_name)
 
         if help is not None:
             cls.help_strings[internal_name] = help
@@ -1609,11 +1623,11 @@ class BunsenOptions:
         self._delayed_config = []
         self.unknown_args = []
 
-    source_priorities = ['args', 'env', 'local', 'global', 'default']
+    source_priorities = ['args', 'cgi', 'env', 'local', 'global', 'default']
     """Possible sources of options in order of decreasing priority.
 
     Here:
-    - 'args' represents command line or CGI arguments
+    - 'args','cgi' represents command line or CGI arguments
     - 'environment' represents environment variables
     - 'local' represents a local configuration file (in a Bunsen repo)
     - 'global' represents a global configuration file (in user's home directory)
@@ -1678,6 +1692,31 @@ class BunsenOptions:
         self.__dict__[key] = value
         self.source[key] = source
         # TODOXXX: Check for any _delayed_config sections that were activated? Or define another method for that.
+
+    def _append_option(self, key, value, source, accumulate_front=None):
+        # <TODO> Warn about duplicate options added from the same source?
+        if key in _options_base_fields:
+            warn_print("attempt to set nonexistent (reserved) option '{}'" \
+                .format(key))
+            return
+        existing = self.get_list(key, default=[])
+        additional = self._split_list(value) # XXX Allow multiple values 'a,b'.
+        if key in self.__dict__ and key in self.source \
+            and not BunsenOptions.source_overrides(source, self.source[key]):
+            existing = existing + additional
+        elif accumulate_front is not None and key not in accumulate_front:
+            # XXX Delay appending to avoid reversing the order of args.
+            accumulate_front[key] = additional
+        elif accumulate_front is not None:
+            accumulate_front[key] = accumulate_front[key] + additional
+        else:
+            # XXX Don't delay appending.
+            existing = additional + existing
+        self.__dict__[key] = existing
+        if key in self.__dict__ and key in self.source \
+            and not BunsenOptions.source_overrides(source, self.source[key]):
+            return # don't update source
+        self.source[key] = source
 
     def _add_config(self, config, section, is_global=False, is_project=False):
         if is_project:
@@ -1751,34 +1790,39 @@ class BunsenOptions:
         self.print_help()
         exit(1)
 
-    def _proc_cmdline_arg(self, arg, next_arg, allow_unknown):
+    def _proc_cmdline_arg(self, arg, next_arg, allow_unknown,
+                          accumulate_front=None):
         m = cmdline_arg_regex.fullmatch(arg) # XXX always matches
         internal_name, use_next = None, False
         flag, val = None, None
         if len(arg) >= 2 and arg.startswith('-') and not arg.startswith('--'):
             # handle '-o arg', '-oarg'
             flag = arg[1:2]
-            arg = arg[2:]
-            # TODOXXX fix below to use arg
+            val = arg[2:]
+            if len(val) == 0:
+                val = None
+
             if flag in self.short_options:
                 internal_name = self.short_options[flag]
             elif allow_unknown:
                 self.unknown_args.append(arg)
                 return use_next
             else:
-                self._cmdline_err("unknown flag '{}" \
-                    .format(arg))
+                self._cmdline_err("unknown flag '{}'".format(arg))
 
-            if next_arg is not None:
+            next_m = None
+            if val is None and next_arg is not None:
                 next_m = cmdline_arg_regex.fullmatch(next_arg) # XXX always matches
-            if internal_name in self.boolean_options:
+
+            if val is None and internal_name in self.boolean_options:
                 val = True
-            elif next_arg is not None and m.group('prefix') is not None:
+            elif val is None and next_m is not None and \
+                 next_m.group('prefix') is not None:
                 self._cmdline_err("option '{}' expects an argument" \
                     .format(arg))
-            elif next_arg is not None:
+            elif val is None and next_arg is not None:
                 val, use_next = next_arg, True
-            else:
+            elif val is None:
                 self._cmdline_err("option '{}' expects an argument" \
                     .format(arg))
         elif arg.startswith('+'):
@@ -1787,7 +1831,7 @@ class BunsenOptions:
                 # TODO: Support chained scripts; for now, signal error.
                 self._cmdline_err("redundant script specifier '{}'" \
                     .format(arg))
-            # TODO: Sanitize, strip '+', here or in find_script?
+            # XXX: The '+' will be stripped by Bunsen.find_script().
             self.script_name = arg
             return use_next
         elif m.group('keyword') is not None:
@@ -1836,7 +1880,10 @@ class BunsenOptions:
             self._cmdline_err("unexpected positional argument '{}'" \
                 .format(arg))
 
-        self.set_option(internal_name, val, 'cmdline')
+        if internal_name in self.accumulate_options:
+            self._append_option(internal_name, val, 'args', accumulate_front)
+        else:
+            self.set_option(internal_name, val, 'args')
         return use_next
 
     def parse_cmdline(self, args, allow_unknown=False):
@@ -1852,12 +1899,16 @@ class BunsenOptions:
             self
         """
         i = 0
+        accumulate_front = {} # XXX args shouldn't accumulate in reverse order
         while i < len(args):
             arg, next_arg = args[i], None
             if i + 1 < len(args):
                 next_arg = args[i+1]
-            use_next = self._proc_cmdline_arg(arg, next_arg, allow_unknown)
+            use_next = self._proc_cmdline_arg(arg, next_arg, allow_unknown,
+                                              accumulate_front)
             i += 2 if use_next else 1
+        for key, val in accumulate_front.items():
+            self.__dict__[key] = val + self.__dict__[key]
         return self
 
     def parse_cgi_query(self, form):
@@ -1889,17 +1940,21 @@ class BunsenOptions:
     # -- can take a formatter object from format_output.py?
     # -- or should we import format_output.py directly?
 
+    def _split_list(self, value):
+        # TODO: Handle quoted/escaped commas.
+        items = []
+        for val in value.split(","):
+            if val == "": continue
+            items.append(val.strip())
+        return items
+
     def get_list(self, key, default=None):
         """Parse an option that was specified as a comma-separated list."""
         if key not in self.__dict__ or self.__dict__[key] is None:
             return default
         if isinstance(self.__dict__[key], list): # XXX already parsed
             return self.__dict__[key]
-        items = []
-        for val in self.__dict__[key].split(","):
-            if val == "": continue
-            items.append(val.strip())
-        return items
+        return self._split_list(self.__dict__[key])
 
     def _show_results(self):
         """For debugging: print the contents of this BunsenOptions object."""
@@ -1918,15 +1973,37 @@ class BunsenOptions:
     # TODO logic for checking cgi_safe functionality
 
     def script_env(self):
-        """<TODO: Docstring.>"""
+        """Output environment variable options as a dict."""
         env_values = {}
         for key, internal_name in self.env_options.items():
             env_values[key] = str(self.__dict__[internal_name])
         return env_values
 
     def script_args(self):
-        # TODOXXX Transform args back into commandline.
-        pass
+        """Output non-default options as a list of command line args.
+
+        Omits any options that can be specified via script variables.
+        """
+        env_keys = set()
+        arg_values = []
+        for key, internal_name in self.env_options.items():
+            # Skip values that can be satisfied by script_env:
+            env_keys.add(internal_name)
+        for key, val in self.__dict__.items():
+            if key in _options_base_fields:
+                continue
+            if self.source[key] == 'default':
+                # XXX Assume Bunsen child process will have the same defaults.
+                continue
+            if key in env_keys:
+                continue
+            if isinstance(val, list):
+                # TODO: Escape commas in val.
+                val = ",".join(val)
+            # TODO: Handle other arg types as necessary.
+            arg_values.append("{}={}".format(key, str(val)))
+        arg_values += self.unknown_args
+        return arg_values
 
 # Options for bunsen:
 BunsenOptions.add_option('bunsen_dir', group='bunsen',
@@ -1944,6 +2021,7 @@ BunsenOptions.add_option('bunsen_default_repo', group='bunsen',
 BunsenOptions.add_option('use_bunsen_default_repo', group='bunsen',
     cmdline='default-repo', boolean=True,
     help="Use the default Bunsen repo if a Bunsen repo is not found.")
+  # TODO: Fallback if config, required if command line arg?
 BunsenOptions.add_option('config_path', group='bunsen',
     cmdline='config', nonconfig=True, default=None,
     help="Path to config file; default '$(bunsen_dir)/config'.")
@@ -1963,8 +2041,9 @@ BunsenOptions.add_option('git_user_email', group={'init', 'commit'},
 # TODO add these options to bunsen add, bunsen run?
 # Options for {run}:
 BunsenOptions.add_option('scripts_search_path', group={'run'},
-    cmdline='scripts-search-path', cmdline_short='-I', default=None,
-    help="Additional directories to search for analysis scripts.") # TODOXXX support multiple args accumulating into a list
+    cmdline='scripts-search-path', cmdline_short='I', default=None,
+    accumulate=True,
+    help="Additional directories to search for analysis scripts.")
 # TODOXXX add --script-name command line option as alternative to +script?
 
 # Options for output:
