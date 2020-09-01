@@ -238,7 +238,7 @@ class Cursor:
         # - Cursor (source=Bunsen, from_str=str, optional commit_id=hexsha)
         #   with from_str of the form '[<commit_id>:]<testlog_path>:<start>[-<end>]'
         elif isinstance(source, Bunsen):
-            assert start is 1 and end is None
+            assert start == 1 and end == None
 
             m = cursor_regex.fullmatch(from_str)
             assert m is not None
@@ -1814,7 +1814,7 @@ def bunsen_run(b, hostname, scriptname, invocation_args):
     if True:
         # Generate checkout name
         wd_name = scriptname
-        if hostname is not 'localhost':
+        if hostname != 'localhost':
             wd_name = hostname + "/" + wd_name
         wd_name = "wd-" + wd_name.replace('/','-')
 
