@@ -276,6 +276,10 @@ def diff_all_testruns(baseline_runs, latest_runs,
     #if best_with_latest is not None:
     #    best_overall = best_with_latest
 
+    if best_overall is None:
+        out.message("\nERROR: No testruns found for baseline commit {}")
+        out.message("Hint: look for whether adjacent commits were tested")
+
     # TODO: Consider splitting at this point into pick_comparisons(),
     # diff_comparisons() to avoid having to pass out into this function.
     if out is not None:
