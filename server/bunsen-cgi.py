@@ -8,7 +8,8 @@ from bunsen import Bunsen
 
 fail_reason = None
 
-valid_cmds = {'list_commits', 'list_runs'}
+# TODOXXX Need to secure 'new_regressions'.
+valid_cmds = {'overview', 'new_regressions', 'list_commits', 'list_runs', 'diff_commits', 'diff_runs'}
 def validate_cmd(script_name, args):
     global fail_reason
     if script_name not in valid_cmds:
