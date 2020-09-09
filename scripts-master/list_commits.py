@@ -7,6 +7,8 @@ cmdline_args = [
      "scan commits from source repo <path>"),
     ('branch', 'master', '<name>',
      "scan commits in branch <name>"),
+    ('show_all', False, None,
+     "show all commits in branch"),
     ('project', None, '<tags>',
      "restrict to testruns under <tags>"),
     ('verbose', False, None,
@@ -123,7 +125,8 @@ if __name__=='__main__':
     testruns_map, hexsha_lens = index_source_commits(b, tags)
     n_commits, n_testruns = 0, 0
     for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens,
-                                         forward=forward, branch=opts.branch):
+                                         forward=forward, branch=opts.branch,
+                                         include_empty_commits=opts.show_all):
         if opts.restrict >= 0 and n_commits >= opts.restrict:
             out.message("... restricted to {} commits, {} testruns ..." \
                         .format(n_commits, n_testruns))
