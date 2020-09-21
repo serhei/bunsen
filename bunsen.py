@@ -216,6 +216,12 @@ class Cursor:
                  name=None, input_file=None, fast_hack=False):
         self.name = name
 
+        # XXX parsing from_str can be delayed
+        self._delay_parse = None
+        self._delay_commit_id = None
+        self._delay_source = None
+        self._delay_input_file = None
+
         # XXX fast_hack has __iter__ yield the same Cursor object repeatedly.
         # Makes the yielded cursor unsafe to store in a testrun since it will change.
         self._fast_hack = True
@@ -240,19 +246,13 @@ class Cursor:
         elif isinstance(source, Bunsen):
             assert start == 1 and end == None
 
-            m = cursor_regex.fullmatch(from_str)
-            assert m is not None
-            if m.group('commit_id') is not None:
-                #assert commit_id is None # XXX may not be true during parsing
-                commit_id = m.group('commit_id')
-            assert commit_id is not None
-            path = m.group('path')
-            assert path is not None
-            testlog = source.testlog(path, commit_id, parse_commit_id=False)
-            if input_file is not None:
-                testlog._input_file = input_file
-            start = int(m.group('start'))
-            end = int(m.group('end')) if m.group('end') is not None else start
+            # XXX Performance fix: delay parsing until a field of this
+            # Cursor (testlog, line_start, line_end) is actually accessed:
+            self._delay_parse = from_str
+            self._delay_commit_id = commit_id
+            self._delay_source = source
+            testlog, start, end = None, None, None
+            #self._delayed_parse() # XXX test effect of performance fix
         # - Cursor (start=Cursor, optional end=Cursor)
         else:
             if end is None: end = start
@@ -271,11 +271,68 @@ class Cursor:
             start = start.line_start
             end = end.line_end
 
-        self.testlog = testlog
-        self.line_start = start
-        self.line_end = end
-        if self.line_end is None:
-            self.line_end = len(self.testlog)
+        self._testlog = testlog
+        self._line_start = start
+        self._line_end = end
+        if self._line_end is None and self._testlog is not None:
+            self._line_end = len(self.testlog)
+
+    def _delayed_parse(self):
+        if self._delay_parse is None:
+            return
+
+        m = cursor_regex.fullmatch(self._delay_parse)
+        assert m is not None
+
+        commit_id = self._delay_commit_id
+        if m.group('commit_id') is not None:
+            #assert commit_id is None # XXX may not be true during parsing
+            commit_id = m.group('commit_id')
+        assert commit_id is not None
+
+        path = m.group('path')
+        assert path is not None
+
+        source = self._delay_source
+        testlog = source.testlog(path, commit_id, parse_commit_id=False)
+        if self._delay_input_file is not None:
+            testlog._input_file = self._delay_input_file
+        start = int(m.group('start'))
+        end = int(m.group('end')) if m.group('end') is not None else start
+
+        self._testlog = testlog
+        self._line_start = start
+        self._line_end = end
+
+    @property
+    def line_start(self):
+        if self._line_start is None:
+            self._delayed_parse()
+        return self._line_start
+
+    @line_start.setter
+    def line_start(self, val):
+        self._line_start = val
+
+    @property
+    def line_end(self):
+        if self._line_end is None:
+            self._delayed_parse()
+        return self._line_end
+
+    @line_end.setter
+    def line_end(self, val):
+        self._line_end = val
+
+    @property
+    def testlog(self):
+        if self._testlog is None:
+            self._delayed_parse()
+        return self._testlog
+
+    @testlog.setter
+    def testlog(self, val):
+        self._testlog = val
 
     def __iter__(self):
         '''
@@ -430,9 +487,10 @@ class Testcase(dict):
                                    commit_id=self._parent_testrun.bunsen_commit_id,
                                    from_str=value)
                 else:
-                    assert self._field_types[field] == 'str' \
-                        or self._field_types[field] == 'hexsha' \
-                        or self._field_types[field] == 'cursor'
+                    pass # TODOXXX skip this assertion elsewhere
+                    #assert self._field_types[field] == 'str' \
+                    #    or self._field_types[field] == 'hexsha' \
+                    #    or self._field_types[field] == 'cursor'
                 self[field] = value
 
     # TODOXXX def validate(self):
