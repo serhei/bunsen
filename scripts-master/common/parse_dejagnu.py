@@ -21,6 +21,31 @@ import dateutil.parser
 from bunsen import Bunsen, Testrun, Testlog, Cursor
 from bunsen import Testcase
 
+# Standardized architecture name mapping table.  The "Native configuration
+# is " line of a test run is matched against the keys in this table.  If
+# a match is found, the architecture is given by the corresponding value.
+# Keys are regular expressions; values are functions which take the regexp
+# match as parameter and return a string representatin of the architecture.
+standard_architecture_map = {r'powerpc64-(\w+)-linux.*':lambda m: 'ppc64',
+                             r'powerpc64le-(\w+)-linux.*':lambda m: 'ppc64le',
+                             r'armv7l-(\w+)-linux-gnueabihf':lambda m: 'armhf',
+                             r'(\w+)-(\w+)-linux.*':lambda m: m.group(1)}
+
+# Deduce the architecture from TEXT, which must start with the string
+# "Native configuration is ".  If TEXT does not start with this string or
+# the architecture is not deduced, return None.
+
+def grok_architecture(text):
+    arch = None
+    if text.startswith("Native configuration is "):
+        text = text[len("Native configuration is "):-1]
+        for regex in standard_architecture_map:
+            match = re.match(regex, text)
+            if match:
+                arch = standard_architecture_map[regex](match)
+                break
+    return arch
+
 native_configuration_map = {"i686-pc-linux-gnu":"i686",
                             "i686-unknown-linux-gnu":"i686",
                             "x86_64-unknown-linux-gnu":"x86_64",

@@ -19,6 +19,7 @@ cmdline_args = [
 
 import sys
 from bunsen import Bunsen, Testrun, Cursor
+from common.parse_dejagnu import grok_architecture
 
 from datetime import datetime
 import dateutil.parser
@@ -32,17 +33,6 @@ import lzma
 
 # === TODO CREATE common.parse_dejagnu AND HARMONIZE WITH SYSTEMTAP ===
 
-native_configuration_map = {"Native configuration is i686-pc-linux-gnu":"i686",
-                            "Native configuration is i686-unknown-linux-gnu":"i686",
-                            "Native configuration is x86_64-unknown-linux-gnu":"x86_64",
-                            "Native configuration is powerpc64-unknown-linux-gnu":"ppc64",
-                            # Older systemtap logs have "Native configuration is /usr/share/dejagnu/libexec/config.guess: unable to guess system type" for ppc64le.
-                            "Native configuration is powerpc64le-unknown-linux-gnu":"ppc64le",
-                            "Native configuration is aarch64-unknown-linux-gnu":"aarch64",
-                            "Native configuration is armv7l-unknown-linux-gnueabihf":"armhf",
-                            "Native configuration is s390x-ibm-linux":"s390x",
-                            "Native configuration is x86_64-pc-linux-gnu":"x86_64", # seen on Ubuntu
-                            }
 
 # TODO Handle other exotic DejaGNU outcome codes if they come up.
 test_outcome_map = {'PASS':'PASS', 'XPASS':'XPASS', 'IPASS':'PASS',
@@ -339,12 +329,7 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
             last_test_cur = Cursor(start=cur); last_test_cur.line_start += 1
     f.close()
 
-    uname_machine = None
-    if uname_machine is None:
-        uname_machine = check_mapping(native_configuration_is,
-                                      native_configuration_map)
-
-    testrun.arch = uname_machine
+    testrun.arch = grok_architecture(native_configuration_is)
     # XXX testrun.osver should be extracted from buildbot repo path
     testrun.version = gdb_version
     testrun.year_month = year_month
