@@ -65,11 +65,14 @@ def get_outcome_line(testcase):
 datestamp_format = '%a %b %d %H:%M:%S %Y'
 
 def openfile_or_xz(path):
+    # Read in bary mode to suppress encoding problems that might occur
+    # from reading gdb.{log,sum}. Sometimes inferiors or gdb can just output
+    # garbage bytes.
     if os.path.isfile(path):
-        return open(path, mode='rt')
+        return open(path, mode='rb')
     elif os.path.isfile(path+'.xz'):
-        return lzma.open(path+'.xz', mode='rt')
-    return open(path, mode='rt') # XXX trigger default error
+        return lzma.open(path+'.xz', mode='rb')
+    return open(path, mode='rb') # XXX trigger default error
 
 def parse_README(testrun, READMEfile):
     if testrun is None: return None
