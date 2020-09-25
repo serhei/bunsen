@@ -622,6 +622,34 @@ class Testrun(dict):
             # XXX Set summary=False if JSON was missing testcases.
             self.summary = self.summary and 'testcases' in json_data
 
+    # Return configuration properties of this Testrun as printable strings,
+    # or "<unknown PROPERTY>" if unknown.  Returns a dictionary containing
+    # keys for architecture, board, branch, version.
+
+    def get_info_strings(self):
+        info = dict()
+        if 'arch' in self:
+            info['architecture'] = self.arch
+        else:
+            info['architecture'] = '<unknown arch>'
+
+        if 'target_board' in self:
+            info['target_board'] = self.target_board
+        else:
+            info['target_board'] = '<unknown board>'
+
+        if 'source_branch' in self:
+            info['branch'] = self.source_branch
+        else:
+            info['branch'] = '<unknown branch>'
+
+        if 'version' in self:
+            info['version'] = self.version
+        else:
+            info['version'] = '<unknown version>'
+
+        return info
+
     def add_testcase(self, name, outcome, **kwargs):
         '''
         Append a testcase result to the Testrun data.
