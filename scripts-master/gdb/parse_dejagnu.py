@@ -19,7 +19,6 @@ cmdline_args = [
 
 import sys
 from bunsen import Bunsen, Testrun, Cursor
-from common.parse_dejagnu import grok_architecture
 
 from datetime import datetime
 import dateutil.parser
@@ -30,37 +29,7 @@ import lzma
 
 # TODO: Modify to use common DejaGNU parsing code:
 #from common.parse_dejagnu import *
-
-# === TODO CREATE common.parse_dejagnu AND HARMONIZE WITH SYSTEMTAP ===
-
-
-# TODO Handle other exotic DejaGNU outcome codes if they come up.
-test_outcome_map = {'PASS':'PASS', 'XPASS':'XPASS', 'IPASS':'PASS',
-                    'FAIL':'FAIL', 'KFAIL':'KFAIL', 'XFAIL':'XFAIL',
-                    'ERROR: tcl error sourcing':'ERROR',
-                    'UNTESTED':'UNTESTED', 'UNSUPPORTED':'UNSUPPORTED',
-                    'UNRESOLVED':'UNRESOLVED'}
-
-def check_mapping(line, mapping, start=False):
-    '''Check if line contains a magic string from specified mapping table.'''
-    if line is None:
-        return None
-    for k, cand in mapping.items():
-        if not start and k in line:
-            return cand
-        if start and line.startswith(k):
-            return cand
-    return None # not found
-
-def get_outcome_line(testcase):
-    cur = testcase['origin_sum']
-    assert isinstance(cur, Cursor)
-    cur.line_start = cur.line_end
-    return cur.line
-
-# === TODO ABOVE ARE PROBABLY COMMON ACROSS GDB/SYSTEMTAP ===
-
-# === TODO BELOW ARE SPECIFIC TO GDB PARSING ===
+from common.parse_dejagnu import test_outcome_map, check_mapping, grok_architecture, get_outcome_line, get_running_exp
 
 datestamp_format = '%a %b %d %H:%M:%S %Y'
 
@@ -179,19 +148,6 @@ def parse_dejagnu_sum(testrun, sumfile, all_cases=None,
     testrun.fail_count = failed_subtests_summary
 
     return testrun
-
-# TODO: harmonize with SystemTap get_running_exp
-def get_running_exp(running_test):
-    t1 = 0
-    # XXX use rfind because of gdb/testsuite/../../other_place/gdb/testsuite shenanigans:
-    if "gdb/testsuite/" in running_test:
-        t1 = running_test.rfind("gdb/testsuite/") \
-            + len("gdb/testsuite/")
-    elif "Running ./" in running_test:
-        t1 = running_test.find("Running ./") + len("Running ./")
-    t2 = running_test.find(".exp") + len(".exp")
-    running_test = running_test[t1:t2]
-    return running_test
 
 def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
                          handle_reordering=False, verbose=True):

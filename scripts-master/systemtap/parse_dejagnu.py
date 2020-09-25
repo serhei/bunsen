@@ -20,45 +20,8 @@ import os
 
 # TODO: Modify to use common DejaGNU parsing code:
 # from common.parse_dejagnu import *
-
-# === TODO CREATE common.parse_dejagnu AND HARMONIZE WITH GDB ===
-
-native_configuration_map = {"Native configuration is i686-pc-linux-gnu":"i686",
-                            "Native configuration is x86_64-unknown-linux-gnu":"x86_64",
-                            "Native configuration is powerpc64-unknown-linux-gnu":"ppc64",
-                            # Older logs have "Native configuration is /usr/share/dejagnu/libexec/config.guess: unable to guess system type" for ppc64le.
-                            "Native configuration is powerpc64le-unknown-linux-gnu":"ppc64le",
-                            "Native configuration is aarch64-unknown-linux-gnu":"aarch64",
-                            "Native configuration is s390x-ibm-linux":"s390x",
-                            "Native configuration is x86_64-pc-linux-gnu":"x86_64", # seen on Ubuntu
-                            }
-
-# TODO Handle other exotic DejaGNU outcome codes if they come up.
-test_outcome_map = {'PASS':'PASS', 'XPASS':'XPASS',
-                    'FAIL':'FAIL', 'KFAIL':'KFAIL', 'XFAIL':'XFAIL',
-                    'ERROR: tcl error sourcing':'ERROR',
-                    'UNTESTED':'UNTESTED', 'UNSUPPORTED':'UNSUPPORTED'}
-
-def check_mapping(line, mapping, start=False):
-    '''Check if line contains a magic string from specified mapping table.'''
-    if line is None:
-        return None
-    for k, cand in mapping.items():
-        if not start and k in line:
-            return cand
-        if start and line.startswith(k):
-            return cand
-    return None # not found
-
-def get_outcome_line(testcase):
-    cur = testcase['origin_sum']
-    assert isinstance(cur, Cursor)
-    cur.line_start = cur.line_end
-    return cur.line
-
-# === TODO ABOVE ARE PROBABLY COMMON ACROSS GDB/SYSTEMTAP ===
-
-# === TODO BELOW ARE SPECIFIC TO SYSTEMTAP PARSING ===
+from common.parse_dejagnu import test_outcome_map, check_mapping, grok_architecture, get_outcome_line, get_running_exp
+from common.parse_dejagnu import standard_osver_map, standard_osver_filename_map, standard_distro_map
 
 stap_testrun_fields = {'arch', 'version', 'pass_count', 'fail_count', 'osver'}
 # XXX Not used from mcermak's script: logfile_path, logfile_hash, key
@@ -77,68 +40,6 @@ def validate_testrun(testrun, print_errors=True):
             else:
                 return result
     return result
-
-# Tables of magic strings:
-
-uname_machine_map = {".i686-":"i686",
-                     ".x86_64-":"x86_64",
-                     ".ppc64-":"ppc64",
-                     ".ppc64le-":"ppc64le",
-                     ".aarch64-":"aarch64",
-                     ".s390x-":"s390x"}
-
-osver_map = {".el6":"rhel-6",
-             ".el7.":"rhel-7",
-             ".ael7.":"rhel-alt-7",
-             ".el8":"rhel-8", # .el8. found in log.filename
-             #".el8+":"rhel-8", # Not found in log.version.
-             ".fc25.":"fedora-25",
-             ".fc26.":"fedora-26",
-             ".fc27.":"fedora-27",
-             ".fc28.":"fedora-28",
-             ".fc29.":"fedora-29",
-             ".fc30.":"fedora-30",
-             ".fc31.":"fedora-31",
-             ".fc32.":"fedora-32",}
-# TODOXXX Add a general pattern that matches all future versions.
-osver_filename_map = dict(osver_map)
-
-# XXX Divergences between log.filename, log.version
-del osver_filename_map[".el8"]
-osver_filename_map[".el8."] = "rhel-8"
-osver_filename_map[".el8+"] = "rhel-8"
-
-distro_map = {"Ubuntu 18.04.1 LTS":"ubuntu-18-04",
-              "Ubuntu 18.04.2 LTS":"ubuntu-18-04",
-              "Ubuntu 18.04.3 LTS":"ubuntu-18-04",
-              "Ubuntu 18.04.4 LTS":"ubuntu-18-04",
-              "Ubuntu 18.04 LTS":"ubuntu-18-04",
-              "Fedora release 29 (Rawhide)":"fedora-29-rawhide",
-              "Fedora release 29 (Twenty Nine)":"fedora-29",
-              "Fedora release 30 (Rawhide)":"fedora-30-rawhide",
-              "Fedora release 30 (Thirty)":"fedora-30",
-              "Fedora release 31 (Rawhide)":"fedora-31-rawhide",
-              "Fedora release 31 (Thirty One)":"fedora-31",
-              "Fedora release 32 (Rawhide)":"fedora-32-rawhide",
-              "Fedora release 32 (Thirty Two)":"fedora-32",
-              "Fedora release 33 (Rawhide)":"fedora-33-rawhide",}
-# TODOXXX: Add a general pattern that matches all future versions.
-
-# TODO: harmonize with GDB get_running_exp
-def get_running_exp(running_test):
-    t1 = 0
-    if "systemtap/testsuite/" in running_test:
-        t1 = running_test.find("systemtap/testsuite/") \
-            + len("systemtap/testsuite/")
-    elif "stap-checkout/testsuite/" in running_test:
-        # XXX used on some of serhei's buildbots
-        t1 = running_test.find("stap-checkout/testsuite/") \
-            + len("stap-checkout/testsuite/")
-    elif "Running ./" in running_test:
-        t1 = running_test.find("Running ./") + len("Running ./")
-    t2 = running_test.find(".exp") + len(".exp")
-    running_test = running_test[t1:t2]
-    return running_test
 
 def parse_dejagnu_log(testrun, logfile, logfile_name=None, all_cases=None,
                       consolidate_pass=True, verbose=True):
@@ -292,8 +193,7 @@ def parse_dejagnu_log(testrun, logfile, logfile_name=None, all_cases=None,
         uname_machine = check_mapping(uname_machine_raw,
                                       uname_machine_map)
     if uname_machine is None:
-        uname_machine = check_mapping(native_configuration_is,
-                                      native_configuration_map)
+        uname_machine = grok_architecture(native_configuration_is)
     if uname_machine is None:
         uname_machine = check_mapping(logfile_path,
                                       uname_machine_map)
@@ -308,14 +208,14 @@ def parse_dejagnu_log(testrun, logfile, logfile_name=None, all_cases=None,
 
     testrun.osver = None
     if testrun.osver is None:
-        testrun.osver = check_mapping(testrun.version,
-                                      osver_map)
+        testrun.osver = check_regex_mapping(testrun.version,
+                                            standard_osver_map)
     if testrun.osver is None:
-        testrun.osver = check_mapping(logfile_path,
-                                      osver_filename_map)
+        testrun.osver = check_regex_mapping(logfile_path,
+                                            standard_osver_filename_map)
     if testrun.osver is None:
-        testrun.osver = check_mapping(distro_is,
-                                      distro_map)
+        testrun.osver = check_regex_mapping(distro_is,
+                                            standard_distro_map)
     if testrun.osver is None:
         print("WARNING: ignoring unknown distro_is", distro_is, file=sys.stderr)
 

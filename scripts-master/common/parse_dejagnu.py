@@ -21,56 +21,6 @@ import dateutil.parser
 from bunsen import Bunsen, Testrun, Testlog, Cursor
 from bunsen import Testcase
 
-# Standardized architecture name mapping table.  The "Native configuration
-# is " line of a test run is matched against the keys in this table.  If
-# a match is found, the architecture is given by the corresponding value.
-# Keys are regular expressions; values are functions which take the regexp
-# match as parameter and return a string representatin of the architecture.
-standard_architecture_map = {r'powerpc64-(\w+)-linux.*':lambda m: 'ppc64',
-                             r'powerpc64le-(\w+)-linux.*':lambda m: 'ppc64le',
-                             r'armv7l-(\w+)-linux-gnueabihf':lambda m: 'armhf',
-                             r'(\w+)-(\w+)-linux.*':lambda m: m.group(1)}
-
-# Deduce the architecture from TEXT, which must start with the string
-# "Native configuration is ".  If TEXT does not start with this string or
-# the architecture is not deduced, return None.
-
-def grok_architecture(text):
-    arch = None
-    if text.startswith("Native configuration is "):
-        text = text[len("Native configuration is "):-1]
-        for regex in standard_architecture_map:
-            match = re.match(regex, text)
-            if match:
-                arch = standard_architecture_map[regex](match)
-                break
-    return arch
-
-native_configuration_map = {"i686-pc-linux-gnu":"i686",
-                            "i686-unknown-linux-gnu":"i686",
-                            "x86_64-unknown-linux-gnu":"x86_64",
-                            "powerpc64-unknown-linux-gnu":"ppc64",
-                            # Older systemtap logs have "Native configuration is /usr/share/dejagnu/libexec/config.guess: unable to guess system type" for ppc64le.
-                            "powerpc64le-unknown-linux-gnu":"ppc64le",
-                            "aarch64-unknown-linux-gnu":"aarch64",
-                            "armv7l-unknown-linux-gnueabihf":"armhf",
-                            "s390x-ibm-linux":"s390x",
-                            "x86_64-pc-linux-gnu":"x86_64", # seen on Ubuntu
-                            }
-
-# XXX more sloppy, results in a warning
-native_configuration_fallback_map = {"i686":"i686", "x86_64":"x86_64",
-                                     "powerpc64":"ppc64",
-                                     "powerpc64le":"ppc64le",
-                                     "aarch64":"aarch64", "armv7l":"armhf",
-                                     "s390x":"s390x"}
-
-# TODO Handle other exotic DejaGNU outcome codes if they come up.
-test_outcome_map = {'PASS':'PASS', 'XPASS':'XPASS', 'IPASS':'IPASS',
-                    'FAIL':'FAIL', 'KFAIL':'KFAIL', 'XFAIL':'XFAIL',
-                    'ERROR: tcl error sourcing':'ERROR',
-                    'UNTESTED':'UNTESTED', 'UNSUPPORTED':'UNSUPPORTED'}
-
 def check_mapping(line, mapping, start=False):
     '''Check if line contains a magic string from the key set of the
     specified mapping table. If so, return the value corresponding to
@@ -85,11 +35,88 @@ def check_mapping(line, mapping, start=False):
             return cand
     return None # not found
 
+def check_regex_mapping(text, mapping, exact_match=False):
+    for regex in mapping:
+        m = re.match(regex, text) if exact_match else re.search(regex, text)
+        if m is not None and isinstance(mapping[regex],str):
+            return mapping[regex]
+        else:
+            return mapping[regex](m)
+    return None
+
+# Tables of magic strings:
+
+# Standardized architecture name mapping table.  The
+# "Native configuration is " line of a test run is matched against the
+# keys in this table.  If a match is found, the architecture is given
+# by the corresponding value.
+#
+# Keys are regular expressions; values are functions which take the regexp
+# match as parameter and return a string representation of the architecture.
+standard_architecture_map = {r'powerpc64-(\w+)-linux.*':lambda m: 'ppc64',
+                             r'powerpc64le-(\w+)-linux.*':lambda m: 'ppc64le',
+                             # XXX Older systemtap logs have "Native configuration is /usr/share/dejagnu/libexec/config.guess: unable to guess system type" for ppc64le.
+                             r'armv7l-(\w+)-linux-gnueabihf':lambda m: 'armhf',
+                             r'(\w+)-(\w+)-linux.*':lambda m: m.group(1)}
+
+# Deduce the architecture from TEXT, which must start with the string
+# "Native configuration is ". If TEXT does not start with this string or
+# the architecture is not deduced, return None.
+def grok_architecture(text):
+    if text.startswith("Native configuration is "):
+        text = text[len("Native configuration is "):-1]
+        return check_regex_mapping(text, standard_architecture_map,
+                                   exact_match=True)
+    return None
+
+# XXX more sloppy alternative to grok_architecture, results in a warning
+native_configuration_fallback_map = {"i686":"i686", "x86_64":"x86_64",
+                                     "powerpc64":"ppc64",
+                                     "powerpc64le":"ppc64le",
+                                     "aarch64":"aarch64", "armv7l":"armhf",
+                                     "s390x":"s390x"}
+
+uname_machine_map = {".i686-":"i686",
+                     ".x86_64-":"x86_64",
+                     ".ppc64-":"ppc64",
+                     ".ppc64le-":"ppc64le",
+                     ".aarch64-":"aarch64",
+                     ".s390x-":"s390x"}
+
+# Standardized distro name mapping tables:
+standard_osver_map = {
+    r'\.fc(\d+)\.':lambda m: "fedora-{}".format(m.group(1)),
+    r"\.el6":"rhel-6",
+    r"\.el7\.":"rhel-7",
+    r"\.ael7\.":"rhel-alt-7",
+    r"\.el8":"rhel-8", # .el8. found in log.filename
+    #r"\.el8\+":"rhel-8", # Not found in log.version.
+}
+
+standard_osver_filename_map = dict(standard_osver_map)
+# XXX Divergences between log.filename, log.version
+del standard_osver_filename_map[r"\.el8"]
+standard_osver_filename_map[r"\.el8\."] = "rhel-8"
+standard_osver_filename_map[r"\.el8\+"] = "rhel-8"
+
+standard_distro_map = {
+    r'Fedora release (\d+) \([^R].*\)':lambda m: "fedora-{}".format(m.group(1)),
+    r'Fedora release (\d+) \(Rawhide\)':lambda m: "fedora-{}-rawhide".format(m.group(1)),
+    r'Ubuntu (\d\d\.\d\d)\w* LTS':lambda m: "ubuntu-{}".format(m.group(1).replace('.','-')),
+}
+
+# TODO Handle other exotic DejaGNU outcome codes if they come up.
+test_outcome_map = {'PASS':'PASS', 'XPASS':'XPASS', 'IPASS':'IPASS',
+                    'FAIL':'FAIL', 'KFAIL':'KFAIL', 'XFAIL':'XFAIL',
+                    'ERROR: tcl error sourcing':'ERROR',
+                    'UNTESTED':'UNTESTED', 'UNSUPPORTED':'UNSUPPORTED',
+                    'UNRESOLVED':'UNRESOLVED'}
+
 def get_running_exp(running_test):
     # Extract exp name from e.g. 'Running path/to/testsuite/foo.exp ...'
     t1 = 0
     if "/testsuite/" in running_test:
-        # XXX use rfind for e.g. 'gdb/testsuite/../../other_place/gdb/testsuite'
+        # XXX use rfind for e.g. 'proj/testsuite/../../other_place/testsuite'
         t1 = running_test.rfind("/testsuite/") \
             + len("/testsuite/")
     elif "Running ./" in running_test:
@@ -105,6 +132,12 @@ def get_expname_subtest(line):
     m = expname_subtest_regex.fullmatch(line)
     if m is None: return None
     return m.group('outcome'), m.group('expname'), m.group('subtest')
+
+def get_outcome_line(testcase):
+    cur = testcase['origin_sum']
+    assert isinstance(cur, Cursor)
+    cur.line_start = cur.line_end
+    return cur.line
 
 class DejaGNUParser:
     def __init__(self, testrun, logfile, logfile_name=None,
@@ -213,8 +246,7 @@ class DejaGNUParser:
             self.testrun.arch = None
         if self.testrun.arch is None \
            and native_configuration is not None:
-            self.testrun.arch = check_mapping(native_configuration,
-                                              native_configuration_map)
+            self.testrun.arch = grok_architecture(native_configuration)
         if self.testrun.arch is None \
            and native_configuration is not None:
             self.testrun.arch = check_mapping(native_configuration,
@@ -690,18 +722,18 @@ def parse_dejagnu_log_SYSTEMTAP(testrun, logfile, logfile_name=None,
     if 'osver' not in testrun:
         testrun.osver = None
     if testrun.osver is None and 'version' in testrun:
-        testrun.osver = check_mapping(testrun.version,
-                                      osver_map)
+        testrun.osver = check_regex_mapping(testrun.version,
+                                            standard_osver_map)
     if testrun.osver is None:
         # XXX valid for SystemTap buildbots
-        testrun.osver = check_mapping(logfile_path,
-                                      osver_filename_map)
+        testrun.osver = check_regex_mapping(logfile_path,
+                                            standard_osver_filename_map)
         # TODOXXX add similar check for GDB buildbots
     if testrun.osver is None:
         # XXX distro_map is valid for many systems,
         # but distro_is only specified for SystemTap testsuite
-        testrun.osver = check_mapping(distro_is,
-                                      distro_map)
+        testrun.osver = check_regex_mapping(distro_is,
+                                            standard_distro_map)
     if testrun.osver is None:
         print("WARNING: unknown distro_is", distro_is,
               "using full distro name", file=sys.stderr)
