@@ -7,6 +7,8 @@ import sys
 import html
 from bunsen import Testcase, Testrun
 
+import urllib.parse
+
 # TODO: def short_hexsha(commit): ...
 # replace commit.hexsha[:7] -> short_hexsha(commit)
 
@@ -24,17 +26,21 @@ def suppress_fields(testrun, suppress=set()):
 def html_sanitize(obj):
     return html.escape(str(obj))
 
-# TODOXXX: Rename to plain_field_summary, have field_summary() take opts and decide between regular/HTML output.
-def field_summary(testrun, fields=None, separator=" ", sanitize=False, suppress_keys=False):
+# TODOXXX: Rename to plain_field_summary, have field_summary() take opts and decide between regular/HTML output (instead of using 'decorate','sanitize').
+def field_summary(testrun, fields=None, separator=" ", sanitize=False,
+                  suppress_keys=False, decorate=False):
     if fields is None:
         fields = testrun.keys()
     s = ""
     first = True
     for k in fields:
         if not first: s += separator
-        v = html_sanitize(testrun[k]) if sanitize else testrun[k]
+        v = html_sanitize(testrun[k].strip()) if sanitize else testrun[k]
         if suppress_keys:
             s += "{}".format(v)
+        elif decorate:
+            # for prettier html:
+            s += "<b>{}</b>: {}".format(k,v)
         else:
             s += "{}={}".format(k,v)
         first = False
@@ -153,7 +159,7 @@ class PrettyPrinter:
 # HTML formatting code:
 
 def html_field_summary(testrun, fields=None, separator=" ", suppress_keys=False):
-    return field_summary(testrun, fields, separator, sanitize=True, suppress_keys=suppress_keys)
+    return field_summary(testrun, fields, separator, sanitize=True, suppress_keys=suppress_keys, decorate=True)
 
 def select_class(field, val):
     if field == 'outcome':
@@ -442,6 +448,36 @@ function details(s) {
         self.table.add_cell(field, cell, details)
         self._section_has_output = True
 
+    # common between testrun_cell and testrun_row
+    def testrun_details(self, testrun, info, list_logs=True):
+        #details = html_field_summary(info, separator="<br/>")
+        details = html_field_summary(info, separator="<br/>")
+
+        if list_logs:
+            # TODOXXX this is pretty slow when listing all commits :/ control with opts.list_logs instead of list_logs option?
+            # TODO: add a method like b.testlog_names(testrun)?
+            details += "<p>"; first = True
+            commit = self._bunsen.git_repo.commit(testrun.bunsen_commit_id)
+            for blob in commit.tree.blobs:
+                if blob.name == '.gitignore': continue
+                if not first: details += "<br>"
+                first = False
+
+                #details += blob.name
+                # TODOXXX: Control with opts.linkify:
+                _opts_linkify_url = "/bunsen-cgi.py" # link to same server /bunsen-cgi.py
+                log_url = "{}?cmd=show_logs&testrun={}&key={}&exact_match=yes" \
+                    .format(_opts_linkify_url, testrun.bunsen_commit_id,
+                            urllib.parse.quote_plus(blob.name))
+                details += "<a href=\"{}\">{}</a>" \
+                    .format(log_url, blob.name)
+                details += " (<a href=\"{}&pretty=no\"><b>raw</b></a>)" \
+                    .format(log_url)
+
+        # TODOXXX also link to analyses
+        #details += "<p><b>details</b>: TODO"
+        return details
+
     def testrun_cell(self, field, testrun, **kwargs):
         info = dict(testrun)
         info.update(kwargs)
@@ -454,7 +490,7 @@ function details(s) {
         if not self.opts.verbose:
             suppress = suppress.union(uninteresting_fields)
         info = suppress_fields(info, suppress)
-        details = html_field_summary(info, separator="<br/>")
+        details = self.testrun_details(testrun, info)
 
         self.table_cell(field, cell, details=details)
 
@@ -483,7 +519,7 @@ function details(s) {
         if not self.opts.verbose:
             suppress = suppress.union(uninteresting_fields)
         info = suppress_fields(info, suppress)
-        details = html_field_summary(info, separator="<br/>")
+        details = self.testrun_details(testrun, info)
 
         self.table_row(row, details=details, order=order, merge_header=True)
 
