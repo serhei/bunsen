@@ -355,10 +355,11 @@ td.clicky { background-color: beige; }
 td.clicky:hover { background-color: azure; }
 tr.clicky:hover > td { background-color: beige; }
 .detail { white-space: nowrap; text-align: left; display: none; }
-tr.detail { font-size: x-small; }
+tr.detail { font-size: medium; }
 tr.detail td { white-space: pre-wrap; }
-div.detail { font-size: xx-small; }
+div.detail { font-size: small; }
 </style>""")
+# TODO: Slightly more tasteful colours than default for the links?
         print("""<script type='text/javascript'>
 function s(i) {
   elt = document.getElementById(i);
