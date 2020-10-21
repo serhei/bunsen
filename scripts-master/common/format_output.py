@@ -66,8 +66,11 @@ class PrettyPrinter:
                 print("* * *\n") # separator
         self._section_has_output = False
 
-    def message(self, *args, raw=True, **kwargs):
-        # XXX raw option ignored in ASCII formatter
+    def sanitize(self, msg):
+        return sanitize(msg)
+
+    def message(self, *args, raw=True, compact=True, sanitize=True, **kwargs):
+        # XXX raw,sanitize options ignored in ASCII formatter
         args = list(args)
         kwargs2 = {}
         for k,v in kwargs.items():
@@ -75,8 +78,12 @@ class PrettyPrinter:
                 # pass the argument on to print()
                 kwargs2[k] = v
                 continue
-            if len(args) > 0: args.append(" ")
-            args.append("{}={}".format(k,v))
+            if compact:
+                if len(args) > 0: args.append(" ")
+                args.append("{}={}".format(k,v))
+            else:
+                if len(args) > 0: args.append("\n")
+                args.append("{}: {}".format(k,v))
         print(*args, **kwargs2)
         self._section_has_output = True
 
@@ -391,7 +398,10 @@ function details(s) {
             print("<hr/>")
         self._section_has_output = False
 
-    def message(self, *args, raw=False, **kwargs):
+    def sanitize(self, msg):
+        return html_sanitize(msg)
+
+    def message(self, *args, raw=False, compact=True, sanitize=True, **kwargs):
         self.table.close()
         s = ""
         prefix_len = 0
@@ -399,14 +409,21 @@ function details(s) {
             s += "<p>"
             prefix_len = len(s)
         for v in args:
-            if len(s) > prefix_len: s += " "
+            if len(s) > prefix_len: s += " " if compact else "<br/>"
             s += str(v)
         for k,v in kwargs.items():
             if k in {'sep','end','file','flush'}:
                 # ignore print() arguments
                 continue
-            if len(s) > prefix_len: s += " "
-            s += "<b>{}=</b>{}".format(html_sanitize(k),html_sanitize(v))
+            vv = v
+            if sanitize:
+                vv = html_sanitize(vv)
+            if compact:
+                if len(s) > prefix_len: s += " "
+                s += "<b>{}=</b>{}".format(html_sanitize(k),vv)
+            else:
+                if len(s) > prefix_len: s += "<br/>"
+                s += "<b>{}</b>: {}".format(html_sanitize(k),vv)
         if not raw:
             s += "</p>"
         print(s)

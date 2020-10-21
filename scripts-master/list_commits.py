@@ -11,6 +11,8 @@ cmdline_args = [
      "show all commits in branch"),
     ('project', None, '<tags>',
      "restrict to testruns under <tags>"),
+    ('gitweb_url', None, '<url>',
+     "for pretty=html only -- link to gitweb at <url>"),
     ('verbose', False, None,
      "show details for each testrun"),
     ('compact', False, None,
@@ -132,11 +134,19 @@ if __name__=='__main__':
                         .format(n_commits, n_testruns))
             break
 
-        # TODOXXX Improve commit_header formatting boilerplate here, and in +when_failed, +new_regressions, +overview
+        # TODOXXX Improve commit_header formatting boilerplate here, and in +when_failed, +new_regressions, +overview -- create some common code?
         info = dict()
-        # TODOXXX Shorten commit_id automatically, rename to source_commit
-        info['commit_id'] = commit.hexsha[:7]+'...'
-        info['summary'] = commit.summary
+        #info['commit_id'] = commit.hexsha[:7]+'...' # for compact=True
+        info['commit_id'] = out.sanitize(commit.hexsha)
+        info['summary'] = out.sanitize(commit.summary)
+        if opts.pretty == 'html' and opts.gitweb_url is not None:
+            commit_url = opts.gitweb_url + ";a=commit;h={}" \
+                             .format(commit.hexsha)
+            commitdiff_url = opts.gitweb_url + ";a=commitdiff;h={}" \
+                                 .format(commit.hexsha)
+            gitweb_info = "<a href=\"{}\">commit</a>, ".format(commit_url) + \
+                "<a href=\"{}\">commitdiff</a>".format(commitdiff_url)
+            info['gitweb_info'] = gitweb_info
 
         # compact output (HTML only) -- one line per commit
         # TODOXXX Create a version of this for PrettyPrinter
@@ -151,11 +161,12 @@ if __name__=='__main__':
 
         # regular output -- one line per testrun, one section per commit
         out.section(minor=True)
-        out.message(commit_id=info['commit_id'],
-                    summary=info['summary'])
+        # TODO: implement out.sanitize() in other scripts, default to sanitize=True
+        out.message(compact=False, sanitize=False, **info)
         # XXX: Note commit.summary was observed to get weird near the
         # start of SystemTap history many years ago. Maybe a bug, but
-        # not relevant because we never tested that far back in time.
+        # not relevant because we never tested that far back in time
+        # with the buildbots.
         for testrun in testruns:
             out.show_testrun(testrun, header_fields=header_fields,
                              show_all_details=opts.verbose)
@@ -165,4 +176,6 @@ if __name__=='__main__':
         out.section()
         out.message(n_commits, "commits,", n_testruns,
                     "testruns for branch", opts.branch)
+        # TODO for html linkification, add show_more+skip link for pagination
+        # TODO likewise for show_logs, add pagination for the giant .log file? or restrict some lines then link to the raw version
     out.finish()
