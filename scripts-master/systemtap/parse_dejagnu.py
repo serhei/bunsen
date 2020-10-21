@@ -20,7 +20,7 @@ import os
 
 # TODO: Modify to use common DejaGNU parsing code:
 # from common.parse_dejagnu import *
-from common.parse_dejagnu import test_outcome_map, check_mapping, grok_architecture, get_outcome_line, get_running_exp
+from common.parse_dejagnu import test_outcome_map, check_mapping, check_regex_mapping, grok_architecture, get_outcome_line, get_running_exp
 from common.parse_dejagnu import standard_osver_map, standard_osver_filename_map, standard_distro_map, uname_machine_map
 
 stap_testrun_fields = {'arch', 'version', 'pass_count', 'fail_count', 'osver'}

@@ -40,7 +40,7 @@ def check_regex_mapping(text, mapping, exact_match=False):
         m = re.match(regex, text) if exact_match else re.search(regex, text)
         if m is not None and isinstance(mapping[regex],str):
             return mapping[regex]
-        else:
+        elif m is not None:
             return mapping[regex](m)
     return None
 
