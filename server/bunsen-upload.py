@@ -87,8 +87,11 @@ if __name__=='__main__':
         tar = tarfile.open(fileobj=form['tar'].file)
         # TODO: change outfile to go somewhere other than 'breakage.log'
         log_tarfile(tar)
+        # TODOXXX suppress the 'Could not push branch' messages
+        # probably by not pushing unmodified branches?
         commit_id = _commit_logs.commit_logs(b, wd, tar, tarfile=tar,
                                              opts=opts, push=True)
     tar.close()
 
     print("failed" if commit_id is None else "ok {}".format(commit_id))
+    print() # XXX extra newline to separate logs cleanly
