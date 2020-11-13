@@ -35,7 +35,7 @@ def field_summary(testrun, fields=None, separator=" ", sanitize=False,
     first = True
     for k in fields:
         if not first: s += separator
-        v = html_sanitize(testrun[k].strip()) if sanitize else testrun[k]
+        v = html_sanitize(str(testrun[k]).strip()) if sanitize else testrun[k]
         if suppress_keys:
             s += "{}".format(v)
         elif decorate:
