@@ -91,6 +91,7 @@ standard_osver_map = {
     r"\.ael7\.":"rhel-alt-7",
     r"\.el8":"rhel-8", # .el8. found in log.filename
     #r"\.el8\+":"rhel-8", # Not found in log.version.
+    r"\.el9":"rhel-9",
 }
 
 standard_osver_filename_map = dict(standard_osver_map)
@@ -102,7 +103,7 @@ standard_osver_filename_map[r"\.el8\+"] = "rhel-8"
 standard_distro_map = {
     r'Fedora release (\d+) \([^R].*\)':lambda m: "fedora-{}".format(m.group(1)),
     r'Fedora release (\d+) \(Rawhide\)':lambda m: "fedora-{}-rawhide".format(m.group(1)),
-    r'Ubuntu (\d\d\.\d\d)\w* LTS':lambda m: "ubuntu-{}".format(m.group(1).replace('.','-')),
+    r'Ubuntu (\d\d\.\d\d)\.?\d*\w* LTS':lambda m: "ubuntu-{}".format(m.group(1).replace('.','-')),
 }
 
 # TODO Handle other exotic DejaGNU outcome codes if they come up.
