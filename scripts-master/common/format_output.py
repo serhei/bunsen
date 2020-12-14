@@ -67,7 +67,7 @@ class PrettyPrinter:
         self._section_has_output = False
 
     def sanitize(self, msg):
-        return sanitize(msg)
+        return msg
 
     def message(self, *args, raw=True, compact=True, sanitize=True, **kwargs):
         # XXX raw,sanitize options ignored in ASCII formatter
