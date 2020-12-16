@@ -35,7 +35,12 @@ def field_summary(testrun, fields=None, separator=" ", sanitize=False,
     first = True
     for k in fields:
         if not first: s += separator
-        v = html_sanitize(str(testrun[k]).strip()) if sanitize else testrun[k]
+        v = testrun[k]
+        if sanitize:
+            v = str(testrun[k]).strip()
+        # XXX: 'comparisons' field contains nested HTML
+        if sanitize and k != "comparisons":
+            v = html_sanitize(v)
         if suppress_keys:
             s += "{}".format(v)
         elif decorate:
@@ -416,7 +421,8 @@ function details(s) {
                 # ignore print() arguments
                 continue
             vv = v
-            if sanitize:
+            # XXX 'comparisons' field contains nested HTML
+            if sanitize and k != "comparisons":
                 vv = html_sanitize(vv)
             if compact:
                 if len(s) > prefix_len: s += " "
