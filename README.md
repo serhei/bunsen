@@ -65,14 +65,14 @@ refer to the project's commit history:
 
     $ git clone git://sourceware.org/git/binutils-gdb.git
 
-Analysis scripts are located under `./scripts-master/` and invoked
+Analysis scripts are located under `./scripts-main/` and invoked
 with `./bunsen.py run +name_of_script args...`.
 
 For example, to list all testruns in the collection:
 
     $ ./bunsen.py run +list_runs
 
-This command invokes `scripts-master/list_runs.py` on the `bunsen`
+This command invokes `scripts-main/list_runs.py` on the `bunsen`
 collection located at `.bunsen/bunsen.git`.
 
 Each testrun in the `bunsen` collection is identified by its
@@ -194,12 +194,12 @@ effort to develop code that handles these variations.
 Right now, if you want to use `bunsen` analyses on your own project's
 test results, you will need to write your own DejaGNU test log
 parser. Two example parsers are included,
-`scripts-master/gdb/parse_dejagnu.py` (389 lines) and
-`scripts-master/systemtap/parse_dejagnu.py` (432 lines). These parsers
+`scripts-main/gdb/parse_dejagnu.py` (389 lines) and
+`scripts-main/systemtap/parse_dejagnu.py` (432 lines). These parsers
 provide a good template to follow and illustrate some of the concerns
 that arise when parsing DejaGNU files.
 
 You will also need to write a script that invokes your parser on a
 repository of test logs and uses the `bunsen.py` library to assemble
-an indexed `bunsen` collection. `scripts-master/gdb/commit_logs.py`
+an indexed `bunsen` collection. `scripts-main/gdb/commit_logs.py`
 (281 lines) provides an example of how this is done.

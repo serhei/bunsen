@@ -991,7 +991,7 @@ class Bunsen:
 
         self.default_pythonpath = [bunsen_repo_dir]
         # XXX Search recursively for 'scripts-' directories,
-        # e.g. .bunsen/scripts-internal/scripts-master
+        # e.g. .bunsen/scripts-internal/scripts-main
         search_path = self.scripts_search_path
         while len(search_path) > 0:
             next_search_path = []
@@ -1492,11 +1492,11 @@ class Bunsen:
                     if not os.path.isdir(candidate_path):
                         continue
 
-                    # TODO Prefer 'scripts-master' over others.
+                    # TODO Prefer 'scripts-main' over others.
                     if candidate_dir == 'scripts' \
                        or candidate_dir.startswith('scripts-'):
                         # XXX Search recursively e.g. in
-                        # .bunsen/scripts-internal/scripts-master
+                        # .bunsen/scripts-internal/scripts-main
                         next_search_dirs.append(candidate_path)
 
                         # XXX Allow script_name to be a relative path
@@ -1528,7 +1528,7 @@ class Bunsen:
             script_dir = basedirname(script_path)
 
             # These preferences activate when preferred_host is not None:
-            if script_dir == 'scripts-master' \
+            if script_dir == 'scripts-main' \
                and preferred_host != 'localhost':
                 continue # XXX Script only suited for localhost.
             # XXX 'scripts-host' should not trigger a preference --
@@ -1545,7 +1545,7 @@ class Bunsen:
 
             # Otherwise, we prefer scripts earlier in the search path
             # i.e. (1) user's custom scripts override bunsen default scripts
-            # and TODO (2) scripts-master/ overrides scripts-host/,scripts-guest/
+            # and TODO (2) scripts-main/ overrides scripts-host/,scripts-guest/
             #
             # Preference (1) lets the user cleanly customize a script
             # by copying files from self.base-dir/scripts-whatever to
@@ -1553,7 +1553,7 @@ class Bunsen:
             #
             # Preference (2) lets a guest script
             # e.g. scripts-guest/my-testsuite.sh be 'wrapped' by a
-            # host script which does additional prep on the master
+            # host script which does additional prep on the main Bunsen server
             # e.g. scripts-host/my-testsuite.py --with-patch=local-changes.patch
             preferred_script_path = script_path
             break
@@ -1576,7 +1576,7 @@ class Bunsen:
             script_env['BUNSEN_COOKIE'] = wd_cookie
 
         # Add the ability to invoke bunsen commands:
-        # TODO: Configure only when script is running on the Bunsen master.
+        # TODO: Configure only when script is running on the Bunsen main server.
         script_env['PATH'] = bunsen_repo_dir + ":" + os.environ['PATH']
 
         # TODO: Configure only when script is written in Python?
@@ -1879,10 +1879,10 @@ def bunsen_run(b, hostname, scriptname, invocation_args):
     script_path = b.find_script(scriptname, preferred_host=hostname)
     script_dirname = basedirname(script_path)
     if hostname is None:
-        if script_dirname == "scripts-master":
+        if script_dirname == "scripts-main":
             hostname = 'localhost'
         elif script_dirname == "scripts-host":
-            # XXX For now the VM host is always the Bunsen master:
+            # XXX For now the VM host is also the Bunsen server:
             #hostname = b.default_vm_host
             hostname = 'localhost'
         elif script_dirname == "scripts-guest":
