@@ -917,7 +917,7 @@ class Bunsen:
           * <tag>/testlogs-<year>-<month>
             - <commit> '<tag>/testlogs-<year>-<month>: ...'
               - testlogs from one test run (must remove previous commit's testlogs)
-        - cache/ -- TODO will contain scratch data for Bunsen scripts, see e.g. +new_regressions3
+        - cache/ -- TODO will contain scratch data for Bunsen scripts, see e.g. +find_regressions
         - config -- git style INI file, with sections:
           - [core]            -- applies always
           - [<script_name>]   -- applies to script +<script_name> only

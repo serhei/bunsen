@@ -177,7 +177,7 @@ class ChangeSet:
         # TODOXXX: Make 'key' argument optional in has_key() etc.
         self.expected_key = key
 
-        # XXX +new_regressions can be run with different key= and
+        # XXX +find_regressions can be run with different key= and
         # novelty_threshold= arguments. To allow recomputation of this
         # data, we store single_changes and associate them to
         # particular commit_pairs in a compact fashion,

@@ -134,7 +134,7 @@ if __name__=='__main__':
                         .format(n_commits, n_testruns))
             break
 
-        # TODOXXX Improve commit_header formatting boilerplate here, and in +when_failed, +new_regressions, +overview -- create some common code?
+        # TODOXXX Improve commit_header formatting boilerplate here, and in +when_failed, +find_regressions, +overview -- create some common code?
         info = dict()
         #info['commit_id'] = commit.hexsha[:7]+'...' # for compact=True
         info['commit_id'] = out.sanitize(commit.hexsha)
