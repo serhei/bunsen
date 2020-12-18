@@ -8,9 +8,9 @@ wd-*
 .idea
 
 # example projects
-binutils-gdb
-systemtap
-gcc
+/binutils-gdb
+/systemtap
+/gcc
 
 # bunsen-cgi.py server via lighttpd
 *.log
