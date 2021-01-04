@@ -1,10 +1,10 @@
 #!/bin/bash
 # Install SystemTap, e.g.
 # $ git clone git://sourceware.org/git/bunsen.git bunsen
-# $ time ./bunsen-internal/scripts-guest/systemtap/stap-install.sh --arch32=i686
+# $ time ./bunsen/scripts-guest/systemtap/stap-install.sh --arch32=i686
 #
 # Or, via curl:
-# $ sudo bash -c 'curl https://sourceware.org/git/?p=bunsen.git;a=blob_plain;f=scripts-guest/systemtap/stap-install.sh;hb=HEAD | bash -'
+# $ sudo bash -c 'curl -G -d p=bunsen.git -d a=blob_plain -d f=scripts-guest/systemtap/stap-install.sh -d hb=HEAD https://sourceware.org/git/ | bash -'
 
 # Default arguments for testing:
 CHECKOUT_DIR=/opt/stap-checkout
