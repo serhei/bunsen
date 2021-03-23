@@ -622,6 +622,12 @@ class Testrun(dict):
             # XXX Set summary=False if JSON was missing testcases.
             self.summary = self.summary and 'testcases' in json_data
 
+    def get_project_name(self):
+        if 'bunsen_testruns_branch' in self:
+            elts = self.bunsen_testruns_branch.split('/')
+            return elts[0]
+        return "unknown"
+
     # Return configuration properties of this Testrun as printable strings,
     # or "<unknown PROPERTY>" if unknown.  Returns a dictionary containing
     # keys for architecture, board, branch, version.

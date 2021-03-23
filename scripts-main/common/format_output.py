@@ -100,6 +100,7 @@ class PrettyPrinter:
             return
 
         info = dict(testrun)
+        info['project'] = testrun.get_project_name()
         info.update(kwargs)
 
         # header
@@ -528,10 +529,11 @@ function details(s) {
         short_commit_id = info['bunsen_commit_id']
         if len(short_commit_id) > 7: short_commit_id = short_commit_id[:7] + '...'
         row['year_month'] = html_sanitize(info['year_month'])
+        row['project'] = testrun.get_project_name()
         row['bunsen_commit_id'] = html_sanitize(short_commit_id)
         row['pass_count'] = html_sanitize(info['pass_count'])
         row['fail_count'] = html_sanitize(info['fail_count'])
-        order = ['year_month', 'bunsen_commit_id', 'pass_count', 'fail_count']
+        order = ['year_month', 'project', 'bunsen_commit_id', 'pass_count', 'fail_count']
         for k in header_fields:
             if row in order: continue # avoid duplicates
             row[k] = html_sanitize(info[k]) if k in info else ''

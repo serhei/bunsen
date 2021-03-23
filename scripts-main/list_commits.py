@@ -71,7 +71,7 @@ def index_source_commits(b, tags):
                       .format(testrun.to_json(summary=True)), file=sys.stderr)
                 continue
             hexsha_lens.add(len(hexsha)) # add for subsequent lookup
-            append_map(testruns_map, hexsha, testrun)    
+            append_map(testruns_map, hexsha, testrun)
     return testruns_map, hexsha_lens
 
 def iter_testruns(b, repo, testruns_map=None, hexsha_lens=None,
