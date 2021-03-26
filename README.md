@@ -27,11 +27,11 @@ configurations.
     $ pip3 install --user tqdm # see https://github.com/tqdm/tqdm
     $ pip3 install --user GitPython # see https://github.com/gitpython-developers/GitPython
     $ pip3 install --user python-dateutil # see https://github.com/dateutil/dateutil/
-    $ pip install --user pathlib # see https://docs.python.org/3/library/pathlib.html
+    $ pip3 install --user pathlib # see https://docs.python.org/3/library/pathlib.html
 
 Or, more simply:
 
-    $ pip install -r requirements.txt
+    $ pip3 install --user -r requirements.txt
 
 Example setup for the `server/bunsen-cgi.py` dashboard and `server/bunsen-upload.py` upload scripts with `lighttpd`:
 
