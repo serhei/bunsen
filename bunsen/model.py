@@ -10,10 +10,12 @@
 Provides classes representing testruns and testcases stored in a Bunsen repo.
 """
 
+import os
 import re
-from pathlib import Path, PurePath
-import git
 import json
+# TODO from pathlib import Path, PurePath
+import tarfile
+import shutil
 
 from bunsen.utils import *
 from bunsen.version import __version__
@@ -21,6 +23,8 @@ from bunsen.version import __version__
 #########################
 # schema for JSON index #
 #########################
+
+# TODO use __version__
 
 branch_regex = re.compile(r"(?P<tag>.*)/test(?P<kind>runs|logs)-(?P<year_month>\d{4}-\d{2})(?:-(?P<extra>.*))?")
 """Format for testruns and testlogs branch names."""
