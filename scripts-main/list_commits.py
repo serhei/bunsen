@@ -74,27 +74,28 @@ def index_source_commits(b, tags):
             append_map(testruns_map, hexsha, testrun)
     return testruns_map, hexsha_lens
 
-def iter_tested_commits(b, tags, repo, branch, forward=False):
+def iter_tested_commits(b, repo, testruns_map=None, hexsha_lens=None,
+                        tags=None, forward=False, branch='master'):
     '''Iterate the commits in repo starting from / ending at the first tested commit.
 
     Use for displaying historical data where we aren't interested in commits
     from before we started testing a project.'''
-    # XXX Redundant with index_source_commits, but one extra time is fine.
-    # Could optimize by taking testruns_map / hexsha_lens params?
-    known_hexshas = set()
-    hexsha_lens = set()
-    for tag in tags:
-        for testrun in b.testruns(tag):
-            hexsha = get_source_commit(testrun)
-            if hexsha is None:
-                continue # XXX no warning at this point
-            known_hexshas.add(str(hexsha))
-            hexsha_lens.add(len(hexsha))
+    if testruns_map is None or hexsha_lens is None:
+        # XXX Redundant with index_source_commits, but one extra time is ok for final report.
+        testruns_map = set()
+        hexsha_lens = set()
+        for tag in tags:
+            for testrun in b.testruns(tag):
+                hexsha = get_source_commit(testrun)
+                if hexsha is None:
+                    continue # XXX no warning at this point
+                testruns_map.add(str(hexsha))
+                hexsha_lens.add(len(hexsha))
     last_pre_testing = None
     found_tested_commit = False
     for commit in repo.iter_commits(branch, reverse=True):
         for k in hexsha_lens:
-            if commit.hexsha[:k] in known_hexshas:
+            if commit.hexsha[:k] in testruns_map:
                 found_tested_commit = True
         if found_tested_commit:
             break
@@ -121,8 +122,11 @@ def iter_testruns(b, repo, testruns_map=None, hexsha_lens=None,
 
 def iter_history(b, repo, testruns_map=None, hexsha_lens=None,
                  forward=False, include_empty_commits=False,
+                 include_early_history=False,
                  branch='master'):
-    for commit in repo.iter_commits(branch, reverse=forward):
+    for commit in repo.iter_commits(branch, reverse=forward) if include_early_history \
+        else iter_tested_commits(b, repo, testruns_map=testruns_map, hexsha_lens=hexsha_lens,
+                                 forward=forward, branch=branch):
         testruns = find_testruns(commit.hexsha, testruns_map, hexsha_lens)
         if testruns is None:
             if include_empty_commits:

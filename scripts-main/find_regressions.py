@@ -564,7 +564,7 @@ if __name__=='__main__':
     if opts.restrict >= 0:
         to_show = opts.restrict
 
-    for commit in iter_tested_commits(b, tags, repo, opts.branch, forward=forward):
+    for commit in iter_tested_commits(b, repo, branch=opts.branch, tags=tags, forward=forward):
         if opts.restrict >= 0 and to_show <= 0:
             break
         to_show -= 1
