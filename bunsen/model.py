@@ -251,6 +251,7 @@ class Cursor:
     def __init__(self, source=None, from_str=None,
                  commit_id=None, start=1, end=None,
                  name=None, input_file=None, fast_hack=False):
+        from bunsen.repo import Bunsen # XXX delayed import
         self.name = name
 
         # XXX parsing from_str can be delayed
