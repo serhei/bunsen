@@ -70,7 +70,8 @@ import tqdm
 from fnmatch import fnmatchcase
 from common.format_output import get_formatter
 
-from list_commits import index_source_commits, iter_testruns, iter_adjacent
+from list_commits import index_source_commits, iter_tested_commits, \
+    iter_testruns, iter_adjacent
 from diff_runs import fail_outcomes
 from diff_commits import index_summary_fields, get_summary, get_comparison, \
     make_comparison_str, get_tc_key, get_summary_key, get_comparison_key, \
@@ -563,7 +564,7 @@ if __name__=='__main__':
     if opts.restrict >= 0:
         to_show = opts.restrict
 
-    for commit in repo.iter_commits(opts.branch, forward=forward):
+    for commit in iter_tested_commits(b, tags, repo, opts.branch, forward=forward):
         if opts.restrict >= 0 and to_show <= 0:
             break
         to_show -= 1

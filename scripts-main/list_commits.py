@@ -74,6 +74,42 @@ def index_source_commits(b, tags):
             append_map(testruns_map, hexsha, testrun)
     return testruns_map, hexsha_lens
 
+def iter_tested_commits(b, tags, repo, branch, forward=False):
+    '''Iterate the commits in repo starting from / ending at the first tested commit.
+
+    Use for displaying historical data where we aren't interested in commits
+    from before we started testing a project.'''
+    # XXX Redundant with index_source_commits, but one extra time is fine.
+    # Could optimize by taking testruns_map / hexsha_lens params?
+    known_hexshas = set()
+    hexsha_lens = set()
+    for tag in tags:
+        for testrun in b.testruns(tag):
+            hexsha = get_source_commit(testrun)
+            if hexsha is None:
+                continue # XXX no warning at this point
+            known_hexshas.add(str(hexsha))
+            hexsha_lens.add(len(hexsha))
+    last_pre_testing = None
+    found_tested_commit = False
+    for commit in repo.iter_commits(branch, reverse=True):
+        for k in hexsha_lens:
+            if commit.hexsha[:k] in known_hexshas:
+                found_tested_commit = True
+        if found_tested_commit:
+            break
+        last_pre_testing = commit.hexsha
+    found_start_of_testing = last_pre_testing is None
+    for commit in repo.iter_commits(branch, reverse=forward):
+        if forward and commit.hexsha == last_pre_testing:
+            found_start_of_testing = True
+            continue
+        if forward and not found_start_of_testing:
+            continue
+        if not forward and commit.hexsha == last_pre_testing:
+            break
+        yield commit
+
 def iter_testruns(b, repo, testruns_map=None, hexsha_lens=None,
                   forward=False, branch='master'):
     for commit in repo.iter_commits(branch, reverse=forward):
