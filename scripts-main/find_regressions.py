@@ -205,6 +205,9 @@ class ChangeSet:
             self._load_data(sd)
 
         self.merged_changes = []      # list of Change, computed
+        self.num_skipped_earlier = {} # maps commit_id -> int, computed
+        self.num_skipped_same    = {} # maps commit_id -> int, computed
+        self.num_skipped_later   = {} # maps commit_id -> int, computed
         self.num_skipped_changes = {} # maps commit_id -> int, computed
         self.changes_starting = {}    # maps commit_id -> set of indices in merged_changes, computed
         self.changes_ending = {}      # maps commit_id -> set of indices in merged_changes, computed
@@ -350,13 +353,29 @@ class ChangeSet:
             self.num_added += 1
             self.num_kept += 1
         else:
+            # XXX assign 'skipped' statistics to prior or current commit
+            # depending on 'first failed' or 'last fixed' policy.
+            # Prior commit is the last commit of the combined change:
+            prev_commit, this_commit = prev_change.commit_pair[0], \
+                single_change.commit_pair[0]
+            if this_commit not in self.num_skipped_changes:
+                self.num_skipped_changes[this_commit] = 0
+                self.num_skipped_earlier[this_commit] = 0
+                self.num_skipped_same[this_commit] = 0
+            if single_change.is_failing: # report 'first failed', skip this
+                self.num_skipped_earlier[this_commit] += 1
+            elif prev_commit == this_commit: # merging comparisons in this commit
+                self.num_skipped_same[this_commit] += 1
+            else: # report 'last fixed', skip prior
+                if prev_commit not in self.num_skipped_later:
+                    self.num_skipped_later[prev_commit] = 0
+                self.num_skipped_later[prev_commit] += 1
+            self.num_skipped_changes[this_commit] += 1
+
             self._remove_bounds(prev_change, prev_change_ix)
             prev_change.merge(single_change, comparison_ix)
             self._add_bounds(prev_change, prev_change_ix)
-            commit_id = single_change.commit_pair[0]
-            if commit_id not in self.num_skipped_changes:
-                self.num_skipped_changes[commit_id] = 0
-            self.num_skipped_changes[commit_id] += 1
+
             # update stats
             self.num_merged += 1
         self.num_seen += 1
@@ -376,6 +395,21 @@ class ChangeSet:
                     # report 'last fixed'
                     change_list.append(change)
         return change_list
+
+    def skipped_earlier(self, commit_id):
+        if commit_id not in self.num_skipped_earlier:
+            return 0
+        return self.num_skipped_earlier[commit_id]
+
+    def skipped_same(self, commit_id):
+        if commit_id not in self.num_skipped_same:
+            return 0
+        return self.num_skipped_same[commit_id]
+
+    def skipped_later(self, commit_id):
+        if commit_id not in self.num_skipped_later:
+            return 0
+        return self.num_skipped_later[commit_id]
 
     def skipped_changes(self, commit_id):
         if commit_id not in self.num_skipped_changes:
@@ -619,8 +653,16 @@ if __name__=='__main__':
             # TODO: match to corresponding failing/fixed change for each configuration
             # TODO: colorize depending on change_kind
             # TODOXXX: colorize depending on whether last occurrence is fix or fail
-        if cs.skipped_changes(commit.hexsha) > 0:
-            out.message("+ {} changes skipped as similar to other changes" \
-                        .format(cs.skipped_changes(commit.hexsha)))
+        if cs.skipped_later(commit.hexsha) > 0:
+            out.message("+ {} fixing changes skipped as similar to later changes" \
+                        .format(cs.skipped_later(commit.hexsha)))
+        if cs.skipped_same(commit.hexsha) > 0:
+            # XXX the simultaneous changes may themselves be skipped, needs thought
+            # the calculations to change the corresponding count to 'later' would be convoluted
+            out.message("+ {} fixing changes skipped as similar to simultaneous changes" \
+                        .format(cs.skipped_same(commit.hexsha)))
+        if cs.skipped_earlier(commit.hexsha) > 0:
+            out.message("+ {} failing changes skipped as similar to earlier changes" \
+                        .format(cs.skipped_earlier(commit.hexsha)))
 
     out.finish()

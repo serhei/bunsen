@@ -11,7 +11,7 @@ and work with the Bunsen data model.
 from .model import Index, Testlog, Cursor, Testcase, Testrun
 from .repo import Workdir, Bunsen, BunsenOpts
 # TODO: from .repo import Workdir, Bunsen, BunsenOptions
-# TODO from .utils import BunsenError
+from .utils import BunsenError
 from .version import __version__
 
 # TODO: Temporary hack while moving declarations out of ../bunsen.py:
