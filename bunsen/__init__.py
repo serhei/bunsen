@@ -15,12 +15,12 @@ from .utils import BunsenError
 from .version import __version__
 
 # TODO: Temporary hack while moving declarations out of ../bunsen.py:
-import sys, os
-if os.path.basename(sys.argv[0]) != 'bunsen.py':
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("bunsen", os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'bunsen.py')))
-    b = importlib.util.module_from_spec(spec)
-    sys.modules['b2'] = b
-    spec.loader.exec_module(b)
-    from b2 import Bunsen
+# import sys, os
+# if os.path.basename(sys.argv[0]) != 'bunsen.py':
+#     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+#     import importlib.util
+#     spec = importlib.util.spec_from_file_location("bunsen", os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'bunsen.py')))
+#     b = importlib.util.module_from_spec(spec)
+#     sys.modules['b2'] = b
+#     spec.loader.exec_module(b)
+#     from b2 import Bunsen
