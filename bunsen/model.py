@@ -24,7 +24,9 @@ from bunsen.version import __version__
 # schema for JSON index #
 #########################
 
-# TODO use __version__
+BUNSEN_REPO_VERSION = __version__
+"""Current version of the Bunsen repo schema."""
+# TODO: use BUNSEN_REPO_VERSION in the model and repo format
 
 branch_regex = re.compile(r"(?P<tag>.*)/test(?P<kind>runs|logs)-(?P<year_month>\d{4}-\d{2})(?:-(?P<extra>.*))?")
 """Format for testruns and testlogs branch names."""
@@ -41,13 +43,15 @@ INDEX_SEPARATOR = '\n---\n'
 cursor_regex = re.compile(r"(?:(?P<commit_id>[0-9A-Fa-f]+):)?(?P<path>.*):(?P<start>\d+)(?:-(?P<end>\d+))?")
 """Serialized representation of a Cursor object."""
 
+related_testrun_regex = re.compile(r"(?P<branchname>.*):(?P<commit_id>[0-9A-Fa-f]+)")
+"""Serialized reference to a related Testrun object."""
+# TODO: use related_testrun_regex in the model and repo format
+
 #####################################
 # schema for testruns and testcases #
 #####################################
 
-# TODOXXX remove leading _
-
-_valid_field_types = {
+valid_field_types = {
     'testcases',
     'cursor',
     'hexsha',
@@ -65,13 +69,13 @@ These include:
 - metadata: subordinate map with the same permitted field types as parent
 """
 
-_testrun_field_types = {'testcases':'testcases'}
+testrun_field_types = {'testcases':'testcases'}
 """dict: Testrun fields requiring special serialization/deserialization logic.
 
 Key is the name of the field, value is one of the valid_field_types.
 """
 
-_testcase_field_types = {'origin_log':'cursor',
+testcase_field_types = {'origin_log':'cursor',
                         'origin_sum':'cursor',
                         'baseline_log':'cursor',
                         'baseline_sum':'cursor',
@@ -85,8 +89,7 @@ The origins and baseline_origins fields are nested metadata fields which store
 the origin data of the two comparisons in a second-order diff.
 """
 
-# TODOXXX rename to cursor_commit_fields
-_cursor_commits = {'origin_log':'bunsen_commit_id',
+cursor_commit_fields = {'origin_log':'bunsen_commit_id',
                         'origin_sum':'bunsen_commit_id',
                         'baseline_log':'baseline_bunsen_commit_id',
                         'baseline_sum':'baseline_bunsen_commit_id'}
@@ -471,10 +474,10 @@ class Testcase(dict):
         elif fields is None:
             fields = {}
 
-        # Populate self._field_types from fields, _testcase_field_types:
-        self._field_types = dict(_testcase_field_types)
+        # Populate self._field_types from fields, testcase_field_types:
+        self._field_types = dict(testcase_field_types)
         for field, field_type in fields.items():
-            assert field_type in _valid_field_types
+            assert field_type in valid_field_types
             self._field_types[field] = field_type
 
         if from_json is not None:
@@ -587,10 +590,10 @@ class Testrun(dict):
 
         self._bunsen = bunsen
 
-        # Populate self._field_types from fields, _testrun_field_types:
-        self._field_types = dict(_testrun_field_types)
+        # Populate self._field_types from fields, testrun_field_types:
+        self._field_types = dict(testrun_field_types)
         for field, field_type in fields.items():
-            assert field_type in _valid_field_types
+            assert field_type in valid_field_types
             self._field_types[field] = field_type
 
         # XXX testcase_fields passed down to Testcase class:
@@ -607,7 +610,7 @@ class Testrun(dict):
             assert isinstance(json_data, dict)
             defer_fields = [] # XXX Defer parsing until cursor_commit_ids are known.
             cursor_commit_ids = {} # XXX bunsen_commit_id -> {value}
-            for cursor_field, commit_field in _cursor_commits.items():
+            for cursor_field, commit_field in cursor_commit_fields.items():
                 cursor_commit_ids[commit_field] = None
             for field, value in json_data.items():
                 if field not in self._field_types:
@@ -693,8 +696,8 @@ class Testrun(dict):
         elif self._field_types[field] == 'cursor' \
              and not isinstance(value, Cursor):
             commit_id = None
-            if field in _cursor_commits:
-                commit_id_field = _cursor_commits[field]
+            if field in cursor_commit_fields:
+                commit_id_field = cursor_commit_fields[field]
                 commit_id = cursor_commit_ids[commit_id_field]
             value = Cursor(source=self._bunsen,
                            commit_id=commit_id,
