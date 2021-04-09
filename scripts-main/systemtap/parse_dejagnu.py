@@ -80,7 +80,7 @@ def parse_dejagnu_log(testrun, logfile, logfile_name=None, all_cases=None,
     if not isinstance(logfile_path, str):
         logfile_path = logfile_name
 
-    for cur in Cursor(logfile, name=logfile_name):
+    for cur in Cursor(logfile, path=logfile_name):
         line = cur.line
         # TODO: Also extract year_month
         if line.startswith("Snapshot: version"):
@@ -305,7 +305,7 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
     running_cur = None
     last_test_cur = None
     next_outcome = None # outcome of testcases[i]
-    for cur in Cursor(logfile, name=logfile_name):
+    for cur in Cursor(logfile, path=logfile_name):
         line = cur.line
         if (line.startswith("Running ") and ".exp ..." in line) \
            or "Summary ===" in line:

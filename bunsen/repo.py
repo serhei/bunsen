@@ -308,7 +308,7 @@ class Bunsen:
         for candidate_branch in self.git_repo.branches:
             m = branch_regex.fullmatch(candidate_branch.name)
             if m is not None:
-                tag = m.group('tag')
+                tag = m.group('project')
                 if m.group('kind') == 'runs':
                     found_testruns[tag] = True
                 if m.group('kind') == 'logs':
@@ -324,7 +324,7 @@ class Bunsen:
                 found_index = False
                 for blob in commit.tree:
                     m = indexfile_regex.fullmatch(blob.path)
-                    if m is not None and m.group('tag') == tag:
+                    if m is not None and m.group('project') == tag:
                         #dbug_print("found indexfile", blob.path)
                         found_index = True
                 if found_index:
@@ -345,7 +345,7 @@ class Bunsen:
             commit = self.git_repo.commit(commit_id)
             #dbug_print("found commit_tag commit", commit.hexsha, commit.summary)
         m = commitmsg_regex.fullmatch(commit.summary)
-        tag = m.group('tag')
+        tag = m.group('project')
         year_month = m.group('year_month')
         return tag, year_month
 
@@ -450,7 +450,7 @@ class Bunsen:
             assert testlog.path is not None
         elif isinstance(testlog_or_path, tarfile.ExFileObject):
             assert testlog_name is not None
-            testlog = Testlog(self, testlog_name, input_file=testlog_or_path)
+            testlog = Testlog(self, testlog_name, input_stream=testlog_or_path)
         else:
             testlog = Testlog(self, testlog_or_path, commit_id=None)
         self._staging_testlogs.append(testlog)

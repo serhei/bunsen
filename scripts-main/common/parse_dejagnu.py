@@ -191,7 +191,7 @@ class DejaGNUParser:
 
         # TODOXXX Also identify GCC metadata.
 
-        for cur in Cursor(self.logfile, name=self.logfile_name):
+        for cur in Cursor(self.logfile, path=self.logfile_name):
             line = cur.line
             
             if line.startswith("Test run by ") and " on " in line:
@@ -330,7 +330,7 @@ class DejaGNUParser:
                                       outcome=outcome,
                                       subtest=failed_subtest,
                                       origin_sum=cursor)
-        
+
     def parse_testlog(self):
         '''Yields a Cursor for each line in the logfile.
 

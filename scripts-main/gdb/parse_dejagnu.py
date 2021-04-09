@@ -46,7 +46,7 @@ def openfile_or_xz(path):
 def parse_README(testrun, READMEfile):
     if testrun is None: return None
     f = openfile_or_xz(READMEfile)
-    for cur in Cursor(READMEfile, name=os.path.basename(READMEfile), input_file=f):
+    for cur in Cursor(READMEfile, name=os.path.basename(READMEfile), input_stream=f):
         line = cur.line
         if line.startswith("Logs for: "):
             t1 = line.find("Logs for: ") + len("Logs for: ")
@@ -77,7 +77,7 @@ def parse_dejagnu_sum(testrun, sumfile, all_cases=None,
     failed_subtests_summary = 0
     passed_subtests_summary = 0
 
-    for cur in Cursor(sumfile, name=os.path.basename(sumfile), input_file=f):
+    for cur in Cursor(sumfile, name=os.path.basename(sumfile), input_stream=f):
         line = cur.line
 
         # XXX all lines in these GDB sumfiles are outcome lines
@@ -199,7 +199,7 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
     last_test_cur = None
     next_outcome = None # outcome of testcases[i]
     f = openfile_or_xz(logfile)
-    for cur in Cursor(logfile, name=os.path.basename(logfile), input_file=f, fast_hack=True):
+    for cur in Cursor(logfile, name=os.path.basename(logfile), input_stream=f, ephemeral=True):
         line = cur.line
 
         if line.startswith("Native configuration is"):
