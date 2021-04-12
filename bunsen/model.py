@@ -284,7 +284,7 @@ class Testlog:
             raise BunsenError("Unknown source '{}' for staging testlog." \
                 .format(source))
         if input_stream is not None:
-            testlog = Testlog.adjust_input(input_stream=input_stream)
+            testlog = Testlog.adjust_input(testlog, input_stream=input_stream)
         return testlog
 
     @classmethod
@@ -301,7 +301,7 @@ class Testlog:
             return testlog
         return Testlog(bunsen=testlog.bunsen, path=path,
             commit_id=testlog.commit_id, blob=testlog.blob,
-            input_path=testlog.input_path, input_stream=testlog.input_stream)
+            input_path=testlog._input_path, input_stream=testlog.input_stream)
 
     @classmethod
     def adjust_input(cls, testlog, input_path=None, input_stream=None):
@@ -313,7 +313,8 @@ class Testlog:
             input_path: Path to an external log file.
             input_stream: A seekable stream for an external log file.
         """
-        if input_path is not None or str(input_path) != str(testlog.input_path):
+        # <TODO: Doublecheck correct behaviour if both are set.>
+        if input_path is not None or str(input_path) != str(testlog._input_path):
             testlog = Testlog(bunsen=testlog.bunsen, path=path,
                 commit_id=testlog.commit_id, blob=testlog.blob,
                 input_path=input_path) # XXX reset input_path
@@ -609,9 +610,10 @@ class Cursor:
         elif start is None:
             start = 1
 
-        if path is not None and str(testlog.path) != str(path):
+        if testlog is not None and path is not None and str(testlog.path) != str(path):
             testlog = Testlog.adjust_path(testlog, path=path)
-        testlog = Testlog.adjust_input(testlog, input_stream=input_stream)
+        if testlog is not None:
+            testlog = Testlog.adjust_input(testlog, input_stream=input_stream)
         self._testlog = testlog
         self._line_start = start
         self._line_end = end
