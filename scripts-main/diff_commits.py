@@ -192,7 +192,8 @@ def get_tc_key(tc, strip_outcome=False):
     key += ('null' if 'subtest' not in tc else tc['subtest']) + '+'
     if not strip_outcome:
         key += ('null' if tc['outcome'] is None else tc['outcome']) + '+'
-        key += ('null' if tc['baseline_outcome'] is None else tc['baseline_outcome'])
+        if 'baseline_outcome' in tc:
+            key += ('null' if tc['baseline_outcome'] is None else tc['baseline_outcome'])
     return key
 
 def get_summary_key(summary):

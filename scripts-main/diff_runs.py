@@ -12,6 +12,7 @@ cmdline_args = [
 #fail_outcomes = {'FAIL','KFAIL','XFAIL','UNTESTED','UNSUPPORTED','ERROR'}
 fail_outcomes = {'FAIL','KFAIL','XFAIL','ERROR'}
 # <- Most likely PASS->UNTESTED is not interesting, FAIL->UNTESTED is.
+untested_outcomes = {'UNTESTED','UNSUPPORTED'}
 
 import sys
 from bunsen import Bunsen, Testrun
