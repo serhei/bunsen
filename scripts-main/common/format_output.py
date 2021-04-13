@@ -174,9 +174,9 @@ class PrettyPrinter:
 def html_field_summary(testrun, fields=None, separator=" ", suppress_keys=False):
     return field_summary(testrun, fields, separator, sanitize=True, suppress_keys=suppress_keys, decorate=True)
 
-def select_class(field, val):
-    if field == 'outcome':
-        # TODO: needs refinement for diff outcomes
+def select_class(cat, val):
+    if cat == 'outcome':
+        # TODO: needs refinement for different outcomes
         if len(val) < 1:
             return 'n'
         if val.endswith('PASS') or val.endswith('XFAIL'):
@@ -187,16 +187,24 @@ def select_class(field, val):
             return 'f'
         else:
             return 'n'
-    elif field == 'pass_count':
+    elif cat == 'pass_count':
         return 'p'
-    elif field == 'fail_count':
+    elif cat == 'fail_count':
         return 'f'
-    elif field == 'bunsen_commit_id':
+    elif cat == 'bunsen_commit_id':
         return 'bcommit'
-    elif field == 'source_commit':
+    elif cat == 'source_commit':
         return 'scommit'
-    elif field == 'subtest':
+    elif cat == 'subtest':
         return 'subtest'
+    # XXX for grid_view, the field names are not really predictable but the values are:
+    elif val.startswith('+'):
+        return 'p'
+    elif val.startswith('-'):
+        return 'f'
+    elif val == '?':
+        return 'empty'
+    # TODOXXX also support categories 'pass', 'fail', 'better' (green-orange), 'worse' (pink)
     return None
 
 class HTMLTable:
@@ -209,8 +217,10 @@ class HTMLTable:
 
         self.rows = []
         self.row_details = []
+        self.row_categories = []
         self._next_row = None
         self._next_row_details = None
+        self._next_row_categories = None # TODOXXX allow table_row, table_cell to mark cells with category
 
     def open(self):
         self.is_open = True
@@ -241,10 +251,13 @@ class HTMLTable:
         if self._next_row is not None:
             self.rows.append(self._next_row)
             self.row_details.append(self._next_row_details)
+            self.row_categories.append(self._next_row_categories)
         if not self.match_header(row):
             self.add_columns(row.keys(), order=order)
         self._next_row = row
         self._next_row_details = {}
+        self._next_row_categories = {}
+        # TODOXXX doublecheck the following code
         if details is not None and len(details) > 0:
             self._next_row_details['_ROW'] = details
         # XXX subsequent add_cell() calls modify _next_row
@@ -263,8 +276,10 @@ class HTMLTable:
         if self._next_row is not None:
             self.rows.append(self._next_row)
             self.row_details.append(self._next_row_details)
+            self.row_categories.append(self._next_row_categories)
         self._next_row = None
         self._next_row_details = None
+        self._next_row_categories = None
 
         print("<table border=0 bgcolor=gray border=1 cellspacing=1 cellpadding=0>")
         # header
@@ -284,6 +299,7 @@ class HTMLTable:
         for i in range(len(self.rows)):
             _this_row = self.rows[i]
             _this_row_details = self.row_details[i]
+            _this_row_categories = self.row_categories[i]
 
             s = ""
             row_id = None
@@ -295,8 +311,9 @@ class HTMLTable:
                 s += "<tr>"
             for field in header:
                 # TODO: add a way to specify td_class in caller
-                val = "" if field not in _this_row else _this_row[field]
-                td_class = select_class(field, val)
+                val = "" if field not in _this_row else str(_this_row[field])
+                cat = field if field not in _this_row_categories else _this_row_categories[field]
+                td_class = select_class(cat, val)
 
                 cell_id = None
                 if field in _this_row_details:
@@ -312,10 +329,12 @@ class HTMLTable:
                 else:
                     s += "<td>"
                 if field in _this_row: # if not, output an empty cell
-                    s += _this_row[field]
+                    s += str(_this_row[field])
+                else:
+                    pass # TODOXXX need some padding for an empty cell
                 if field in _this_row_details:
                     s += "<div id={0} class=detail>".format(cell_id)
-                    s += _this_row_details[field]
+                    s += str(_this_row_details[field])
                     s += "</div>"
                 s += "</td>"
             s += "</tr>"
