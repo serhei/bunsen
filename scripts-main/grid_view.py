@@ -4,14 +4,20 @@ Show a grid of test results for recent commits.'''
 cmdline_args = [
     ('project', None, '<tags>',
      "restrict to testruns under <tags>"),
+    ('key', None, '<glob>',
+     "restrict to testcases matching <glob>"),
     ('source_repo', None, '<path>',
      "scan commits from source_repo <path>"),
+    ('gitweb_url', None, '<url>',
+     "for pretty=html only -- link to gitweb at <url>"),
     ('branch', 'master', '<name>',
      "scan commits in branch <name>"),
     ('latest', None, '<source_commit>',
      "last commit for which to show testruns"),
     ('baseline', None, '<source_commit>',
      "first commit for which to show testruns"),
+    ('show_subtests', False, None,
+     "show subtest details (increases file size significantly)"),
     # XXX no option 'pretty': for now, always output HTML
     ('filter_unchanged', True, None,
      "filter out testcases whose fail counts did not change"),
@@ -20,6 +26,7 @@ cmdline_args = [
 import sys
 import bunsen
 from git import Repo
+from fnmatch import fnmatchcase
 
 import tqdm
 
@@ -89,6 +96,7 @@ if __name__=='__main__':
     configurations = {} # summary_key -> configuration_summary
     outcomes_grid = {} # testcase_name+summary_key+hexsha -> outcome {PASS,FAIL} only
     subtests_grid1 = {} # testcase_name+summary_key+hexsha -> set of tc_key(name+outcome+subtest)
+    subtests_info = {} # tc_key -> testcase
     # TODOXXX subtests_grid = {} # testcase_name+summary_key+hexsha -> list of testcase + refs to original testruns/configurations
 
     progress = tqdm.tqdm(iterable=None, desc='Scanning commits',
@@ -102,6 +110,9 @@ if __name__=='__main__':
                 configurations[sk] = summary
             testrun = b.testrun(testrun)
             for testcase in testrun.testcases:
+                if opts.key is not None and \
+                   not fnmatchcase(testcase.name, opts.key):
+                    continue
                 if testcase.name not in testcase_names:
                     testcase_names.add(testcase.name)
                 if testcase.name not in testcase_configurations:
@@ -114,6 +125,7 @@ if __name__=='__main__':
                 if gk not in subtests_grid1:
                     subtests_grid1[gk] = set()
                 subtests_grid1[gk].add(tk)
+                subtests_info[tk] = testcase
                 pass # TODOXXX add to subtests_grid for more details
         progress.update(n=1)
 
@@ -189,6 +201,10 @@ if __name__=='__main__':
                 # TODOXXX add commit msg to header tooltip?
                 hexsha = commit.hexsha[:7]
                 field_order.append(hexsha)
+                if opts.gitweb_url is not None:
+                    commitdiff_url = opts.gitweb_url + ";a=commitdiff;h={}" \
+                        .format(commit.hexsha)
+                    out.table.header_href[hexsha] = commitdiff_url # XXX HACK
             out.table_row(summary, order=field_order)
             # XXX for glanceability, show the first commit on the very left
             first_val = '?' # <- will be the rightmost value
@@ -197,21 +213,39 @@ if __name__=='__main__':
                 hexsha = commit.hexsha[:7]
                 # TODOXXX mark category = pass, fail, better, worse
                 # TODOXXX
-                n_testcases = 0
+                #n_testcases = 0
+                uniq_subtests = {}
                 if gk in subtests_grid1:
                     tc_keys = subtests_grid1[gk]
                     for tk in subtests_grid1[gk]:
-                        n_testcases += 1
-                        pass # TODOXXX add to details of table cell
+                        #n_testcases += 1
+                        testcase = subtests_info[tk]
+                        if 'subtest' not in testcase:
+                            continue
+                        if testcase.subtest not in uniq_subtests:
+                            uniq_subtests[testcase.subtest] = 0
+                        uniq_subtests[testcase.subtest] += 1
+                n_testcases = len(uniq_subtests)
+                details = None
+                if opts.show_subtests:
+                    details = ""
+                    need_br = False
+                    for st, num in uniq_subtests.items():
+                        if need_br: details += "<br/>" # XXX HTML ONLY
+                        if num > 1:
+                            details += "{}x {}".format(num, st)
+                        else:
+                            details += st
+                            need_br = True
 
                 if gk not in outcomes_grid:
-                    out.table_cell(hexsha, '?') # XXX mey be too visually cluttered
-                    pass
+                    out.table_cell(hexsha, '?')
+                    # out.table_cell(hexsha, '?') # XXX may be too visually cluttered
                 elif outcomes_grid[gk] == "PASS":
                     out.table_cell(hexsha, '+')
                     first_val = '+'
                 elif outcomes_grid[gk] == "FAIL":
-                    out.table_cell(hexsha, '-'+str(n_testcases)) # XXX mark number of fails
+                    out.table_cell(hexsha, '-'+str(n_testcases), details=details) # XXX mark number of fails
                     first_val = '-'+str(n_testcases)
                 else:
                     # XXX should not happen

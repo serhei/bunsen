@@ -213,6 +213,7 @@ class HTMLTable:
         self.is_open = False
 
         self.header = set()
+        self.header_href = {}
         self.order = [] # order of (subset of) fields in header
 
         self.rows = []
@@ -290,7 +291,10 @@ class HTMLTable:
         s = "<tr>"
         for field in header:
             s += "<th class=h>"
-            s += str(field)
+            if field in self.header_href:
+                s += "<a href=\"{}\">".format(self.header_href[field]) + str(field) + "</a>"
+            else:
+                s += str(field)
             s += "</th>"
         s += "</tr>"
         print(s)
@@ -382,9 +386,10 @@ table { font-size: 1em; table-layout: auto; }
 table.fixed { table-layout: fixed; width: 100%; }
 td,th { background-color: white; text-align: left;
         padding: 3px; white-space: normal; overflow: hidden; }
-td.empty { background-color: lightgray; }
-td.clicky { background-color: beige; }
+td.empty { background-color: lightgray; color: lightgray; }
+/* td.clicky { background-color: beige; } */
 td.clicky:hover { background-color: azure; }
+th.h > a { text-decoration: none; color: darkslategray; }
 tr.clicky:hover > td { background-color: beige; }
 .detail { white-space: nowrap; text-align: left; display: none; }
 tr.detail { font-size: medium; }
