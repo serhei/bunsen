@@ -444,7 +444,7 @@ class Testlog:
             return self._bunsen._testlog_readlines(self.commit_id, self.path)
 
         try:
-            return read_decode_lines(self._input_stream, must_decode=False)
+            return readlines_decode(self._input_stream, must_decode=False)
             # XXX prefer to decode utf-8 later in line()
         except UnicodeDecodeError:
             warn_print("UnicodeDecodeError in Testlog {}".format(self.path))
