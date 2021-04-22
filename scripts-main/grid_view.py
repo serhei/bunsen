@@ -76,12 +76,12 @@ if __name__=='__main__':
         n_commits += 1
         if not started_range and refspec_matches(repo, opts.baseline, commit.hexsha):
             started_range = True
-        if refspec_matches(repo, opts.latest, commit.hexsha):
-            continue
         if not started_range:
             continue
         commit_range.append((commit, testruns))
         all_testruns += testruns
+        if refspec_matches(repo, opts.latest, commit.hexsha):
+            break
 
     # (1b) find summary fields present in all testruns
     header_fields, summary_fields = index_summary_fields(all_testruns)
