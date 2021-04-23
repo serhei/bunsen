@@ -31,6 +31,7 @@ e.g. skip_until=Fedora-x86_64-native-extended-gdbserver-m64/a0/a051e2f3e0c1cedf4
 import sys
 import tarfile
 from bunsen import Bunsen, BunsenError, Testrun
+from common.parse_dejagnu import grok_architecture
 
 # TODO: wrap in a Bunsen API e.g. start_progress(), Bunsen.progress(),
 # Bunsen.end_progress(), etc.?
@@ -176,6 +177,7 @@ def commit_logs(b, wd, *args, **kwargs):
     alt_year_month = kwargs['year_month'] if 'year_month' in kwargs else None
     tarfile = kwargs['tarfile'] if 'tarfile' in kwargs else None
     tarballname = kwargs['tarballname'] if 'tarballname' in kwargs else None
+    osver = kwargs['osver'] if 'osver' in kwargs else None
 
     # for error reporting:
     testdir = kwargs['testdir'] if 'testdir' in kwargs else None
@@ -184,7 +186,10 @@ def commit_logs(b, wd, *args, **kwargs):
 
     # XXX tmpdir is required for unxzing
     tmpdir = kwargs['tmpdir'] if 'tmpdir' in kwargs else None
-    if tmpdir is None: tmpdir = tempfile.mkdtemp()
+    tmpdir_created = False
+    if tmpdir is None:
+        tmpdir_created = True
+        tmpdir = tempfile.mkdtemp()
 
     # flatten list of args to list of (path, OPTIONAL tarfile.TarInfo)
     logfiles = flatten_logfiles(args)
@@ -193,6 +198,9 @@ def commit_logs(b, wd, *args, **kwargs):
         if logfile == 'BUNSEN_COMMIT': continue # don't add to commit
         if logfile == 'year_month.txt': continue # don't add to commit
         if logfile.startswith('index.html'): continue # don't add to commit
+        if logfile.startswith('baseline'): continue # don't add to commit
+        if logfile.startswith('xfail'): continue # don't add to commit
+        if logfile.startswith('previous_'): continue # don't add to commit
         if tarinfo is not None:
             t = tarfile.extractfile(tarinfo)
             logname = os.path.basename(logfile)
@@ -210,8 +218,10 @@ def commit_logs(b, wd, *args, **kwargs):
     gdb_sum = pick_testlog(testdir, tmpdir, 'gdb.sum') # XXX parser autodetects .xz
     gdb_log = pick_testlog(testdir, tmpdir, 'gdb.log') # XXX parser autodetects .xz
     testrun = parse_README(testrun, gdb_README)
+    testrun.arch = grok_architecture(testdir)
+    testrun.osver = osver
     testrun = parse_dejagnu_sum(testrun, gdb_sum, all_cases=all_cases)
-    testrun = annotate_dejagnu_log(testrun, gdb_log, all_cases)
+    testrun = annotate_dejagnu_log(testrun, gdb_log, all_cases, verbose=False)
 
     if testrun is None:
         b.reset_all()
@@ -239,7 +249,7 @@ def commit_logs(b, wd, *args, **kwargs):
     if push:
         wd.push_all()
 
-    if tmpdir is not None: shutil.rmtree(tmpdir)
+    if tmpdir_created: shutil.rmtree(tmpdir)
 
     return commit_id
 
@@ -332,7 +342,7 @@ def commit_repo_logs(b, log_src, opts=None):
 
         commit_id = commit_logs(b, wd, opts=opts, push=False,
                                 testdir=testdir, tmpdir=tmpdir,
-                                year_month=year_month,
+                                year_month=year_month, osver=osver,
                                 *os.listdir(testdir))
 
         if commit_id is None:
@@ -341,8 +351,10 @@ def commit_repo_logs(b, log_src, opts=None):
             total_dirs += 1
 
         # XXX Create BUNSEN_COMMIT file to mark logs as committed:
-        with open(os.path.join(testdir,"BUNSEN_COMMIT"), 'w') as f:
-            f.write(commit_id)
+        if commit_id is not None:
+            with open(os.path.join(testdir,"BUNSEN_COMMIT"), 'w') as f:
+                f.write(commit_id)
+        # TODO: Delay this 'till just before the final 'git push'.
 
         if profiler is not None:
             profiler.disable()

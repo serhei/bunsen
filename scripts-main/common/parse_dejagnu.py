@@ -63,6 +63,8 @@ standard_architecture_map = {r'powerpc64-(\w+)-linux.*':lambda m: 'ppc64',
 # "Native configuration is ". If TEXT does not start with this string or
 # the architecture is not deduced, return None.
 def grok_architecture(text):
+    if text is None:
+        return None
     if text.startswith("Native configuration is "):
         text = text[len("Native configuration is "):-1]
         return check_regex_mapping(text, standard_architecture_map,
@@ -193,7 +195,7 @@ class DejaGNUParser:
 
         for cur in Cursor(self.logfile, path=self.logfile_name):
             line = cur.line
-            
+
             if line.startswith("Test run by ") and " on " in line:
                 runtest_timestamp_full = line
                 t1 = line.find(" on ") + len(" on ")

@@ -299,7 +299,7 @@ class Testlog:
         """
         if path is None or str(path) == str(testlog.path):
             return testlog
-        return Testlog(bunsen=testlog.bunsen, path=path,
+        return Testlog(bunsen=testlog._bunsen, path=testlog.path,
             commit_id=testlog.commit_id, blob=testlog.blob,
             input_path=testlog._input_path, input_stream=testlog.input_stream)
 
@@ -315,11 +315,11 @@ class Testlog:
         """
         # <TODO: Doublecheck correct behaviour if both are set.>
         if input_path is not None or str(input_path) != str(testlog._input_path):
-            testlog = Testlog(bunsen=testlog.bunsen, path=path,
+            testlog = Testlog(bunsen=testlog._bunsen, path=testlog.path,
                 commit_id=testlog.commit_id, blob=testlog.blob,
                 input_path=input_path) # XXX reset input_path
         if input_stream is not None:
-             testlog = Testlog(bunsen=testlog.bunsen, path=path,
+             testlog = Testlog(bunsen=testlog._bunsen, path=testlog.path,
                 commit_id=testlog.commit_id, blob=testlog.blob,
                 input_stream=input_stream) # XXX reset input_stream
         return testlog
@@ -327,7 +327,7 @@ class Testlog:
     @property
     def external(self):
         """Is this Testlog external to the bunsen repo?"""
-        return self._bunsen is None
+        return self._bunsen is None or self.blob is None
 
     def copy_to(self, dirpath, create_subdirs=False):
         """Copy this logfile into a specified target directory.
@@ -474,6 +474,8 @@ class Testlog:
             self._lines = self._data_stream_readlines()
             # XXX: Could clear _lines when too many Testlog objects are
             # in memory, but I have not observed this problem in practice.
+        if line_no-1 >= len(self._lines) and line_no == 1:
+            return "" # XXX empty file
         if line_no-1 >= len(self._lines):
             raise BunsenError("out of range line number {} for Testlog {}" \
                 .format(line_no, self.path))
@@ -604,9 +606,9 @@ class Cursor:
 
         # Default values for start and end:
         if start is None and end is None:
-            start, end = 1, 1
+            start, end = 1, None
         elif start is not None and end is None:
-            end = len(self.testlog)
+            end = 1
         elif start is None:
             start = 1
 
@@ -780,7 +782,7 @@ class Cursor:
         repr = ''
         if not skip_commit_id and self.testlog.commit_id is not None:
             repr += self.testlog.commit_id + ':'
-        repr += self.testlog.path if self.testlog.path else \
+        repr += str(self.testlog.path) if self.testlog.path else \
                 '<unknown>'
         repr += ':' + str(self.line_start)
         if self.line_end is not None and self.line_end != self.line_start:

@@ -46,7 +46,7 @@ def openfile_or_xz(path):
 def parse_README(testrun, READMEfile):
     if testrun is None: return None
     f = openfile_or_xz(READMEfile)
-    for cur in Cursor(READMEfile, name=os.path.basename(READMEfile), input_stream=f):
+    for cur in Cursor(READMEfile, path=os.path.basename(READMEfile), input_stream=f):
         line = cur.line
         if line.startswith("Logs for: "):
             t1 = line.find("Logs for: ") + len("Logs for: ")
@@ -77,7 +77,7 @@ def parse_dejagnu_sum(testrun, sumfile, all_cases=None,
     failed_subtests_summary = 0
     passed_subtests_summary = 0
 
-    for cur in Cursor(sumfile, name=os.path.basename(sumfile), input_stream=f):
+    for cur in Cursor(sumfile, path=os.path.basename(sumfile), input_stream=f):
         line = cur.line
 
         # XXX all lines in these GDB sumfiles are outcome lines
@@ -199,7 +199,7 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
     last_test_cur = None
     next_outcome = None # outcome of testcases[i]
     f = openfile_or_xz(logfile)
-    for cur in Cursor(logfile, name=os.path.basename(logfile), input_stream=f, ephemeral=True):
+    for cur in Cursor(logfile, path=os.path.basename(logfile), input_stream=f, ephemeral=True):
         line = cur.line
 
         if line.startswith("Native configuration is"):
@@ -215,6 +215,7 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
                 # XXX Below turns out a bit brittle in practice.
                 #datestamp = datetime.strptime(datestamp, datestamp_format)
                 year_month = datestamp.strftime("%Y-%m")
+                print("FOUND {} for {}".format(year_month, os.path.basename(logfile)))
             except ValueError:
                 print("WARNING: unknown datestamp in line --", line, file=sys.stderr)
         if line.startswith("GNU gdb (GDB) "):
@@ -298,9 +299,9 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
     if testrun.year_month is None:
         skip = True
         skip_reason = "unknown year_month, "
-    elif testrun.arch is None:
-        skip = True
-        skip_reason = "unknown arch, "
+    #elif testrun.arch is None:
+    #    skip = True
+    #    skip_reason = "unknown arch, "
     # elif testrun.osver is None:
     #     skip = True
     #     skip_reason = "unknown osver, "
@@ -312,9 +313,10 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
         testrun.problems = skip_reason
         return testrun # return None
 
-    if verbose:
+    if True:
+    #if verbose:
         print("Processed", logfile, testrun.version,
-              testrun.arch, str(testrun.pass_count) + "pass",
+              testrun.arch, testrun.osver, str(testrun.pass_count) + "pass",
               str(testrun.fail_count) + "fail", file=sys.stdout)
     return testrun
 

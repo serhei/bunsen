@@ -99,5 +99,5 @@ if __name__=='__main__':
                         f.write(year_month)
                 else:
                     print("NO YEAR_MONTH FOUND FOR {}".format(testdir))
-                
+
 

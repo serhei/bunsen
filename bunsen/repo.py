@@ -451,7 +451,12 @@ class Bunsen:
         elif isinstance(testlog_or_path, tarfile.ExFileObject):
             assert testlog_name is not None
             testlog = Testlog(self, testlog_name, input_stream=testlog_or_path)
+        elif isinstance(testlog_or_path, str):
+            if testlog_name is None:
+                testlog_name = testlog_or_path
+            testlog = Testlog(self, testlog_name, input_path=testlog_or_path)
         else:
+            # TODO: Doublecheck correctness of path.
             testlog = Testlog(self, testlog_or_path, commit_id=None)
         self._staging_testlogs.append(testlog)
 
