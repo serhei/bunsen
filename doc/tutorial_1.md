@@ -65,6 +65,17 @@ this.) Run `crontab -e` to open your Crontab file and add the following line:
 
 ## Download and Add Test Results
 
+*Alternative 1:* If you don't want to go through the *very long* process of adding
+test results, you can set up Bunsen with a pre-made repository of GDB test
+results:
+
+    mv .bunsen/config oldconfig
+    rm -rf .bunsen # DELETES ANY EXISTING DATA
+    git clone --bare https://github.com/serhei/bunsen-gdb-sample-data .bunsen/bunsen.git
+    ./bunsen.py init
+    mv oldconfig .bunsen/config
+
+*Alternative 2:* (If you want to try building a large repository yourself.)
 For this example, we'll use `wget` to download some test results from the [old
 GDB buildbot](https://gdb-buildbot.osci.io) I saved at
 https://163.172.178.105/results/ and use them to build a repository. (Below,
@@ -97,15 +108,6 @@ earlier in `.bunsen/config`: `scripts-main/gdb/commit_logs.py`. The
 After being added, the test results are stored in a Git repository
 `.bunsen/bunsen.git`. Bunsen includes a collection of scripts to extract and
 analyze these results under `scripts-main/`.
-
-*Alternative:* If you don't want to go through the process of adding test
-results, you can set up Bunsen with a pre-made repository of GDB test results:
-
-    mv .bunsen/config oldconfig
-    rm -rf .bunsen # DELETES ANY EXISTING DATA
-    git clone --bare https://github.com/serhei/bunsen-gdb-sample-data .bunsen/bunsen.git
-    ./bunsen.py init
-    mv oldconfig .bunsen/config
 
 ## Show Test Results
 
@@ -180,6 +182,9 @@ a smaller file, you could specify a particular subset of the testcases with the
 
 This will output a grid of results only for the testcases whose name contains
 the string 'non-ldr'.
+
+For a more complete example of `+grid_view` output see [these examples from the
+SystemTap project](http://163.172.178.105/bunsen-examples/).
 
 ## Set up the Web Server to accept test results
 
