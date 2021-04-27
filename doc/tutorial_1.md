@@ -78,7 +78,7 @@ results:
 *Alternative 2:* (If you want to try building a large repository yourself.)
 For this example, we'll use `wget` to download some test results from the [old
 GDB buildbot](https://gdb-buildbot.osci.io) I saved at
-https://163.172.178.105/results/ and use them to build a repository. (Below,
+http://163.172.178.105/results/ and use them to build a repository. (Below,
 we'll learn how to send test results directly to Bunsen from a machine running
 the GDB testsuite.)
 
