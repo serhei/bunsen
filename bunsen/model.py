@@ -20,18 +20,22 @@ import shutil
 from bunsen.utils import *
 from bunsen.version import __version__
 
+# <TODO: replace invalid-format assertions with BunsenError.>
+
 #########################
 # schema for JSON index #
 #########################
+
+# <TODO: check m.group('label') vs m.group('extra_label')>
 
 BUNSEN_REPO_VERSION = __version__
 """Current version of the Bunsen repo schema."""
 # TODO: use BUNSEN_REPO_VERSION in the model and repo format
 
-branch_regex = re.compile(r"(?P<project>.*)/test(?P<kind>runs|logs)-(?P<year_month>\d{4}-\d{2})(?:-(?P<extra>.*))?")
+branch_regex = re.compile(r"(?P<project>.*)/test(?P<kind>runs|logs)-(?P<year_month>\d{4}-\d{2})(?:-(?P<extra_label>.*))?")
 """Format for testruns and testlogs branch names."""
 
-commitmsg_regex = re.compile(r"(?P<project>.*)/test(?P<kind>runs|logs)-(?P<year_month>\d{4}-\d{2})(?:-(?P<extra>[^:]*))?:(?P<note>.*)")
+commitmsg_regex = re.compile(r"(?P<project>.*)/test(?P<kind>runs|logs)-(?P<year_month>\d{4}-\d{2})(?:-(?P<extra_label>[^:]*))?:(?P<note>.*)")
 """Format for commit message summaries created by Bunsen."""
 
 indexfile_regex = re.compile(r"(?P<project>.*)-(?P<year_month>\d{4}-\d{2}).json")
@@ -466,7 +470,7 @@ class Testlog:
     #         return [""]
 
     def line(self, line_no):
-        """Returns text at specified (one-indexed) line number in log file."""
+        """Return text at specified (one-indexed) line number in log file."""
         if line_no < 1:
             raise BunsenError("out of range line number {} for Testlog {}" \
                 .format(line_no, self.path))
@@ -535,7 +539,10 @@ class Cursor:
         the entire logfile.
 
         If start is specified and end is not, the resulting Cursor is
-        a single-line cursor covering start.
+        a single-line cursor covering start,
+        except for Cursor(start=cur, end=None) where start is a Cursor.
+        In that case the resulting cursor will have the same start and
+        end as cur.
 
         Args:
             source (optional): Testlog, Bunsen, external path, or
@@ -561,7 +568,7 @@ class Cursor:
         """
         from bunsen.repo import Bunsen # XXX delayed import
 
-        # # XXX parsing from_str can be delayed
+        # XXX parsing from_str can be delayed
         self._delay_parse = None
         self._delay_commit_id = None
         self._delay_source = None
@@ -608,7 +615,7 @@ class Cursor:
         if start is None and end is None:
             start, end = 1, None
         elif start is not None and end is None:
-            end = 1
+            end = start # <TODOXXX: verify>
         elif start is None:
             start = 1
 
@@ -817,7 +824,6 @@ def _serialize_testcases(testcases, parent_testrun):
 
 # XXX in common between Testcase and Testrun
 def _deserialize_testcases(testcases, parent_testrun):
-    fields = parent_testrun._testcase_fields
     deserialized_testcases = []
     for testcase in testcases:
         deserialized_testcase = \
@@ -826,108 +832,213 @@ def _deserialize_testcases(testcases, parent_testrun):
     return deserialized_testcases
 
 # Testrun/Testcase fields that should not be added to JSON:
-_testrun_base_fields = {'_bunsen', # Testrun only
-                        '_parent_testrun', # Testcase only
-                        '_field_types',
-                        '_testcase_fields', # Testrun only
+_testrun_base_fields = {'bunsen', # Testrun only
+                        'parent_testrun', # Testcase only
+                        'field_types',
+                        'testcase_field_types', # Testrun only
+                        # TODO: '_cursor_commit_ids', # Testrun only
                         'summary'} # Testrun only
 class Testcase(dict):
-    def __init__(self, from_json=None, fields=None, parent_testrun=None):
-        '''
-        Create empty Testcase or parse Testcase data from JSON string or dict.
-        '''
+    """Represents a single testcase within a Testrun.
+
+    Subclasses dict to support reading and writing arbitrary fields as dict
+    fields or as attributes. These fields will be serialized together with the
+    standard Testcase attributes.
+
+    Attributes:
+        name (str): The name of the testcase.
+        outcome (str): Outcome code of the testcase (e.g. PASS, FAIL, etc.).
+        subtest (str, optional): The name of the subtest with this outcome code.
+            For DejaGnu format logs, we typically store one PASS outcome for
+            a testcase which passed in its entirety, but separate FAIL outcomes
+            in separate Testcase objects, one for each subtest that failed
+            within the testcase.
+        origin_log (Cursor, optional): Locates this testcase in a full test log
+            file (e.g. a file in DejaGnu '.log' format).
+        origin_sum (Cursor, optional): Locates this testcase in a test summary
+            file (e.g. a file in DejaGnu '.sum' format).
+        parent_testrun (Testrun, optional): The Testrun object that
+            this Testcase belongs to. Not serialized.
+        field_types (dict): Dictionary of fields (names and types
+            from valid_field_types) which will receive special treatment
+            during serialization. Includes all testcase_field_types
+            by default. Not serialized.
+        problems (str, optional): After running validate(), will contain a
+            description of any problems that make this Testcase unsuitable
+            for serialization, or None if there aren't any problems.
+    """
+
+    # TODOXXX elsewhere, rename Testcase(fields=) to Testcase(field_types=)
+    def __init__(self, from_json=None, field_types=None, parent_testrun=None,
+                 bunsen=None):
+        """Create empty Testcase or parse Testcase from JSON string or dict.
+
+        Args:
+            from_json (str or dict, optional): JSON data for the testcase.
+            field_types (dict, optional): Dictionary of additional field types
+                requiring special treatment during serialization,
+                in the same format as testcase_field_types.
+            parent_testrun (Testrun, optional): The Testrun object that
+                this Testcase belongs to. (Note that Testcase objects
+                for a Testrun can be created with the Testrun.add_testcase()
+                method, which will use the types specified in the
+                Testrun object's testcase_field_types.)
+            bunsen (Bunsen, optional): Used only as a fallback for
+                deserializing Cursors when parent_testrun is None.
+        """
 
         # XXX Populate fields so __setattr__ doesn't add them to JSON dict.
         for field in _testrun_base_fields:
             if field not in self.__dict__:
                 self.__dict__[field] = None
 
-        # TODO: Provide sane defaults for when parent_testrun is None?
-        assert parent_testrun is not None
+        self.parent_testrun = parent_testrun
+        if field_types is None and self.parent_testrun is not None:
+            field_types = self.parent_testrun.testcase_field_types
+        elif field_types is None:
+            field_types = {}
 
-        self._parent_testrun = parent_testrun
-        if fields is None and self._parent_testrun is not None:
-            fields = self._parent_testrun._testcase_fields
-        elif fields is None:
-            fields = {}
-
-        # Populate self._field_types from fields, testcase_field_types:
-        self._field_types = dict(testcase_field_types)
-        for field, field_type in fields.items():
-            assert field_type in valid_field_types
-            self._field_types[field] = field_type
+        # Populate self.field_types from fields, testcase_field_types:
+        self.field_types = dict(testcase_field_types)
+        for field, field_type in field_types.items():
+            assert field_type in valid_field_types # BUG in testcase_field_types
+            self.field_types[field] = field_type
 
         if from_json is not None:
-            json_data = from_json # XXX handle from_json(dict)
-            if isinstance(from_json, str) or isinstance(from_json, bytes):
-                json_data = json.loads(from_json)
-            assert isinstance(json_data, dict)
+            self._deserialize_testcase(from_json=from_json, bunsen=bunsen)
 
-            for field, value in json_data.items():
-                if field not in self._field_types:
-                    pass
-                elif self._field_types[field] == 'testcases':
-                    value = _deserialize_testcases(value, self._parent_testrun)
-                elif self._field_types[field] == 'metadata':
-                    # XXX Nested Testcase metadata contains Testcase fields,
-                    # but we don't consider it as a Testcase object:
-                    value = dict(Testcase(from_json=value, fields=fields,
-                                          parent_testrun=self._parent_testrun))
-                elif self._field_types[field] == 'cursor' \
-                     and not isinstance(value, Cursor):
-                    value = Cursor(source=self._parent_testrun._bunsen,
-                                   commit_id=self._parent_testrun.bunsen_commit_id,
-                                   from_str=value)
-                else:
-                    pass # TODOXXX skip this assertion elsewhere
-                    #assert self._field_types[field] == 'str' \
-                    #    or self._field_types[field] == 'hexsha' \
-                    #    or self._field_types[field] == 'cursor'
-                self[field] = value
+    def _deserialize_testcase(self, deserialized_testcase=None, from_json={},
+                              bunsen=None):
+        if deserialized_testcase is None:
+            deserialized_testcase = self
 
-    # TODOXXX def validate(self):
+        json_data = from_json # XXX handles from_json(dict)
+        if isinstance(from_json, str) or isinstance(from_json, bytes):
+            json_data = json.loads(from_json)
+        assert isinstance(json_data, dict) # Testcase from_json
 
-    # XXX @property does not seem to work with the 'map' protocol
+        for field, value in json_data.items():
+            if field not in self.field_types:
+                pass
+            elif self.field_types[field] == 'testcases':
+                value = _deserialize_testcases(value, self.parent_testrun)
+            elif self.field_types[field] == 'metadata':
+                # Nested Testcase metadata contains Testcase fields,
+                # but we don't consider it as a Testcase object:
+                value = self._deserialize_testcase({}, from_json=value,
+                    bunsen=bunsen)
+                # TODOXXX OLD VERSION
+                # value = dict(Testcase(from_json=value, field_types=fields,
+                #                       parent_testrun=self.parent_testrun))
+            elif self.field_types[field] == 'cursor' \
+                and not isinstance(value, Cursor) \
+                and self.parent_testrun is not None:
+                commit_id = None
+                if field in parent_testrun._cursor_commit_ids:
+                    commit_id = parent_testrun._cursor_commit_ids[field]
+                value = Cursor(source=self.parent_testrun.bunsen,
+                    commit_id=commit_id, from_str=value)
+            elif self.field_types[field] == 'cursor' \
+                and not isinstance(value, Cursor):
+                assert bunsen is not None # no parent_testrun and no bunsen
+                value = Cursor(source=bunsen, from_str=value)
+            # TODOXXX OLD VERSION OF PREV 2 CLAUSES
+            # elif self.field_types[field] == 'cursor' \
+            #      and not isinstance(value, Cursor):
+            #     value = Cursor(source=self.parent_testrun.bunsen,
+            #                    commit_id=self.parent_testrun.bunsen_commit_id,
+            #                    from_str=value)
+            elif self.field_types[field] not in {'str','hexsha','cursor'}:
+                raise BunsenError("BUG: unknown type '{}' for testcase field '{}'" \
+                    .format(self.field_types[field], field))
+            else:
+                pass
+            deserialized_testcase[field] = value
+        return deserialized_testcase
+
+    def validate(self):
+        """Verify that this Testcase includes required fields for serialization.
+
+        If there are problems, store an explanation in self.problems.
+
+        Returns:
+            bool
+        """
+        valid, problems = True, ""
+        if not ('name' in self and isinstance(self.name, str)):
+            valid = False
+            problems += "missing/incorrect name, "
+        if not ('outcome' in self and isinstance(self.outcome, str)):
+            valid = False
+            problems += "missing/incorrect outcome, "
+        if problems.endswith(", "):
+            problems = problems[:-2]
+        if not valid:
+            self.problems = problems
+        return valid
+
+    # XXX @property is incompatible with the JSON attr protocol below
     def outcome_line(self):
-        if 'origin_sum' not in self:
+        """Return the last line corresponding to this Testcase in the log file.
+
+        For DejaGNU format logs, this line reports the testcase outcome.
+
+        Will return None if this Testcase does not reference a log file.
+        """
+        cur = None
+        if 'origin_sum' in self:
+            cur = self.origin_sum
+        elif 'origin_log' in self:
+            cur = self.origin_log
+        else:
             return None
-        cur = self.origin_sum
-        assert isinstance(cur, Cursor)
-        cur = Cursor(source=cur.testlog,
-                     start=cur.line_end, end=cur.line_end)
+        assert isinstance(cur, Cursor) # origin_sum, origin_log not deserialized
+        cur = Cursor(cur); cur.line_start = cur.line_end
         return cur.line
 
     def to_json(self, pretty=False, as_dict=False,
                 extra_fields={}):
-        '''
-        Serialize Testcase data to a JSON string or dict.
-        '''
+        """Serialize Testcase data to a JSON string or dict.
+
+        Args:
+            pretty (bool or int, optional): Output the JSON as a properly
+                indented string instead of as a compact string. Passing an
+                int configures the indentation level (default 4).
+            as_dict (bool, optional): Return a dict instead of a string.
+            extra_fields (dict, optional): Dictionary of additional fields to
+                include in the JSON. These will override any fields of the same
+                name already present in the Testcase object.
+        """
         serialized_testcase = {}
         fields = dict(self)
         fields.update(extra_fields)
         for field, value in fields.items():
             if isinstance(value, Cursor):
-                # XXX serialize regardless of self._field_types
-                # TODO: Remove bunsen_commit_id prefix.
-                value = value.to_str(serialize=True)
-            elif field not in self._field_types:
+                # Serialize regardless of self.field_types.
+                skip_commit_id = self.parent_testrun is not None \
+                    and self.parent_testrun.should_skip_commit_id(value, field)
+                value = value.to_str(serialize=True,
+                    skip_commit_id=skip_commit_id)
+            elif field not in self.field_types:
                 pass
-            elif self._field_types[field] == 'testcases':
-                value = _serialize_testcases(value, self._parent_testrun)
+            elif self.field_types[field] == 'testcases':
+                value = _serialize_testcases(value, self.parent_testrun)
+            elif self.field_types[field] not in {'str','hexsha','cursor'}:
+                raise BunsenError("BUG: unknown type '{}' for testcase field '{}'" \
+                    .format(self.field_types[field], field))
             else:
-                assert self._field_types[field] == 'str' \
-                    or self._field_types[field] == 'hexsha' \
-                    or self._field_types[field] == 'cursor' # XXX can be given as str
+                pass # no special processing needed
             serialized_testcase[field] = value
-        # XXX: Could use json.dump instead of json.dumps?
+        # <TODO: Could use json.dump instead of json.dumps?>
         if as_dict:
             return serialized_testcase
         elif pretty:
-            return json.dumps(serialized_testcase, indent=4)
+            indent = pretty if isinstance(pretty,int) else 4
+            return json_dumps(serialized_testcase, indent=indent)
         else:
             return json.dumps(serialized_testcase)
 
-    # XXX: Hackish protocol to support reading/writing JSON fields as attrs:
+    # XXX: Protocol to support reading/writing arbitrary JSON fields as attrs:
 
     def __getattr__(self, field):
         # XXX Called if attribute is not found -- look in JSON dict.
@@ -949,71 +1060,244 @@ class Testcase(dict):
             # __setattr__ calls don't add this field to the JSON dict!
             self.__dict__[field] = None
 
-    pass # TODOXXX replace testcase dict with Testcase, throughout the scripts
-
 class Testrun(dict):
-    def __init__(self, bunsen=None, from_json=None,
-                 fields={}, testcase_fields={},
-                 summary=False):
-        '''
-        Create empty Testrun or parse Testrun data from JSON string or dict.
-        '''
+    """Represents a single testsuite run.
 
-        # XXX Populate fields so __setattr__ doesn't add them to JSON dict.
+    Subclasses dict to support reading and writing arbitrary fields as dict
+    fields or as attributes. These fields will be serialized together with the
+    standard Testrun attributes.
+
+    <TODO> Example of JSON representation for Testrun, Testrun with problems.
+
+    <TODO> Regenerate project, year_month, extra_label when deserializing? Will simplify commit_tag.
+
+    Attributes:
+        bunsen (Bunsen): Bunsen repo that this Testrun belongs to.
+            Not serialized.
+        project (str, optional): Used to specify the project this Testrun
+            belongs to. Removed when the testrun is committed.
+            Used to generate the bunsen_testruns_branch for this Testrun
+            if one was not provided (as well as the bunsen_testlogs_branch
+            for a primary testrun).
+        year_month (str, optional): Used to specify the year_month for this
+            Testrun. Removed when the testrun is committed.
+            Used to generate the bunsen_testruns_branch for this Testrun
+            if one was not provided (as well as the bunsen_testlogs_branch
+            for a primary Testrun).
+        extra_label (str, optional): Used to specify an extra_label for a
+            primary Testrun in a Bunsen commit. Removed when the Testrun is
+            committed. Used to generate the bunsen_testlogs_branch for a
+            primary testrun.
+        bunsen_version (str): The version of Bunsen used to originally generate
+            this testrun. Added automatically when the testrun is committed.
+        bunsen_commit_id (str): The hexsha of the commit in the Bunsen Git repo
+            storing the test log files corresponding to this Testrun.
+            Added automatically when the Testrun is committed.
+        bunsen_testlogs_branch (str): Name of the branch in the Bunsen Git repo
+            storing the test log files corresponding to this Testrun.
+            Added automatically when the Testrun is committed,
+            unless the commit does not include any test log files.
+        bunsen_testruns_branch (str): Name of the branch in the Bunsen Git repo
+            storing the full representation of this testrun.
+            Added automatically when the Testrun is committed.
+        related_testruns (list of str, optional): The names of branches storing
+            related testruns in other projects.
+            Added automatically when this Testrun is committed
+            as a primary testrun.
+        testcases (list, optional): List of Testcase objects recording
+            individual testcase outcomes.
+        summary (bool): If True, this Testrun is a summary of the testsuite run
+            and does not include individual testcase outcomes.
+            (Summary Testruns are stored within index files.) Not serialized.
+        field_types (dict): Dictionary of fields (names and type
+            from valid_field_types) which will receive special treament
+            during serialization. Includes all testrun_field_types
+            by default. Not serialized.
+        testcase_field_types (dict): Dictionary of additional fields
+            in nested Testcase objects which will receive special treatment
+            during serialization. Does not include default fields from
+            testcase_field_types, which will be added by the Testcase class.
+            Not serialized.
+        problems (str, optional): After running validate(), will contain a
+            description of any problems that make this Testrun unsuitable
+            for serialization, or None if there aren't any problems.
+    """
+
+    def __init__(self, bunsen=None, from_json=None, summary=False,
+                 field_types={}, testcase_field_types={}):
+        """Create empty Testrun or parse Testrun from JSON string or dict.
+
+        Args:
+            bunsen (Bunsen): Bunsen repo that this Testrun belongs to.
+            from_json (str or dict, optional): JSON data for the testsuite run.
+            summary (bool): If True, produce a summary Testrun which omits
+                individual testcase outcomes. If False, testcase outcomes
+                will be included only if they are present in the JSON data
+                and the Testrun's 'summary' field will be set accordingly.
+            field_types (dict, optional): Dictionary of additional field types
+                requiring special treatment during serialization,
+                in the same format as testrun_field_types.
+            testcase_field_types (dict, optional): Dictionary of additional
+                field types for nested Testcase objects
+                requiring special treatment during serialization,
+                in the same format as testcase_field_types.
+        """
+
+        # XXX: Populate fields so __setattr__ won't add them to the JSON dict:
         for field in _testrun_base_fields:
             if field not in self.__dict__:
                 self.__dict__[field] = None
 
-        self._bunsen = bunsen
+        self.bunsen = bunsen
 
-        # Populate self._field_types from fields, testrun_field_types:
-        self._field_types = dict(testrun_field_types)
-        for field, field_type in fields.items():
-            assert field_type in valid_field_types
-            self._field_types[field] = field_type
+        # Populate self.field_types from field_types, testrun_field_types:
+        self.field_types = dict(testrun_field_types)
+        for field, field_type in field_types.items():
+            assert field_type in valid_field_types # BUG in testrun_field_types
+            self.field_types[field] = field_type
 
-        # XXX testcase_fields passed down to Testcase class:
-        self._testcase_fields = testcase_fields
+        self.testcase_field_types = testcase_field_types
 
         self.summary = summary
         if not self.summary:
             self.testcases = []
 
         if from_json is not None:
-            json_data = from_json # XXX handle from_json(dict)
-            if isinstance(from_json, str) or isinstance(from_json, bytes):
-                json_data = json.loads(from_json)
-            assert isinstance(json_data, dict)
-            defer_fields = [] # XXX Defer parsing until cursor_commit_ids are known.
-            cursor_commit_ids = {} # XXX bunsen_commit_id -> {value}
-            for cursor_field, commit_field in cursor_commit_fields.items():
-                cursor_commit_ids[commit_field] = None
-            for field, value in json_data.items():
-                if field not in self._field_types:
-                    pass
-                elif self._field_types[field] == 'testcases' \
-                     and summary:
-                    continue # read only summary from JSON
-                elif self._field_types[field] == 'testcases':
-                    defer_fields.append(field)
-                elif self._field_types[field] == 'cursor':
-                    defer_fields.append(field)
-                else:
-                    assert self._field_types[field] == 'str' \
-                        or self._field_types[field] == 'hexsha'
-                if summary and field == 'testcases':
-                    continue # load only summary from JSON
-                if field in cursor_commit_ids:
-                    cursor_commit_ids[field] = value
-                self[field] = value
-            for field in defer_fields:
-                self[field] = self._deserialize_testrun_field(field, self[field],
-                                                              cursor_commit_ids)
+            self._deserialize_testrun(from_json=from_json)
 
-            # XXX Set summary=False if JSON was missing testcases.
-            self.summary = self.summary and 'testcases' in json_data
+    def _deserialize_testrun(self, from_json={}):
+        json_data = from_json # XXX handles from_json(dict)
+        if isinstance(from_json, str) or isinstance(from_json, bytes):
+            json_data = json.loads(from_json)
+        assert isinstance(json_data, dict) # BUG from_json is not str, bytes or dict
+        defer_fields = [] # XXX Defer parsing until _cursor_commit_ids are known.
+        self._cursor_commit_ids = {} # XXX field_name -> bunsen_commit_id
+        for cursor_field, commit_field in cursor_commit_fields.items():
+            self._cursor_commit_ids[commit_field] = None
+        for field, value in json_data.items():
+            if field not in self.field_types:
+                pass
+            elif self.field_types[field] == 'testcases' \
+                and summary:
+                continue # omit testcases when reading only summary
+            elif self.field_types[field] == 'testcases':
+                defer_fields.append(field)
+            elif self.field_types[field] == 'cursor':
+                defer_fields.append(field)
+            elif self.field_types[field] not in {'str','hexsha'}:
+                raise BunsenError("BUG: unknown type '{}' for testrun field '{}'" \
+                    .format(self.field_types[field], field))
+            else:
+                pass # no special processing needed
+            if summary and field == 'testcases':
+                continue # omit testcases when reading only summary
+            if field in self._cursor_commit_ids:
+                self._cursor_commit_ids[field] = value
+            self[field] = value
+        for field in defer_fields:
+            self[field] = self._deserialize_testrun_field(field, self[field])
+
+        if 'testcases' not in json_data:
+            self.summary = True
+        return self
+
+    def _deserialize_testrun_field(self, field, value):
+        if self.field_types[field] == 'testcases':
+            value = _deserialize_testcases(value, parent_testrun=self)
+        elif self.field_types[field] == 'metadata':
+            # Nested Testrun metadata contains Testrun fields:
+            value = self._deserialize_testrun_metadata(value)
+        elif self.field_types[field] == 'cursor' \
+            and not isinstance(value, Cursor):
+            assert self.bunsen is not None # Bunsen repo required for parsing Cursor
+            commit_id = self.cursor_commit_id(field)
+            value = Cursor(source=self.bunsen, from_str=value,
+                commit_id=commit_id)
+        return value
+
+    # Deserialize nested metadata. Don't collect additional _cursor_commit_ids:
+    def _deserialize_testrun_metadata(self, metadata):
+        deserialized_testrun = {}
+        for field, value in metadata.items():
+            value = self._deserialize_testrun_field(field, value)
+            deserialized_testrun[field] = value
+        return deserialized_testrun
+
+    def add_testcase(self, name, outcome, **kwargs):
+        """Append a new Testcase object to the Testrun data.
+
+        Args:
+            name (str): The name of the testcase.
+            outcome (str): Outcome code of the testcase (e.g. PASS, FAIL, etc.).
+
+        Any additional keyword arguments (e.g. subtest) will be added to the
+        Testcase object.
+
+        Returns:
+            The newly created Testcase object.
+        """
+        testcase = Testcase({'name':name, 'outcome':outcome},
+            parent_testrun=self)
+        for field, value in kwargs.items():
+            testcase[field] = value
+        if 'testcases' not in self:
+            self.summary = False
+            self.testcases = []
+        self.testcases.append(testcase)
+        return testcase
+
+    def cursor_commit_id(self, field):
+        """Return the cursor_commit_id for the specified field, if any.
+
+        Returns None if the field does not have an associated commit_id.
+        """
+        commit_id = None
+        # XXX Only available if the Testrun was deserialized:
+        # if field in self._cursor_commit_ids:
+        #     commit_id = self._cursor_commit_ids[field]
+        if field in cursor_commit_fields and field in self:
+            commit_id = self[field]
+        return commit_id
+
+    def should_skip_commit_id(self, cur, field):
+        """Is a Cursor stored in this field covered by a cursor_commit_id?"""
+        commit_id = self.cursor_commit_id(field)
+        if commit_id is None:
+            return False
+        if cur.testlog.commit_id is not None and \
+            cur.testlog.commit_id != commit_id:
+            # cur.testlog overrides cursor_commit_id with a different value
+            return False
+        return True
+
+    # XXX: To avoid confusion, don't mark this as a property:
+    def commit_tag(self):
+        """The (project, year_month, extra_label) values for this Testrun.
+
+        These values are used to select a branch name for storing the Testrun's
+        JSON representation in the Bunsen repo.
+        """
+        project, year_month, extra_label = None, None, None
+        if 'project' in self: project = self.project
+        if 'year_month' in self: year_month = self.year_month
+        if 'extra_label' in self: extra_label = self.extra_label
+        # XXX if (project is None or year_month is None or extra_label is None) \
+        if (project is None or year_month is None) \
+            and 'bunsen_testruns_branch' in self:
+            m = branch_regex.fullmatch(self.bunsen_testruns_branch)
+            assert m is not None # bunsen_testruns_branch
+            if project is None: project = m.group('project')
+            if year_month is None: year_month = m.group('year_month')
+            if extra_label is None: extra_label = m.group('extra_label')
+        # XXX extra_label is usually only present in bunsen_testlogs_branch
+        if m.group('extra_label') is None and 'bunsen_testlogs_branch' in self:
+            m = branch_regex.fullmatch(self.bunsen_testlogs_branch)
+            extra_label = m.group('extra_label')
+        return project, year_month, extra_label
 
     def get_project_name(self):
+        """Return the project name which this Testrun is stored under in the
+        Bunsen repository."""
         if 'bunsen_testruns_branch' in self:
             elts = self.bunsen_testruns_branch.split('/')
             return elts[0]
@@ -1024,6 +1308,12 @@ class Testrun(dict):
     # keys for architecture, board, branch, version.
 
     def get_info_strings(self):
+        """Return configuration properties of this Testrun as printable
+        strings, or "<unknown PROPERTY>" if unknown.
+
+        Returns:
+            dict, containing keys for 'architecture', 'board', 'branch', and 'version'
+        """
         info = dict()
         if 'arch' in self:
             info['architecture'] = self.arch
@@ -1047,85 +1337,188 @@ class Testrun(dict):
 
         return info
 
-    def add_testcase(self, name, outcome, **kwargs):
-        '''
-        Append a testcase result to the Testrun data.
-        '''
-        testcase = Testcase({'name':name, 'outcome':outcome},
-                            parent_testrun=self)
-        for field, value in kwargs.items():
-            testcase[field] = value
+    def validate(self, project=None, year_month=None, extra_label=None,
+                 cleanup_metadata=False, validate_testcases=False):
+        """Verify that this Testrun includes required fields for serialization.
+
+        If there are problems, store an explanation in self.problems.
+
+        Args:
+            project (str, optional): The project to use for this Testrun,
+                only if one is not already specified in the Testrun's fields.
+            year_month (str, optional): The year_month to use for this Testrun,
+                only if one is not already specified in the Testrun's fields.
+            extra_label (str, optional): Optional extra_label to use for this
+                Testrun, only if one is not already specified.
+            cleanup_metadata (bool, optional): If True, modify this
+                Testrun for serialization in the Bunsen Git repo.
+                In particular, removee any (project, year_month, extra_label)
+                fields and create (if not alreay present) a single
+                bunsen_testruns_branch field containing the same information.
+                Raise a BunsenError if any problems will prevent the Testrun
+                from being serialized. Defaults to False.
+            validate_testcases (bool, optional): If True, also validate all
+                testcases within this Testrun. Defaults to False.
+
+        Returns:
+            bool
+        """
+        problems = ""
+        raise_error = False
+
+        # Populate required metadata:
+        if cleanup_metadata:
+            # Testrun commit_tag fields will override commit_tag args:
+            if 'project' in self:
+                project = self.project; del self['project']
+            if 'year_month' in self:
+                year_month = self.year_month; del self['year_month']
+            if 'extra_label' in self:
+                extra_label = self.extra_label; del self['extra_label']
+
+            if project is None and 'bunsen_testruns_branch' not in self:
+                problems += "missing project, "
+                raise_error = True
+            if year_month is None and 'bunsen_testlogs_branch' not in self:
+                problems += "missing year_month, "
+                raise_error = True
+
+            if 'bunsen_testruns_branch' not in self:
+                # XXX testruns branches don't use extra_label
+                self.bunsen_testruns_branch = '{}/testruns-{}' \
+                    .format(project, year_month)
+
+            if 'bunsen_version' not in self:
+                self.bunsen_version = BUNSEN_REPO_VERSION
+
+        if 'bunsen_version' not in self and not cleanup_metadata:
+            problems += "no bunsen_version, "
+        else:
+            pass # XXX guaranteed to be populated by cleanup_metadata
+
+        if 'bunsen_testruns_branch' not in self \
+            and ('project' not in self or 'year_month' not in self):
+            problems += "missing bunsen_testruns_branch (or equivalent project/year_month), "
+        elif 'bunsen_testruns_branch' not in self:
+            pass # XXX don't care as long as project/year_month are present
+        elif ':' in self.bunsen_testruns_branch:
+            problems += "malformed bunsen_testruns_branch (contains ':'), "
+            if cleanup_metadata: raise_error = True
+        elif branch_regex.fullmatch(self.bunsen_testruns_branch) is None:
+            problems += "malformed bunsen_testruns_branch, "
+            if cleanup_metadata: raise_error = True
+
+        if 'bunsen_testlogs_branch' not in self and not cleanup_metadata:
+            problems += "missing bunsen_testlogs_branch, "
+        elif 'bunsen_testlogs_branch' not in self:
+            pass # may be populated later on by Bunsen.commit()
+        elif ':' in self.bunsen_testlogs_branch:
+            problems += "malformed bunsen_testlogs_branch (contains ':'), "
+            if cleanup_metadata: raise_error = True
+        elif branch_regex.fullmatch(self.bunsen_testlogs_branch) is None:
+            problems += "malformed bunsen_testlogs_branch, "
+            if cleanup_metadata: raise_error = True
+
+        if 'bunsen_commit_id' not in self and not cleanup_metadata:
+            problems += "missing bunsen_commit_id, "
+        elif 'bunsen_commit_id' not in self:
+            pass # may be populated later on by Bunsen.commit()
+
+        if 'related_testruns' not in self:
+            pass # optional
+        elif not isinstance(self.related_testruns, list):
+            problems += "malformed related_testruns (must be a list), "
+            if cleanup_metadata: raise_error = True
+        else:
+            for related_testrun in self.related_testruns:
+                if not related_testrun_regex.fullmatch(related_testrun):
+                    problems += "malformed related_testruns, "
+                    break
+            if cleanup_metadata: raise_error = True
+
         if 'testcases' not in self:
-            self.summary = False
-            self.testcases = []
-        self.testcases.append(testcase)
-        return testcase
+            pass # optional
+        elif not isinstance(self.testcases, list):
+            problems += "malformed testcases (must be a list), "
+            if cleanup_metadata: raise_error = True
+        elif validate_testcases:
+            testcases_valid = True
+            for testcase in self.testcases:
+                testcases_valid = testcates_valid and testcase.validate()
+            if not testcases_valid:
+                problems += "problems in testcases, "
 
-    # TODOXXX def validate(self):
+        # TODO: Could be more strict at checking types
+        # (e.g. where str expected for regex match, hexsha for commit_id).
 
-    def _deserialize_testrun_field(self, field, value, cursor_commit_ids):
-        if self._field_types[field] == 'testcases':
-            value = _deserialize_testcases(value, parent_testrun=self)
-        elif self._field_types[field] == 'metadata':
-            # Nested Testrun metadata contains Testrun fields:
-            value = self._deserialize_testrun_metadata(value, cursor_commit_ids)
-        elif self._field_types[field] == 'cursor' \
-             and not isinstance(value, Cursor):
-            commit_id = None
-            if field in cursor_commit_fields:
-                commit_id_field = cursor_commit_fields[field]
-                commit_id = cursor_commit_ids[commit_id_field]
-            value = Cursor(source=self._bunsen,
-                           commit_id=commit_id,
-                           from_str=value)
-        return value
+        # TODO: Provide a way to check other desirable metadata:
+        # - testcases: subtest field for failing tests?
+        # - required architecture fields (e.g. arch, osver)
+        # - timestamp
 
-    def _deserialize_testrun_metadata(self, metadata, cursor_commit_ids):
-        '''
-        Deserialize nested Testrun metadata. Don't gather cursor_commit_ids.
-        '''
-        deserialized_testrun = {}
-        for field, value in metadata.items():
-            value = self._deserialize_testrun_field(field, value,
-                                                    cursor_commit_ids)
-            deserialized_testrun[field] = value
-        return deserialized_testrun
+        if problems.endswith(", "):
+            problems = problems[:-2]
+        valid = (problems == "")
+        if not valid and 'problems' in self: # append to existing problems
+            self.problems = self.problems + ", " + problems
+        elif not valid:
+            self.problems = problems
+        elif 'problems' in self:
+            valid = False # already existing problems
+        if raise_error:
+            # TODO: Should also provide the full testrun -- would need to catch the error.
+            raise BunsenError("could not validate Testrun for inclusion: {}" \
+                .format(self.problems))
+        return valid
 
     def to_json(self, summary=False, pretty=False, as_dict=False,
                 extra_fields={}):
-        '''
-        Serialize Testrun data to a JSON string or dict.
-        '''
+        """Serialize Testrun data to a JSON string or dict.
+
+        Args:
+            summary (bool, optional): Exclude testcases to produce a summary
+                Testcase for inclusion in an index file.
+            pretty (bool or int, optional): Output the JSON as a properly
+                indented string instead of as a compact string. Passing an
+                int configures the indentation level (default 4).
+            as_dict (bool, optional): Return a dict instead of a string.
+            extra_fields (dict, optional): Dictionary of additional fields to
+                include in the JSON. These will override any fields of the same
+                name already present in the Testcase object.
+        """
         serialized = {}
         fields = dict(self)
         fields.update(extra_fields)
         for field, value in fields.items():
             if isinstance(value, Cursor):
-                # XXX serialize regardless of self._field_types
-                # TODO: Remove bunsen_commit_id prefix.
-                value = value.to_str(serialize=True)
-            elif field not in self._field_types:
+                # Serialize regardless of self.field_types.
+                skip_commit_id = should_skip_commit_id(value, field)
+                value = value.to_str(serialize=True,
+                    skip_commit_id=skip_commit_id)
+            elif field not in self.field_types:
                 pass
-            elif self._field_types[field] == 'testcases' \
-                 and summary:
-                continue # write only summary to JSON
-            elif self._field_types[field] == 'testcases' \
-                 and isinstance(value, list):
+            elif self.field_types[field] == 'testcases' \
+                and self.summary:
+                continue # omit testcases when writing only summary
+            elif self.field_types[field] == 'testcases' \
+                and isinstance(value, list):
                 value = _serialize_testcases(value, parent_testrun=self)
+            elif self.field_types[field] not in {'str','hexsha','cursor'}:
+                raise BunsenError("BUG: unknown type '{}' for testrun field '{}'" \
+                    .format(self.field_types[field], field))
             else:
-                assert self._field_types[field] == 'str' \
-                    or self._field_types[field] == 'hexsha' \
-                    or self._field_types[field] == 'cursor' # XXX can be given as str
+                pass # no special processing needed
             serialized[field] = value
-        # XXX: Could use json.dump instead of json.dumps?
+        # <TODO: Could use json.dump instead of json.dumps?>
         if as_dict:
             return serialized
         elif pretty:
-            return json.dumps(serialized, indent=4)
+            indent = pretty if isinstance(pretty,int) else 4
+            return json_dumps(serialized, indent=indent)
         else:
             return json.dumps(serialized)
 
-    # XXX: Hackish protocol to support reading/writing JSON fields as attrs:
+    # XXX: Protocol to support reading/writing arbitrary JSON fields as attrs:
 
     def __getattr__(self, field):
         # XXX Called if attribute is not found -- look in JSON dict.
@@ -1146,3 +1539,10 @@ class Testrun(dict):
             # XXX This is a builtin field. Assign None so later
             # __setattr__ calls don't add this field to the JSON dict!
             self.__dict__[field] = None
+
+# TODOXXX REFACTOR BELOW & IN OTHER FILES
+# TODO renamed Testcase._parent_testrun -> Testcase.parent_testrun
+# TODO renamed {Testcase,Testrun}._field_types -> Testcase.field_types
+# TODO renamed Testrun._bunsen -> Testrun.bunsen
+# TODO renamed Testrun._testcase_fields -> Testrun.testcase_field_types
+# <TODO: replace testcase dict with Testcase, throughout the analysis scripts>
