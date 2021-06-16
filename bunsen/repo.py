@@ -13,6 +13,8 @@ and to configure analysis scripts.
 
 import os
 import re
+import glob
+from pathlib import Path
 from configparser import ConfigParser
 import tarfile
 import shutil
@@ -22,162 +24,289 @@ import git
 from bunsen.model import *
 from bunsen.utils import *
 
-# XXX For now, hardcode Bunsen data to live in the git checkout directory:
-bunsen_repo_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
-bunsen_default_dir = os.path.join(bunsen_repo_dir, ".bunsen")
-# OR bunsen_default_dir = os.path.join(bunsen_default_dir, "bunsen-data")
-
-# TODO: Ideally all nasty Git trickery should be confined to this class.
+# XXX: Ideally, all nasty Git trickery will be confined to this class.
 class Workdir(git.Repo):
-    '''
-    A temporary clone of a Bunsen git repo. Includes some higher-level
-    functionality for safely working with Bunsen data.
-    '''
-    # TODO Add an option to show git command output / progress.
+    """Temporary clone of a Bunsen git repo.
+
+    Extends the GitPython Repo class with additional methods for safely working
+    with Bunsen data. Complex manipulations of the repo data should be done
+    in a clone of the main repo to reduce the risk of corrupting its index
+    (from experience, the types of manipulations Bunsen is doing are not
+    well-tested if applied many times to the same Git working directory
+    without a periodic git push and fresh checkout).
+    """
 
     def __init__(self, bunsen, path_or_repo):
+        """Create a Workdir instance for an already-checked-out directory.
+
+        Args:
+            bunsen (Bunsen): The Bunsen repo this working directory
+                was checked out from.
+            path_or_repo: Path to a working directory
+                or a git.Repo object whose path will be used to create
+                this new Workdir object.
+        """
         self._bunsen = bunsen
         if isinstance(path_or_repo, git.Repo):
             path_or_repo = path_or_repo.working_tree_dir
-        super().__init__(path_or_repo)
+        super().__init__(str(path_or_repo))
 
-    def push_all(self, branch_names=None):
-        '''
-        Push all (or specified) branches in the working directory.
-        '''
-        if branch_names is None:
-            # XXX Could also use self.branches
-            branch_names = [b.name for b in self._bunsen.git_repo.branches]
-        # TODOXXX: Doing separate push operations at the end of a long
-        # parsing run is risky as it may result in incomplete data
-        # when interrupted. Figure out something better. Is a git
-        # push --all with multiple branches even atomic? Or perhaps
-        # index branches should be updated last of all.
-        #
-        # TODO: For now, perhaps implement the following suggestion:
-        # - delete the .bunsen_workdir file so the workdir data isn't lost
-        # - print a warning about how to recover if the operation is interrupted
-        # - push */testlogs-* in any order
-        # - push */testruns-* in any order (refers to already pushed testlogs)
-        # - push index (refers to already pushed testlogs+testruns)
-        # Alternatively, if branch_names is None: git push --all origin.
-        for candidate_branch in branch_names:
-            try:
-                self.push_branch(candidate_branch)
-            except Exception: # XXX except git.exc.GitCommandError ??
-                # XXX This is most typically the result of a partial commit.
-                # May want to assemble branch names from self.branches.
-                warn_print("could not push branch {}".format(candidate_branch))
+    def push_all(self, refspec=None):
+        """Push all modified branches (or specified list of branches) to origin.
 
-    def push_branch(self, branch_name=None):
-        '''
-        Push current (or specified) branch in the working directory.
-        '''
-        if branch_name is None:
-            branch_name = self.head.reference.name
-        # TODO: Need to show progress for large updates.
-        # TODO: Need to find the 'proper' GitPython equivalent for this:
-        log_print("Pushing branch {}...".format(branch_name))
-        self.git.push('origin', branch_name)
+        Args:
+            refspec (str or list, optional): Refspec or list of branch names
+                to push to the Bunsen repo.
+        """
+        # <TODO: Configure the Workdir checkout to denyDeletes to avoid 'push :importantBranch'>
+        if refspec is None:
+            branch_names = self.branches
+            refspec = '*:*'
+        else:
+            # XXX refspec can be a list
+            branch_names = refspec
+        log_print("Pushing {}...".format(branch_names),
+            prefix="bunsen.Workdir:") # <TODO: verbosity level>
+        try:
+            # <TODO: Need to show progress for large updates;
+            # may need to use subprocess instead of git.Repo
+            # as GitPython only offers GIT_PYTHON_TRACE for all commands>
+            self.git.push('origin', refspec) # <TODO: self.remotes.origin.push?>
+        except exception as e:
+            err_print(e, prefix="")
+            err_print("Could not push branches {}!".format(branch_names),
+                prefix="bunsen.Workdir ERROR:")
+    # TODOXXX: Doublecheck old implementation:
+    # def push_all(self, branch_names=None):
+    #     '''
+    #     Push all (or specified) branches in the working directory.
+    #     '''
+    #     if branch_names is None:
+    #         # XXX Could also use self.branches
+    #         branch_names = [b.name for b in self._bunsen.git_repo.branches]
+    #     # TODOXXX: Doing separate push operations at the end of a long
+    #     # parsing run is risky as it may result in incomplete data
+    #     # when interrupted. Figure out something better. Is a git
+    #     # push --all with multiple branches even atomic? Or perhaps
+    #     # index branches should be updated last of all.
+    #     #
+    #     # TODO: For now, perhaps implement the following suggestion:
+    #     # - delete the .bunsen_workdir file so the workdir data isn't lost
+    #     # - print a warning about how to recover if the operation is interrupted
+    #     # - push */testlogs-* in any order
+    #     # - push */testruns-* in any order (refers to already pushed testlogs)
+    #     # - push index (refers to already pushed testlogs+testruns)
+    #     # Alternatively, if branch_names is None: git push --all origin.
+    #     for candidate_branch in branch_names:
+    #         try:
+    #             self.push_branch(candidate_branch)
+    #         except Exception: # XXX except git.exc.GitCommandError ??
+    #             # XXX This is most typically the result of a partial commit.
+    #             # May want to assemble branch names from self.branches.
+    #             warn_print("could not push branch {}".format(candidate_branch))
+
+    def push_branch(self, refspec=None):
+        """Push the current branch (or specified branch or refspec) to origin.
+
+        Args:
+            refspec (str or list, optional): Refspec, branch name, or
+                list of branch names to push to the Bunsen repo.
+        """
+        if refspec is None:
+            refspec = self.head.reference.name
+        self.push_all(refspec)
 
     def checkout_branch(self, branch_name, skip_redundant_checkout=False):
-        '''
-        Check out specified branch in the working directory.
-        '''
+        """Check out a branch in this working directory.
+
+        Will destroy any uncommitted changes in the previously checked out
+        branch (unless branch_name is already checked out and
+        skip_redundant_checkout is enabled).
+
+        Args:
+            branch_name (str): Name of branch to check out.
+            skip_redundant_checkout (bool, optional): Avoid a redundant
+                checkout operation if branch_name is already checked out.
+        """
+
         branch = None
-        # TODO: This ugly linear search is the best API I could find so far:
-        for candidate_ref in self._bunsen.git_repo.branches: # XXX self.branches also works
+        # XXX: Linear search is ugly, but it works:
+        for candidate_ref in self._bunsen.git_repo.branches:
             if candidate_ref.name == branch_name:
                 branch = candidate_ref
                 break
 
-        # if necessary, create appropriate branch based on master
+        # If necessary, create a new branch based on master:
+        # <TODO: Handle both old version of Git using 'master' and
+        # new version of Git using 'main'/'trunk'/'elephant'/???.>
         if branch is None:
-            log_print("Created new branch", branch_name, file=sys.stderr)
+            log_print("Creating new branch {}...".format(branch_name),
+                prefix="bunsen.Workdir:") # <TODO: verbosity level>
             branch = self.create_head(branch_name)
             branch.commit = 'master'
-            #branch = self.create_head(branch_name, self.git_repo.refs.master)
-            # TODO: Need to find the 'proper' GitPython equivalent for this:
             self.git.push('--set-upstream', 'origin', branch_name)
-            # TODO: ??? wd.remotes.origin.push() ???
 
-        # TODO: For an existing wd already on the correct branch, may
-        # not want to check out at this point. It might be useful to
-        # chain the outputs of one script into inputs for another one,
-        # without committing any files.
-
-        # checkout appropriate branch
         if skip_redundant_checkout and self.head.reference == branch:
+            # For an existing wd already on the correct branch, we may not want
+            # to check out at this point. For example, we could want to chain
+            # the outputs of one script into inputs for another one and only
+            # commit the final result.
             return
-        # XXX log_print("Checked out existing branch", branch_name)
 
         self.head.reference = branch
         self.head.reset(index=True, working_tree=True) # XXX destroys changes
         #branch.checkout() # XXX alternative, preserves uncommitted changes
-        self.git.pull('origin', branch_name) # TODO: Prevent non-fast-forward refs? There were some issues with this in early testing.
+        self.git.pull('origin', branch_name) # <TODO: handle non-fast-forward pulls?>
 
     def clear_files(self):
-        '''
-        Remove (almost) all files in the working directory
-        (used to commit logically distinct testlogs to the same branch).
-        '''
-        keep_files = ['.git', '.gitignore', '.bunsen_workdir']
+        """Remove almost all files in the working directory.
+
+        Keeps only .gitignore and the .bunsen_workdir lockfile.
+
+        This is used to commit log files from unrelated testsuite runs
+        as successive commits into a testlogs branch.
+        """
+        # <TODO: Ensure this also works for nested directory structures>
+        keep_files = ['.git', '.gitignore', '.bunsen_workdir'] # <TODO: Store this list in a standard location. Make into a customizable parameter?>
         if len(self.index.entries) > 0:
-            remove_files = [k for k, v in self.index.entries if k not in keep_files]
-            #dbug_print("removing", remove_files)
+            remove_files = [path
+                for path, _v in self.index.entries
+                if path not in keep_files]
+            log_print("Removing files {} from index...", remove_files,
+                prefix="bunsen.Workdir:") # <TODO: HIGH verbosity level>
             self.index.remove(remove_files)
-        # Be sure to remove any non-index files:
+
+        # Also remove any non-index files:
+        remove_files = [path
+            for path in os.listdir(self.working_tree_dir)
+            if path not in keep_files]
+        log_print("Removing non-index files {}...", remove_files,
+            prefix="bunsen.Workdir:") # <TODO: verbosity level, Will probably include the previously removed index files>
+        for path in remove_files:
+            path = os.path.join(self.working_tree_dir, path)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+
+        # Check the result:
         for path in os.listdir(self.working_tree_dir):
             if path not in keep_files:
-                os.remove(os.path.join(self.working_tree_dir,path)) # TODO: Does not handle subdirectories.
-                #shutil.rmtree(os.path.join(self.working_tree_dir,path)) # A bit extreme, but will be needed for more complex testsuites such as DynInst.
-        for path in os.listdir(self.working_tree_dir):
-            assert path in keep_files
+                raise BunsenError("BUG: file {} was not removed from working directory".format(path))
 
-    def commit_all(self, commit_msg, allow_duplicates=True):
-        '''
-        Commit all files in the working directory. Returns hexsha of the new commit.
+    # <TODO: Add option skip_empty=False>.
+    def commit_all(self, commit_msg, allow_duplicates=False):
+        """Commit almost all files in the working directory.
 
-        If allow_duplicates=False, will find a previous commit in the
-        same branch with the same files and returns its commit hexsha,
-        rather than committing again.
-        '''
+        Excludes only the .bunsen_workdir lockfile.
+
+        This is used to commit log files from unrelated testsuite runs
+        as successive commits into a testlogs branch.
+
+        Args:
+            commit_msg (str): The commit message to use.
+            allow_duplicates (bool, optional): Create a new commit even if
+                a similar commit is already present. If allow_duplicates
+                is False, try to find a previous commit in the same branch
+                with the same files and return its commit hexsha instead
+                of committing the same files again.
+            <TODO> skip_empty (bool, optional): Don't attempt to create the
+                commit if it would be empty, but instead return None.
+
+        Returns:
+            str: The hexsha of the new or already existing commit.
+        """
+
+        paths = []
         for path in os.listdir(self.working_tree_dir):
-            if path == '.bunsen_initial':
-                # Delete dummy placeholder file from master branch.
-                self.index.remove(['.bunsen_initial'])
-                os.remove(os.path.join(self.working_tree_dir,path))
-            elif path != '.git' and path != '.bunsen_workdir':
-                self.index.add([path])
+            # <TODO: This may not be necessary if clear_files() was called.>
+            # if str(path) == '.bunsen_initial':
+            #     # Remove the dummy placeholder file from master branch.
+            #     self.index.remove(['.bunsen_initial'])
+            #     os.remove(os.path.join(self.working_tree_dir,path))
+            if path != '.git' and path != '.bunsen_workdir':
+                paths.append(path)
+        log_print("Adding {} to index...".format(paths),
+            prefix="bunsen.Workdir:") # <TODO: HIGH verbosity level>
+        self.index.add(paths)
+        # <TODOXXX: Handle skip_empty here.>
+
         if not allow_duplicates:
-            index_tree = self.index.write_tree() # computes hexsha
-            # Memoize known hexshas to avoid quadratic re-scanning of branch:
+            index_tree = self.index.write_tree() # compute the tree's hexsha
+
+            # XXX When committing many testlogs, this amounts to a quadratic
+            # scan through the branch. However, the branch size is limited
+            # to approximately one month of logs (and further split with
+            # extra tags for particularly large repos).
+            # <TODO: Consider memoization again?>
             #if index_tree.hexsha in _bunsen._known_hexshas:
             #    # XXX If this takes too much memory, store just the hexsha
             #    commit = _bunsen._known_hexshas[index_tree.hexsha]
             #    warn_print("proposed commit {}\n.. is a duplicate of already existing commit {} ({})".format(commit_msg, commit.summary, commit.hexsha))
             #    return commit.hexsha
-            for commit in self.iter_commits(): # XXX iters tiny branch (~1month)
-                #dbug_print("should be active branch (not many) --", commit.hexsha)
-                #_bunsen._known_hexshas[commit.tree.hexsha] = commit
+            for commit in self.iter_commits():
                 if commit.tree.hexsha == index_tree.hexsha:
-                    warn_print("proposed commit {}\n.. is a duplicate of already existing commit {} ({}), skipping".format(commit_msg, commit.summary, commit.hexsha))
+                    log_print("Proposed commit tree {} duplicates " \
+                        "tree {} for existing commit:\n{} {}" \
+                        .format(index_tree.hexsha, commit.tree.hexsha,
+                            commit.hexsha, commit.summary),
+                        prefix="bunsen.Workdir:") # <TODO: HIGH verbosity level>
+                    log_print("Will reuse existing commit {}" \
+                        .format(commit.hexsha),
+                        prefix="bunsen.Workdir:") # <TODO: verbosity level>
                     return commit.hexsha
+
         commit = self.index.commit(commit_msg)
         return commit.hexsha
 
-    # TODO: Add a --keep option to suppress workdir destruction.
-    def destroy(self):
-        '''
-        Delete the working directory.
-        '''
-        # Additional safety check (don't destroy a non-Bunsen git checkout):
+    # <TODO: bunsen should have a --keep option to suppress automatic workdir removal>
+    def destroy(self, require_workdir=True):
+        """Delete the working directory.
+
+        Args:
+            require_workdir (bool, optional): If True, require a
+                '.bunsen_workdir' file to be present in the working directory
+                to avoid inadvertently destroying a Git working tree that
+                wasn't checked out by Bunsen. Defaults to True.
+        """
+        # Additional safety check (don't destroy a non-Bunsen Git checkout):
         files = os.listdir(self.working_tree_dir)
-        if '.git' in files and '.bunsen_workdir' in files:
+        if '.git' in files \
+            and ('.bunsen_workdir' in files or not require_workdir):
             shutil.rmtree(self.working_tree_dir)
-            return
-        warn_print(("{} doesn't look like a Bunsen workdir, " \
-                    "skip destroying it").format(self.working_tree_dir))
+        else:
+            warn_print("{} doesn't look like a Bunsen working directory (no .bunsen_workdir), skip deleting it".format(self.working_tree_dir),
+                prefix="bunsen.Workdir WARNING:")
+
+# Location of bundled analysis scripts.
+# - When running from Git checkout, use '$__file__.parent/..'.
+# - TODO: When running from installed location, use '$share/bunsen/scripts'.
+BUNSEN_SCRIPTS_DIR = Path(__file__).resolve().parent.parent
+
+# class Bunsen:
+#     """Represents a Bunsen repo.
+
+#     Provides methods to query and manage Testruns and Testlogs within the repo
+#     and to run analysis scripts.
+
+#     Attributes:
+#         base_dir (Path): Path to the top level directory of the Bunsen repo.
+#         git_repo_path (Path): Path to the Bunsen git repo.
+#             Defaults to 'bunsen.git' within base_dir.
+#         git_repo (git.Repo): A git.Repo object representing the Bunsen git repo.
+#         cache_dir (Path): Path to the Bunsen analysis cache.
+#             Defaults to 'cache' within base_dir.
+#     """
+#     pass
+
+#################################################
+# TODOXXX REWRITE BELOW TO MATCH module-design
+#################################################
+
+# TODOXXX For now, hardcode Bunsen data to live in the git checkout directory:
+bunsen_repo_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
+bunsen_default_dir = os.path.join(bunsen_repo_dir, ".bunsen")
+# OR bunsen_default_dir = os.path.join(bunsen_default_dir, "bunsen-data")
 
 class Bunsen:
     def __init__(self, bunsen_dir=None, repo=None, alternate_cookie=None):
