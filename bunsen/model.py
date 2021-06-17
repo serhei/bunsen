@@ -1178,7 +1178,7 @@ class Testrun(dict):
             if field not in self.field_types:
                 pass
             elif self.field_types[field] == 'testcases' \
-                and summary:
+                and self.summary:
                 continue # omit testcases when reading only summary
             elif self.field_types[field] == 'testcases':
                 defer_fields.append(field)
@@ -1189,7 +1189,7 @@ class Testrun(dict):
                     .format(self.field_types[field], field))
             else:
                 pass # no special processing needed
-            if summary and field == 'testcases':
+            if self.summary and field == 'testcases':
                 continue # omit testcases when reading only summary
             if field in self._cursor_commit_ids:
                 self._cursor_commit_ids[field] = value
