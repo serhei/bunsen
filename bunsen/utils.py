@@ -26,6 +26,11 @@ class BunsenError(Exception):
 # TODO: Control with bunsen verbose/non-verbose option.
 def log_print(*args, **kwargs):
     # XXX For now, consider as part of the script output.
+    prefix = ""
+    if 'prefix' in kwargs:
+        prefix = kwargs['prefix']
+        del kwargs['prefix']
+    print(prefix, end=('' if prefix == '' else ' '))
     print(*args, **kwargs)
 
 def err_print(*args, **kwargs):

@@ -24,6 +24,8 @@ import git
 from bunsen.model import *
 from bunsen.utils import *
 
+# TODOXXX: Bunsen.init_repo should create a blank 'index' branch so +list_runs works immediately
+
 # XXX: Ideally, all nasty Git trickery will be confined to this class.
 class Workdir(git.Repo):
     """Temporary clone of a Bunsen git repo.

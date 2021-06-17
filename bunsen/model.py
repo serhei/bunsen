@@ -1498,7 +1498,7 @@ class Testrun(dict):
             elif field not in self.field_types:
                 pass
             elif self.field_types[field] == 'testcases' \
-                and self.summary:
+                and summary:
                 continue # omit testcases when writing only summary
             elif self.field_types[field] == 'testcases' \
                 and isinstance(value, list):
