@@ -934,8 +934,8 @@ class Testcase(dict):
                 and not isinstance(value, Cursor) \
                 and self.parent_testrun is not None:
                 commit_id = None
-                if field in parent_testrun._cursor_commit_ids:
-                    commit_id = parent_testrun._cursor_commit_ids[field]
+                if field in self.parent_testrun._cursor_commit_ids:
+                    commit_id = self.parent_testrun._cursor_commit_ids[field]
                 value = Cursor(source=self.parent_testrun.bunsen,
                     commit_id=commit_id, from_str=value)
             elif self.field_types[field] == 'cursor' \
