@@ -58,14 +58,22 @@ def parse_README(testrun, READMEfile):
     return testrun
 
 expname_subtest_regex = re.compile(r"(?P<outcome>[A-Z]+): (?P<expname>[^:]*.exp): (?P<subtest>.*)\n?")
+outcome_subtest_regex = re.compile(r"(?P<outcome>[A-Z]+): (?P<subtest>.*)\n?")
 
+# TODOXXX Redundant with scripts-main/common:
 def get_expname_subtest(line):
     m = expname_subtest_regex.fullmatch(line)
     if m is None: return None
     return m.group('outcome'), m.group('expname'), m.group('subtest')
 
+def get_outcome_subtest(line):
+    m = outcome_subtest_regex.fullmatch(line)
+    if m is None: return None
+    return m.group('outcome'), m.group('subtest')
+
 def parse_dejagnu_sum(testrun, sumfile, all_cases=None,
-                      consolidate_pass=True, verbose=True):
+                      consolidate_pass=False, verbose=True):
+#                      consolidate_pass=True, verbose=True):
     if testrun is None: return None
     f = openfile_or_xz(sumfile)
 
@@ -80,13 +88,29 @@ def parse_dejagnu_sum(testrun, sumfile, all_cases=None,
     for cur in Cursor(sumfile, path=os.path.basename(sumfile), input_stream=f):
         line = cur.line
 
-        # XXX all lines in these GDB sumfiles are outcome lines
+        # XXX need to handle several .sum formats
+        # buildbot format :: all lines are outcome lines, include the .exp
+        # regular format :: outcome lines separated by "Running <expname>.exp ..."
+        outcome, expname, subtest = None, None, None
         info = get_expname_subtest(line)
-        if info is None: continue
-        outcome, expname, subtest = info
-        if all_cases is not None: all_cases.append(line)
+        if info is not None:
+            outcome, expname, subtest = info
+        elif (line.startswith("Running") and ".exp ..." in line):
+            outcome = None
+            expname = get_running_exp(line)
+        else:
+            info = get_outcome_subtest(line)
+            if info is not None:
+                outcome, subtest = info
 
-        if expname != last_exp and last_exp is not None:
+        # XXX these situations mark an .exp boundary:
+        finished_exp = False
+        if expname != last_exp and expname is not None and last_exp is not None:
+            finished_exp = True
+        elif "Summary ===" in line:
+            finished_exp = True
+
+        if finished_exp:
             running_cur.line_end = cur.line_end-1
             if consolidate_pass and last_test_passed:
                 testrun.add_testcase(name=last_exp,
@@ -105,13 +129,23 @@ def parse_dejagnu_sum(testrun, sumfile, all_cases=None,
                                      outcome=outcome,
                                      subtest=failed_subtest,
                                      origin_sum=cursor)
-        if expname != last_exp:
+
+        if expname is not None and expname != last_exp:
             last_exp = expname
             running_cur = Cursor(start=cur)
             last_test_passed = False
             last_test_failed = False
             failed_subtests = []
             passed_subtests = []
+
+        if outcome is None:
+            continue
+        # XXX The line contains a test outcome.
+        synth_line = line
+        if all_cases is not None and expname is None:
+            # XXX force embed the expname into the line for later annotation code
+            synth_line = str(outcome) + ": " + last_exp + ": " + str(subtest)
+        all_cases.append(synth_line)
 
         # TODO: Handle other dejagnu outcomes if they show up:
         if line.startswith("FAIL: ") \
@@ -291,6 +325,8 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
 
     testrun.arch = grok_architecture(native_configuration_is)
     # XXX testrun.osver should be extracted from buildbot repo path
+    #if 'osver' not in testrun:
+    #    testrun.osver = '<unknown>' # TODO enable for dry-run parser test
     testrun.version = gdb_version
     testrun.year_month = year_month
 
