@@ -1034,7 +1034,7 @@ class Testcase(dict):
             return serialized_testcase
         elif pretty:
             indent = pretty if isinstance(pretty,int) else 4
-            return json_dumps(serialized_testcase, indent=indent)
+            return json.dumps(serialized_testcase, indent=indent)
         else:
             return json.dumps(serialized_testcase)
 
@@ -1514,7 +1514,7 @@ class Testrun(dict):
             return serialized
         elif pretty:
             indent = pretty if isinstance(pretty,int) else 4
-            return json_dumps(serialized, indent=indent)
+            return json.dumps(serialized, indent=indent)
         else:
             return json.dumps(serialized)
 
