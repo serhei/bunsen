@@ -42,7 +42,7 @@ def err_print(*args, **kwargs):
     Args:
         prefix: custom prefix to use instead of 'bunsen ERROR:'.
     """
-    prefix = "{} ERROR:".format(sys.argv[0])
+    prefix = "{} ERROR:".format(os.path.basename(sys.argv[0]))
     if 'prefix' in kwargs:
         prefix = kwargs['prefix']
         del kwargs['prefix']
@@ -58,7 +58,7 @@ def warn_print(*args, **kwargs):
     Args:
         prefix: custom prefix to use instead of 'bunsen WARNING:'.
     """
-    prefix = "{} WARNING:".format(sys.argv[0])
+    prefix = "{} WARNING:".format(os.path.basename(sys.argv[0]))
     if 'prefix' in kwargs:
         prefix = kwargs['prefix']
         del kwargs['prefix']
