@@ -9,6 +9,7 @@
 import os
 import sys
 from pathlib import Path, PurePath
+import subprocess
 
 # TODO progress uses tqdm when printing to console, suppresses output otherwise
 # TODO add colorization for console printing
@@ -89,7 +90,7 @@ def git_toplevel():
     Obtains the path reported by 'git rev-parse --show_toplevel'."""
     rc = subprocess.run(["git", "rev-parse", "--show-toplevel"],
                         capture_output=True)
-    return rc.stdout.strip()
+    return str(rc.stdout.strip())
 
 def sanitize_path(target_path, base_path):
     """Clean up target_path and ensure it is inside base_path
