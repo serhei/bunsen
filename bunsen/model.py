@@ -17,6 +17,8 @@ from pathlib import Path, PurePath
 import tarfile
 import shutil
 
+import git.exc
+
 from bunsen.utils import *
 from bunsen.version import __version__
 
@@ -159,8 +161,13 @@ class Index:
                 data_stream = self._index_source
             yield (path, data_stream)
         else:
-            commit = self._bunsen.git_repo.commit('index')
-            for blob in commit.tree:
+            try:
+                commit = self._bunsen.git_repo.commit('index')
+                tree = commit.tree
+            except git.exc.BadName:
+                warn_print("no branch 'index', the Bunsen repo is empty (or invalid)")
+                tree = []
+            for blob in tree:
                 m = indexfile_regex.fullmatch(blob.path)
                 if m is not None and m.group('project') == self.project:
                     yield (blob.path, commit.tree[blob.path].data_stream)
