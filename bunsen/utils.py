@@ -13,19 +13,24 @@ import subprocess
 
 # TODO progress uses tqdm when printing to console, suppresses output otherwise
 # TODO add colorization for console printing
-
 # TODO consider using a Python logging framework instead of this stuff (?)
-
-# TODO log_print prints to stdout when printing non-html, stderr otherwise
-# TODOXXX log_print takes verbosity levels
 
 class BunsenError(Exception):
     def __init__(self, msg):
         self.msg = msg
 
-# TODOXXX edit to match other _print methods
 # TODO: Control with bunsen verbose/non-verbose option.
+# TODO log_print prints to stdout when printing non-html, stderr otherwise
+# TODOXXX log_print takes verbosity levels
 def log_print(*args, **kwargs):
+    """
+    Print an ordinary log message to standard output.
+
+    Supports the same arguments are 'print'.
+
+    Args:
+        prefix (optional): optional prefix for the message.
+    """
     # XXX For now, consider as part of the script output.
     prefix = ""
     if 'prefix' in kwargs:
@@ -36,12 +41,12 @@ def log_print(*args, **kwargs):
 
 def err_print(*args, **kwargs):
     """
-    Print an error message.
+    Print an error message to standard error.
 
     Supports the same arguments as 'print'.
 
     Args:
-        prefix: custom prefix to use instead of 'bunsen ERROR:'.
+        prefix (optional): custom prefix to use instead of 'bunsen ERROR:'.
     """
     prefix = "{} ERROR:".format(os.path.basename(sys.argv[0]))
     if 'prefix' in kwargs:
@@ -52,12 +57,12 @@ def err_print(*args, **kwargs):
 
 def warn_print(*args, **kwargs):
     """
-    Print an error message.
+    Print a warning message to standard error.
 
     Supports the same arguments as 'print'.
 
     Args:
-        prefix: custom prefix to use instead of 'bunsen WARNING:'.
+        prefix (optional): custom prefix to use instead of 'bunsen WARNING:'.
     """
     prefix = "{} WARNING:".format(os.path.basename(sys.argv[0]))
     if 'prefix' in kwargs:
@@ -70,6 +75,14 @@ def warn_print(*args, **kwargs):
 # TODO: Control with bunsen debug option.
 # TODO dbug_print prints to stderr, checks Bunsen settings -- or combine with log_print and set verbosity level?
 def dbug_print(*args, **kwargs):
+    """
+    Print a debugging message to standard error.
+
+    Supports the same arguments are 'print'.
+
+    Args:
+        prefix (optional): custom prefix to use instead of 'DEBUG:'.
+    """
     prefix = "DEBUG:"
     if 'prefix' in kwargs:
         prefix = kwargs['prefix']
@@ -78,7 +91,7 @@ def dbug_print(*args, **kwargs):
         print(prefix, file=sys.stderr, end=('' if prefix == '' else ' '))
         print(file=sys.stderr, *args, **kwargs)
 
-# TODOXXX is this used or replaced?
+# TODO: Gradually replace this with Path methods.
 def basedirname(path):
     """Return the directory path one level up from os.path.basename."""
     dir = os.path.dirname(path)
