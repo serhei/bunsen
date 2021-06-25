@@ -154,11 +154,11 @@ def bunsen_gorilla():
 # Command Line Interface
 
 def sub_init(parser, args):
-    b = Bunsen(repo=args.repo)
+    b = Bunsen(repo=args.repo, script_name="init")
     bunsen_init(b)
 
 def sub_checkout(parser, args):
-    b = Bunsen(repo=args.repo, alternate_cookie=str(os.getppid()))
+    b = Bunsen(repo=args.repo, alternate_cookie=str(os.getppid()), script_name="checkout_wd")
     branch_name = args.branch
     bunsen_checkout_wd(b, branch_name)
 
@@ -186,7 +186,7 @@ def sub_run(parser, args):
     if not invocations:
         parser.error("No invocations found " + \
                     "(hint: 'bunsen run +script' not 'bunsen run script').")
-    b = Bunsen(repo=args.repo)
+    b = Bunsen(repo=args.repo, script_name=None) # script_name set in child process
     for invocation in invocations:
         scriptname = invocation[0]
         invocation_args = invocation[1:]
