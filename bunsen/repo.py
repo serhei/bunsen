@@ -20,6 +20,7 @@ import tarfile
 import shutil
 import subprocess
 import git
+import git.exc
 
 from bunsen.model import *
 from bunsen.utils import *
@@ -708,137 +709,339 @@ class Bunsen:
 
     @property
     def tags(self):
-        '''
-        Find the list of log categories in the repo.
-        '''
-        found_testruns = {} # found <tag>/testruns-<yyyy>-<mm>-<extra>
-        found_testlogs = {} # found <tag>/testlogs-<yyyy>-<mm>-<extra>
+        """Deprecated. Use Bunsen.projects() instead."""
+        return self.projects
+
+    @property
+    def projects(self):
+        """List of names of projects in the repo."""
+
+        # XXX: We could cache this data at the risk of it becoming out-of-date
+        # when the repository is modified. Recomputing is tolerably quick.
+
+        found_testruns = set() # found <tag>/testruns-<yyyy>-<mm>(-<extra>)?
+        found_testlogs = set() # found <tag>/testruns-<yyyy>-<mm>(-<extra>)?
         for candidate_branch in self.git_repo.branches:
             m = branch_regex.fullmatch(candidate_branch.name)
-            if m is not None:
-                tag = m.group('project')
-                if m.group('kind') == 'runs':
-                    found_testruns[tag] = True
-                if m.group('kind') == 'logs':
-                    found_testlogs[tag] = True
+            if m is None:
+                continue
+            project = m.group('project')
+            if m.group['kind'] == 'runs':
+                found_testruns.add(project)
+            if m.group['kind'] == 'logs':
+                found_testlogs.add(project)
 
-        found_tags = []
+        found_projects = []
         warned_indexfiles = False
-        for tag in found_testruns.keys():
-            if tag in found_testlogs:
-                # Check for a master index file in index branch:
-                commit = self.git_repo.commit('index')
-                #dbug_print("found index commit", commit.hexsha, commit.summary) # check for HEAD in index
-                found_index = False
-                for blob in commit.tree:
-                    m = indexfile_regex.fullmatch(blob.path)
-                    if m is not None and m.group('project') == tag:
-                        #dbug_print("found indexfile", blob.path)
-                        found_index = True
-                if found_index:
-                    found_tags.append(tag)
-                elif not warned_indexfiles:
-                    warn_print(("found tag {} but no indexfiles "
-                                "in branch index").format(tag))
-                    warned_indexfiles = True
+        for project in found_testruns:
+            if project not in found_testlogs:
+                continue
 
-        return found_tags
+            # Check for a master index file in the index branch:
+            commit = self.git_repo.commit('index')
+            found_index = False
+            for blob in commit.tree:
+                m = indexfile_regex.fullmatch(blob.path)
+                if m is not None and m.group('project') == project:
+                    found_index = True
+                    break
+            if found_index:
+                found_projects.append(projects)
+            elif not warned_indexfiles:
+                warn_print("found project '{}' but no indexfiles in branch index" \
+                    .format(project))
+                warned_indexfiles = True
+
+        return found_projects
 
     def commit_tag(self, commit_id=None, commit=None):
-        '''
-        Find the (tag, year_month) pair for a commit in the repo.
-        '''
+        """Return (project, year_month, extra_label) for a testlogs commit.
+
+        Each testlogs commit is tagged with a project, a year_month, and
+        an optional extra_label which are used to select the branch
+        where it should be stored.
+
+        Args:
+            commit_id (str, optional): Hexsha of the testlogs commit.
+            commit (git.objects.commit.Commit, optional): GitPython Commit
+                object representing the testlogs commit. Can be provided
+                instead of commit_id, in which case the commit_id argument
+                is ignored.
+        """
         if commit is None:
             assert commit_id is not None
             commit = self.git_repo.commit(commit_id)
-            #dbug_print("found commit_tag commit", commit.hexsha, commit.summary)
-        m = commitmsg_regex.fullmatch(commit.summary)
-        tag = m.group('project')
-        year_month = m.group('year_month')
-        return tag, year_month
 
-    def testruns(self, tag, key_function=None, reverse=False):
-        '''
-        Create an Index object for a log category in the repo.
-        '''
+        # The testlogs branch does not include testrun metadata,
+        # (and should not, since the metadata can be updated separately)
+        # so we use one of two strategies to find the tag.
+
+        # (1) Use git branch --contains to find the branch of this commit:
+        branches = self.git_repo.git \
+            .branch('--contains', commit.hexsha) \
+            .split('\n')
+        if len(branches) > 0:
+            warn_print("Testlogs commit {} is present in multiple branches {}" \
+                .format(commit.hexsha, branches))
+        for branch in branches:
+            m = branch_regex.search(branch)
+            if m is None:
+                continue
+            project = m.group('project')
+            year_month = m.group('year_month')
+            extra_label = m.group('extra_label')
+            return project, year_month, extra_label
+
+        # (2) Fallback: Parse commit message, which usually includes the tag:
+        m = commitmsg_regex.fullmatch(commit.summary)
+        if m is None:
+            raise BunsenError("could not find branch name for commit {}" \
+                .format(commit.hexsha))
+        project = m.group('project')
+        year_month = m.group('year_month')
+        extra_label = m.group('extra_label')
+        return project, year_month, extra_label
+
+    def testruns(self, project, key_function=None, reverse=False):
+        """Return an Index object for the specified project in this Bunsen repo.
+
+        More complex queries are supported by BunsenCommand.
+
+        Args:
+            project: The name of the project for which to return an Index.
+            key_function (optional): Sort the index according to
+                key_function applied to the Testrun objects.
+            reverse (bool, optional): Iterate in reverse of the usual order.
+        """
         return Index(self, tag, key_function=key_function, reverse=reverse)
 
-    def full_testrun(self, testrun_or_commit_id, tag=None, summary=False):
-        return self.testrun(testrun_or_commit_id, tag, summary)
 
-    def testrun(self, testrun_or_commit_id, tag=None, summary=False):
-        '''
-        Create a Testrun object from a json file in the repo.
-        '''
-        bunsen_testruns_branch = None
-        if isinstance(testrun_or_commit_id, Testrun) \
-           and 'bunsen_testruns_branch' in testrun_or_commit_id:
-            bunsen_testruns_branch = testrun_or_commit_id.bunsen_testruns_branch
-        commit_id = testrun_or_commit_id.bunsen_commit_id \
-            if isinstance(testrun_or_commit_id, Testrun) else testrun_or_commit_id
+    def testrun(self, testrun_or_commit_id, project=None,
+                summary=False, raise_error=True):
+        """Retrieve a Testrun from the repo.
 
-        commit = self.git_repo.commit(commit_id)
-        testlog_hexsha = commit.hexsha
-        #dbug_print("found testlog commit", testlog_hexsha, commit.summary)
-        alt_tag, year_month = self.commit_tag(commit=commit)
-        tag = tag or alt_tag
+        <TODO: More complex queries should be supported by BunsenOptions.>
 
-        # XXX Search branches with -<extra>, prefer without -<extra>:
-        if bunsen_testruns_branch is not None:
-            possible_branch_names = [bunsen_testruns_branch]
+        Args:
+            testrun_or_commit_id (Testrun or str): The bunsen_commit_id
+                or Testrun object (presumably a summary Testrun)
+                corresponding to the Testrun that should be retrieved.
+            project (str, optional): The name of the project the retrieved
+                Testrun should belong to. Necessary if retrieving by commit id
+                and the same bunsen_commit_id has several associated testruns
+                in different projects. Will override any project value
+                specified by testrun_or_commit_id.
+            summary (bool, optional): If True, strip the 'testcases' field
+                from the Testrun and return a summary Testrun only.
+                <TODO: Testrun() should strip other fields if other fields
+                are of testcases type.>
+            raise_error (bool, optional): If True, raise a BunsenError if
+                the Testrun was not found in the repo.
+                If False, return None in that case.
+                Defaults to True.
+        """
+        testrun_summary = None
+        bunsen_commit_id = None
+        candidate_branches = []
+        year_month = None
+        extra_label = None
+        # have {testrun_or_commit_id, maybe project}
+
+        if isinstance(testrun_or_commit_id, Testrun):
+            testrun_summary = testrun_or_commit_id
         else:
-            # TODOXXX: If bunsen_testruns_branch is not specified, should try to read json from the commit's commit_msg.
-            # XXX If bunsen_testruns_branch is not specified and the commit's commit_msg has no json, the final (slow) fallback will search *all* branches with -<extra>
-            # while preferring the branch without -<extra>.
-            # This creates visible latency in analysis scripts.
-            default_branch_name = tag + '/testruns-' + year_month
-            possible_branch_names = [default_branch_name]
-            for branch in self.git_repo.branches:
-                if branch.name != default_branch_name \
-                   and branch.name.startswith(default_branch_name):
-                    possible_branch_names.append(branch.name)
-        for branch_name in possible_branch_names:
+            bunsen_commit_id = testrun_or_commit_id
+        if testrun_summary is not None and 'bunsen_commit_id' in testrun_summary:
+            bunsen_commit_id = testrun_summary.bunsen_commit_id
+        if bunsen_commit_id is None:
+            raise BunsenError("no bunsen_commit_id provided in Testrun lookup")
+        # have {maybe testrun_summary, bunsen_commit_id, maybe project}
+
+        # Use one of several strategies to find project, candidate_branches:
+        candidate_branches = []
+
+        # Option 1a: get project,bunsen_testruns_branch from testrun_summary.
+        if testrun_summary is not None \
+            and 'bunsen_testruns_branch' in testrun_summary:
+            testrun_project, testrun_year_month, testrun_extra_label = \
+                testrun_summary.commit_tag()
+            if project is None: project = testrun_project
+            if project == testrun_project:
+                candidate_branches.append(testrun_summary.bunsen_testruns_branch)
+            else:
+                year_month, extra_label = \
+                    testrun_year_month, testrun_extra_label
+                # XXX compute candidate_branches manually below
+
+        # Option 1b: get project,year_month from testrun_summary.
+        elif project is None and testrun_summary is not None:
+            testrun_project, testrun_year_month, testrun_extra_label = \
+                testrun_summary.commit_tag()
+            if project is None: project = testrun_project
+            year_month = testrun_year_month
+            # XXX ignore extra_label -- as a field, it would refer to testlogs
+            # XXX compute candidate_branches manually below
+
+        # Option 2: get project,bunsen_testruns_branch from commit message JSON
+        extra_info = None
+        if project is None:
+            commit = self.git_repo.commit(bunsen_commit_id)
+            msg = commit.message
+            t1 = msg.rfind(INDEX_SEPARATOR) + len(INDEX_SEPARATOR)
+            msg = msg[t1:]
+            extra_info = Testrun(self, from_json=msg, summary=summary)
+        if project is None and extra_info is not None \
+            and 'bunsen_testruns_branch' in extra_info:
+            testrun_project, testrun_year_month, testrun_extra_label = \
+                extra_info.commit_tag()
+            project = testrun_project
+            candidate_branches.append(testrun_summary.bunsen_testruns_branch)
+
+        # Option 3: get project,year_month from commit message header.
+        if project is None:
+            commit_project, commit_year_month, commit_extra_label = \
+                self.commit_tag(bunsen_commit_id)
+            project = commit_project
+            year_month = commit_year_month
+            # XXX ignore extra_label
+            # XXX compute candidate_branches manually below
+
+        if project is None:
+            raise BunsenError("no project provided in Testrun lookup")
+
+        # Fallback: a value for candidate_branches was not specified explicitly,
+        # or the project was overridden by the project argument;
+        # we need to construct the branch name manually from the commit_tag:
+        if len(candidate_branches) == 0 and year_month is not None:
+            default_branch_name = '{}/testruns-{}'.format(project, year_month)
+            if extra_label is not None:
+                default_branch_name += '-' + extra_label
+            candidate_branches.append(default_branch_name)
+            # In rare cases we may want to store testrun data in separate
+            # branches with an extra_label. In this case our fallback must
+            # search through all branch names prefixed by default_branch_name.
+            if extra_label is None:
+                for branch in self.git_repo.branches:
+                    if branch_name != default_branch_name \
+                        and branch.name.startswith(default_branch_name):
+                        possible_branch_names.append(branch_name)
+
+        # need {bunsen_commit_id, project, candidate_branches matching project}
+        blob = None
+        for branch_name in candidate_branches:
             try:
                 commit = self.git_repo.commit(branch_name)
-            except Exception: # XXX except gitdb.exc.BadName
-                continue
-            #dbug_print("found testrun commit", commit.hexsha, commit.summary) # check for HEAD in branch_name
+            except git.exc.BadName: # XXX gitdb.exc.BadName
+                continue # skip any nonexistent branch
             try:
-                blob = commit.tree[tag + '-' + testlog_hexsha + '.json']
+                json_path = '{}-{}.json'.format(project, bunsen_commit_id)
+                blob = commit.tree[json_path]
                 break
             except KeyError:
                 continue
+        if blob is None:
+            if raise_error:
+                raise BunsenError("no Testrun with project '{}', " \
+                    "bunsen_commit_id '{}'" \
+                    .format(project, bunsen_commit_id))
+            return None
+
         return Testrun(self, from_json=blob.data_stream.read(), summary=summary)
+    # TODOXXX OLD IMPLEMENTATION, need to doublecheck
+        # bunsen_testruns_branch = None
+        # if isinstance(testrun_or_commit_id, Testrun) \
+        #    and 'bunsen_testruns_branch' in testrun_or_commit_id:
+        #     bunsen_testruns_branch = testrun_or_commit_id.bunsen_testruns_branch
+        # commit_id = testrun_or_commit_id.bunsen_commit_id \
+        #     if isinstance(testrun_or_commit_id, Testrun) else testrun_or_commit_id
 
-    def testlog(self, testlog_id, commit_id=None, parse_commit_id=True):
-        '''
-        Create a Testlog object from a log file. Supports the following:
-        - testlog_id='<path>', commit_id=None -- <path> outside repo;
-        - testlog_id='<path>', commit_id='<commit>' -- <path> in <commit>;
-        - testlog_id='<commit>:<path>', commit_id=None -- <path> in <commit>,
-          only if parse_commit_id is enabled.
-        '''
-        if parse_commit_id and ':' in testlog_id and commit_id is None:
-            commit_id, _sep, testlog_path = testlog_id.partition(':')
-        else:
-            testlog_path = testlog_id
+        # commit = self.git_repo.commit(commit_id)
+        # testlog_hexsha = commit.hexsha
+        # #dbug_print("found testlog commit", testlog_hexsha, commit.summary)
+        # alt_tag, year_month, extra_label = self.commit_tag(commit=commit) # TODOXXX use extra_label
+        # tag = tag or alt_tag
 
+        # # XXX Search branches with -<extra>, prefer without -<extra>:
+        # if bunsen_testruns_branch is not None:
+        #     possible_branch_names = [bunsen_testruns_branch]
+        # else:
+        #     # TODOXXX: If bunsen_testruns_branch is not specified, should try to read json from the commit's commit_msg.
+        #     # XXX If bunsen_testruns_branch is not specified and the commit's commit_msg has no json, the final (slow) fallback will search *all* branches with -<extra>
+        #     # while preferring the branch without -<extra>.
+        #     # This creates visible latency in analysis scripts.
+        #     default_branch_name = tag + '/testruns-' + year_month
+        #     possible_branch_names = [default_branch_name]
+        #     for branch in self.git_repo.branches:
+        #         if branch.name != default_branch_name \
+        #            and branch.name.startswith(default_branch_name):
+        #             possible_branch_names.append(branch.name)
+        # for branch_name in possible_branch_names:
+        #     try:
+        #         commit = self.git_repo.commit(branch_name)
+        #     except Exception: # XXX except gitdb.exc.BadName
+        #         continue
+        #     #dbug_print("found testrun commit", commit.hexsha, commit.summary) # check for HEAD in branch_name
+        #     try:
+        #         blob = commit.tree[tag + '-' + testlog_hexsha + '.json']
+        #         break
+        #     except KeyError:
+        #         continue
+        # return Testrun(self, from_json=blob.data_stream.read(), summary=summary)
+
+    # <TODO: Go through the scripts and change
+    #     testrun = ...
+    #     testrun = b.full_testrun(testrun)
+    # to
+    #     testrun_summary = ...
+    #     testrun = b.full_testrun(testrun_summary)
+    # for further readability.>
+    #
+    # <TODO: Testrun class should have a summary testrun
+    # load 'testcases' on demand, when the field is accessed.
+    # Then the above pattern is not necessary.>
+    def full_testrun(self, testrun_or_commit_id, project=None, summary=False):
+        """Given a summary Testrun, retrieve the corresponding full Testrun.
+
+        (This method is an alias of testrun(), provided for readability.)
+        """
+        return self.testrun(testrun_or_commit_id, project, summary)
+
+    def testlog(self, testlog_path, commit_id=None,
+                input_stream=None):
+        """Retrieve Testlog from repo or create Testlog for external log file.
+
+        <TODO: More complex queries should be supported by BunsenOptions.>
+
+        <TODO> BunsenOptions query should suppoert
+        testlog_id='<commit>:<path>', commit_id=None -- <path> in <commit>.
+
+        Args:
+            testlog_path (str or Path or PurePath): Path of the log file
+                within the Bunsen git tree,
+                or path to an external log file.
+            commit_id (str, optional): Commit which stores the log file
+                within a testlogs branch of the Bunsen git repo,
+                or None for an external log file.
+            input_stream (optional): Seekable stream for an external log file.
+        """
         if commit_id is None:
-            return Testlog(self, path=testlog_id)
-
+            return Testlog(self, path=testlog_path, input_stream=input_stream)
+        assert input_stream is None # no input_stream for a testlog in the repo
         commit = self.git_repo.commit(commit_id)
-        #dbug_print("found testlog commit", commit.hexsha, commit.summary)
         blob = commit.tree[testlog_path]
         return Testlog(self, path=testlog_path, commit_id=commit_id, blob=blob)
 
-    def _testlog_readlines(self, testlog_path, commit_id):
-        if (testlog_path, commit_id) not in self._testlog_lines:
-            commit = self.git_repo.commit(commit_id)
-            blob = commit.tree[testlog_path]
-            lines = blob.data_stream.read().decode('utf8').split('\n')
-            #lines = blob.data_stream.readlines()
-            self._testlog_lines[(testlog_path, commit_id)] = lines
-        return self._testlog_lines[(testlog_path, commit_id)]
+    # Provides a way for separate Testlogs referencing the same log file
+    # to avoid redundant reads of that log file:
+    def _testlog_readlines(self, commit_id, path):
+        if (commit_id, path) in self._testlog_lines:
+            return self._testlog_lines[(commit_id, path)]
+        commit = self.git_repo.commit(commit_id)
+        blob = commit.tree[path]
+        lines = readlines_decode(blob.data_stream, must_decode=False)
+        # XXX to localize errors, decode utf-8 later in Testlog.line()
+        self._testlog_lines[(commit_id, path)] = lines
+        return self._testlog_lines[(commit_id, path)]
 
     ############################################
     # Methods for adding testlogs and testruns #

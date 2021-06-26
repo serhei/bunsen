@@ -138,7 +138,7 @@ def readlines_decode(data_stream, must_decode=True):
             been decoded to a string. If False, in some cases a readlines()
             method may return a list of byte strings instead. This is useful
             for recovery from UnicodeDecodeError since a malformed line
-            can be skipped without discarding the remainder of the file.
+            can be skipped without discarding the entirety of the file.
     """
     if hasattr(data_stream,'readlines') and \
         callable(getattr(data_stream,'readlines')):

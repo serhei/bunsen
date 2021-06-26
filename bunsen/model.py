@@ -164,7 +164,7 @@ class Index:
             try:
                 commit = self._bunsen.git_repo.commit('index')
                 tree = commit.tree
-            except git.exc.BadName:
+            except git.exc.BadName: # XXX gitdb.exc.BadName
                 warn_print("no branch 'index', the Bunsen repo is empty (or invalid)")
                 tree = []
             for blob in tree:
@@ -249,7 +249,7 @@ class Testlog:
             blob (git.objects.blob.Blob): A GitPython Blob object for this log file,
                 or None for an external log file.
             input_path: Path to an external log file.
-            input_stream: A seekable stream for an external log file.
+            input_stream: Seekable stream for an external log file.
         """
 
         self._bunsen = bunsen
@@ -402,11 +402,8 @@ class Testlog:
 
     def _get_commit_tag(self):
         if self._bunsen is not None and self.commit_id is not None:
-            # TODOXXX OLD VERSION, need to update Bunsen class
-            self._project, self._year_month = self._bunsen.commit_tag(self.commit_id)
-            # TODOXXX NEW VERSION
-            # self._project, self._year_month, self._extra_label = \
-            #     self._bunsen.commit_tag(self.commit_id)
+            self._project, self._year_month, self._extra_label = \
+                self._bunsen.commit_tag(self.commit_id)
 
     @property
     def project(self):
@@ -662,7 +659,7 @@ class Cursor:
 
         input_stream = self._delay_input_stream
 
-        testlog = source.testlog(path, commit_id, parse_commit_id=False, input_stream=input_stream)
+        testlog = source.testlog(path, commit_id, input_stream=input_stream)
         start = int(m.group('start'))
         end = int(m.group('end')) if m.group('end') is not None else start
 
