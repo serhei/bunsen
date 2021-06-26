@@ -318,10 +318,15 @@ class Bunsen:
         git_repo (git.Repo): A git.Repo object representing the Bunsen git repo.
         cache_dir (Path): Path to the Bunsen analysis cache. 
             Defaults to 'cache' within base_dir.
+        scripts_search_path (list of Path): Paths that will be searched to
+            find a Bunsen analysis script.
+        default_pythonpath (list of Path): Library paths for the Bunsen
+            analysis script invocation.
     """
 
     def __init__(self, base_dir=None, args=None, script_name=None,
                  options=None, old_default_options=None,
+                 required_args=[], optional_args=[],
                  repo=None, alternate_cookie=None):
         """Initialize an object representing a Bunsen repo.
 
@@ -361,7 +366,13 @@ class Bunsen:
                 and extended with any missing default values.
             old_default_options (dict, optional): To be deprecated.
                 A description of the expected default options in the old
-                cmdline_args format.
+                cmdline_args() format.
+            required_args (list of str, optional): List of required
+                command line arguments, which can be specified as positional
+                arguments.
+            optional_args (list of str, optional): List of optional
+                command line arguments, which can be specified
+                as positional arguments after required_args.
             repo (git.Repo, optional): A git.Repo object which will be
                 used as the Bunsen git repo.
             alternate_cookie (str, optional): A string to append to
@@ -425,9 +436,11 @@ class Bunsen:
 
         # (3) Parse command line arguments:
         if args is not None:
-            # <TODOXXX> for from_cmdline: Pass required_args, optional_args here:
             # TODO: Better option to configure allow_unknown here, e.g. self._opts.script_name == 'run'
-            self._opts.parse_cmdline(args, allow_unknown=(self._opts.script_name is None))
+            self._opts.parse_cmdline(args,
+                                     required_args,
+                                     optional_args,
+                                     allow_unknown=(self._opts.script_name is None))
 
         # (4) Identify Bunsen repo location:
         if base_dir is not None:
@@ -492,8 +505,8 @@ class Bunsen:
             self.scripts_search_path = extra_paths + self.scripts_search_path
         self._opts.scripts_search_path = self.scripts_search_path
 
-        # <TODO>: Old calculations, replace when improving run_script:
-        self.default_pythonpath = [str(BUNSEN_SCRIPTS_DIR)]
+        # <TODO>: Old calculations, replace when improving run_script?
+        self.default_pythonpath = [BUNSEN_SCRIPTS_DIR]
         # XXX Search recursively for 'scripts-' directories,
         # e.g. .bunsen/scripts-internal/scripts-main
         search_path = self.scripts_search_path
@@ -512,7 +525,7 @@ class Bunsen:
                        or candidate_dir.startswith('modules_'):
                         if not os.path.isdir(candidate_path):
                             continue
-                        self.default_pythonpath.append(candidate_path)
+                        self.default_pythonpath.append(Path(candidate_path))
                         next_search_path.append(candidate_path)
             search_path = next_search_path
         # TODO: Also allow invoking Python scripts from shell scripts via $PATH.
@@ -570,10 +583,12 @@ class Bunsen:
 
     @property
     def script_name(self):
-        """The name of the command or analysis script being invoked on this repo.
+        """The name of the command or analysis script being invoked on this
+        repo.
 
-        Will be None in the parent Bunsen process that is forking an analysis script.
-        TODO: Probably better to have it be 'run' in that case?
+        Will be None in the parent Bunsen process that is forking an
+        analysis script. TODO: Probably better to have it be 'run' in
+        that case?
         """
         return self._opts.script_name
 
@@ -643,6 +658,49 @@ class Bunsen:
             self._opts.print_help()
             exit()
         return opts
+
+    @classmethod
+    def from_cmdline(cls, args=None, required_args=[], optional_args=[],
+                     script_name=None):
+        """Initialize objects representing a Bunsen repo and command invocation.
+
+        This method takes a set of command line arguments.
+
+        Args:
+            args (list of str): command line options for the command
+                or analysis script being invoked.
+            required_args (list of str, optional): List of required
+                command line arguments, which can be specified as positional
+                arguments.
+            optional_args (list of str, optional): List of optional
+                command line arguments, which can be specified
+                as positional arguments after required_args.
+            script_name (str, optional): name of the command
+                or analysis script being invoked.
+
+        Returns:
+            Bunsen, BunsenOptions
+        """
+        b = Bunsen(args=args,
+                   required_args=required_args, optional_args=optional_args,
+                   script_name=script_name)
+        b._opts._show_results() # TODOXXX for debugging purposes
+        return b, b._opts
+
+    @classmethod
+    def from_cgi_query(cls, form):
+        """Initialize objects representing a Bunsen repo and command invocation.
+
+        This method takes a set of arguments from a CGI query.
+
+        Args:
+            form (cgi.FieldStorage): CGI form arguments for the command
+                or analysis script being invoked.
+        """
+        # <TODO: Configure Bunsen input/output for CGI logging.>
+        b = Bunsen()
+        b._opts.parse_cgi_query(form)
+        return b, b._opts
 
     ##############################################
     # Methods for querying testlogs and testruns #
@@ -1233,7 +1291,7 @@ class Bunsen:
         script_env['PATH'] = str(BUNSEN_SCRIPTS_DIR) + ":" + os.environ['PATH']
 
         # TODO: Configure only when script is written in Python?
-        script_env['PYTHONPATH'] = ':'.join(self.default_pythonpath)
+        script_env['PYTHONPATH'] = ':'.join([str(p) for p in self.default_pythonpath])
 
         if hostname == 'localhost':
             # TODO Need to add some job control to handle long-running
