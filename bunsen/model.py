@@ -1356,7 +1356,7 @@ class Testrun(dict):
                 Testrun, only if one is not already specified.
             cleanup_metadata (bool, optional): If True, modify this
                 Testrun for serialization in the Bunsen Git repo.
-                In particular, removee any (project, year_month, extra_label)
+                In particular, remove any (project, year_month, extra_label)
                 fields and create (if not alreay present) a single
                 bunsen_testruns_branch field containing the same information.
                 Raise a BunsenError if any problems will prevent the Testrun

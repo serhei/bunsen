@@ -240,7 +240,7 @@ def commit_logs(b, wd, *args, **kwargs):
 
     # XXX To avoid huge working copies, use branch_extra to split testruns branches by source buildbot:
     if 'osver' in testrun:
-        commit_id = b.commit(opts.tag, wd=wd, push=False, allow_duplicates=False, branch_extra=testrun.osver)
+        commit_id = b.commit(opts.tag, wd=wd, push=False, allow_duplicates=False, extra_label=testrun.osver)
     else:
         # TODOXXX Need to extract osver more diligently for tarfile submissions:
         commit_id = b.commit(opts.tag, wd=wd, push=False, allow_duplicates=False)
