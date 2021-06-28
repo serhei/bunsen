@@ -100,6 +100,7 @@ class PrettyPrinter:
             return
 
         info = dict(testrun)
+        info['project'], info['year_month'], info['extra_label'] = testrun.commit_tag()
         info['project'] = testrun.get_project_name()
         info.update(kwargs)
 
@@ -545,6 +546,7 @@ function details(s) {
 
     def testrun_row(self, testrun, header_fields=[], **kwargs):
         info = dict(testrun)
+        info['project'], info['year_month'], info['extra_label'] = testrun.commit_tag()
         info.update(kwargs)
 
         # header

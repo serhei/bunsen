@@ -132,6 +132,7 @@ class Index:
         """Initialize an Index object iterating a project in a Bunsen repo.
 
         Args:
+            project (str): The project to iterate through.
             key_function (optional): Sort the index according to
                 key_function applied to the Testrun objects.
             reverse (bool, optional): Iterate in reverse of the usual order.
@@ -179,6 +180,8 @@ class Index:
     def _iter_raw_basic(self):
         for path, data_stream in self._indexfiles():
             data = read_decode(data_stream)
+            if data is None:
+                continue
             for json_str in data.split(INDEX_SEPARATOR):
                 json_str = json_str.strip()
                 if json_str == '':
@@ -1285,6 +1288,7 @@ class Testrun(dict):
         if 'project' in self: project = self.project
         if 'year_month' in self: year_month = self.year_month
         if 'extra_label' in self: extra_label = self.extra_label
+        m = None
         # XXX if (project is None or year_month is None or extra_label is None) \
         if (project is None or year_month is None) \
             and 'bunsen_testruns_branch' in self:
@@ -1294,11 +1298,13 @@ class Testrun(dict):
             if year_month is None: year_month = m.group('year_month')
             if extra_label is None: extra_label = m.group('extra_label')
         # XXX extra_label is usually only present in bunsen_testlogs_branch
-        if m.group('extra_label') is None and 'bunsen_testlogs_branch' in self:
+        if (m is None or m.group('extra_label') is None) \
+           and 'bunsen_testlogs_branch' in self:
             m = branch_regex.fullmatch(self.bunsen_testlogs_branch)
             extra_label = m.group('extra_label')
         return project, year_month, extra_label
 
+    # <TODOXXX>: Harmonize with commit_tag().
     def get_project_name(self):
         """Return the project name which this Testrun is stored under in the
         Bunsen repository."""

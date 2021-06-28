@@ -14,7 +14,7 @@ and to configure analysis scripts.
 import os
 import re
 import glob
-from pathlib import Path
+from pathlib import Path, PurePath
 from configparser import ConfigParser
 import tarfile
 import shutil
@@ -735,9 +735,9 @@ class Bunsen:
             if m is None:
                 continue
             project = m.group('project')
-            if m.group['kind'] == 'runs':
+            if m.group('kind') == 'runs':
                 found_testruns.add(project)
-            if m.group['kind'] == 'logs':
+            if m.group('kind') == 'logs':
                 found_testlogs.add(project)
 
         found_projects = []
@@ -755,7 +755,7 @@ class Bunsen:
                     found_index = True
                     break
             if found_index:
-                found_projects.append(projects)
+                found_projects.append(project)
             elif not warned_indexfiles:
                 warn_print("found project '{}' but no indexfiles in branch index" \
                     .format(project))
@@ -822,8 +822,7 @@ class Bunsen:
                 key_function applied to the Testrun objects.
             reverse (bool, optional): Iterate in reverse of the usual order.
         """
-        return Index(self, tag, key_function=key_function, reverse=reverse)
-
+        return Index(self, project, key_function=key_function, reverse=reverse)
 
     def testrun(self, testrun_or_commit_id, project=None,
                 summary=False, raise_error=True):
@@ -1086,8 +1085,15 @@ class Bunsen:
             path (str or PurePath, optional): Intended path of this log file
                 within a Bunsen git tree. Should not be an absolute path.
                 Will override an existing path specified by source.
+                If omitted, will default to the top level of the Git tree.
         """
-        testlog = Testlog.from_source(testlog, path)
+        if path is None and isinstance(source, Testlog):
+            path = source.path.name
+        elif path is None and isinstance(source, tarfile.ExFileObject):
+            pass # XXX no info available
+        else: # str or Path-like object
+            path = PurePath(source).name
+        testlog = Testlog.from_source(source, path)
         self._staging_testlogs.append(testlog)
 
     def add_testrun(self, testrun):
@@ -1112,39 +1118,41 @@ class Bunsen:
     # Overwrites any existing testrun summary with the same bunsen_commit_id
     # within the file, while leaving other testrun summaries intact.
     # Return True if an existing summary was overwritten.
-    def _serialize_testrun_summary(self, testrun, index_path):
+    def _serialize_testrun_summary(self, testrun, project, index_path):
         updated_testrun, need_update_index = False, False
-        update_path = index_path + "_UPDATING"
+        update_path = str(index_path) + "_UPDATING"
+        updated_testruns = []
 
-        # Load the existing indexfile:
         try:
+            # Load the existing indexfile:
             index = Index(self, project, index_source=index_path)
             index_iter = index.iter_raw()
+
+            # Scan the indexfile to determine how to update the contents:
+            found_matching = False
+            for json_str in index_iter:
+                other_run = Testrun(self, from_json=json_str, summary=True)
+                next_run_str = json_str
+                if other_run.bunsen_commit_id == testrun.bunsen_commit_id and found_matching:
+                    warn_print("duplicate/multiple testrun summaries" \
+                        "found in {} (bunsen_commit_id={})" \
+                        .format(Path(index_path).name,
+                            other_run.bunsen_commit_id))
+                elif other_run.bunsen_commit_id == testrun.bunsen_commit_id:
+                    next_run_str = testrun.to_json(summary=True)
+                    found_matching = True
+                    # Only change the file if the testrun data has changed:
+                    if next_run_str != json_str:
+                        updated_testrun = True # will replace other_run
+                        need_update_index = True
+                updated_testruns.append(next_run_str)
         except OSError as err: # index does not exist yet
             if Path(index_path).is_file():
                 warn_print("unexpected error when opening {}: {}" \
                     .format(index_path, err))
-            index_iter = []
+                raise BunsenError("giving up to avoid losing data")
+                return # <TODOXXX>: Should append rather than overwrite, just to be safe.
 
-        # Scan the indexfile to determine how to update the contents:
-        updated_testruns = []
-        found_matching = False
-        for json_str in index_iter:
-            other_run = Testrun(self, from_json=json_str, summary=True)
-            next_run_str = json_str
-            if other_run.bunsen_commit_id == commit_id and found_matching:
-                warn_print("duplicate/multiple testrun summaries" \
-                    "found in {} (bunsen_commit_id={})" \
-                    .format(Path(index_path).name,
-                        other_run.bunsen_commit_id))
-            elif other_run.bunsen_commit_id == commit_id:
-                next_run_str = testrun.to_json(summary=True)
-                found_matching = True
-                # Only change the file if the testrun data has changed:
-                if next_run_str != json_str:
-                    updated_testrun = True # will replace other_run
-                    need_update_index = True
-            updated_testruns.append(next_run_str)
         if not found_matching:
             next_run_str = testrun.to_json(summary=True)
             updated_testruns.append(next_run_str)
@@ -1231,7 +1239,7 @@ class Bunsen:
         """
 
         # Identify the primary testrun:
-        if self._staging_testruns.empty():
+        if not self._staging_testruns: # XXX empty
             raise BunsenError('no testruns in commit')
         if primary_testrun is None:
             primary_testrun = self._staging_testruns[0]
@@ -1285,7 +1293,7 @@ class Bunsen:
             # In addition, all testruns should have the same year_month:
             testrun_project, testrun_year_month, testrun_extra_label = \
                 testrun.commit_tag()
-            if testrun.year_month != year_month:
+            if testrun_year_month != year_month:
                 raise BunsenError("conflicting testrun year_months in commit")
         if not found_primary_testrun:
             raise BunsenError("primary_testrun was not staged for commit")
@@ -1305,7 +1313,7 @@ class Bunsen:
         # Create git commit from _staging_testlogs:
         wd = testlogs_wd
         testlogs_branch_name = None
-        if not self._staging_testlogs.empty():
+        if self._staging_testlogs: # XXX not empty
             assert testlogs_commit_id is None # can't specify existing commit if there are staged testlogs
             testruns_branch_name = primary_testrun.bunsen_testruns_branch
             testlogs_branch_name = primary_testrun.bunsen_testlogs_branch
@@ -1314,7 +1322,7 @@ class Bunsen:
             for testlog in self._staging_testlogs:
                 testlog.copy_to(wd.working_tree_dir)
             commit_msg = testlogs_branch_name
-            commit_msg += ": testsuite run with '{}' testlogs" \
+            commit_msg += ": testsuite run with {} testlogs" \
                 .format(len(self._staging_testlogs))
             # If the full testrun summary is included here, it may end
             # up being out of date. So now we only include its
@@ -1357,10 +1365,10 @@ class Bunsen:
             testrun_branch_name = testrun.bunsen_testruns_branch
             wd.checkout_branch(testrun_branch_name, skip_redundant_checkout=True)
             json_name = "{}-{}.json".format(testrun_project, testrun.bunsen_commit_id)
-            updated_testrun = _serialize_testrun(testrun, \
+            updated_testrun = self._serialize_testrun(testrun, \
                 Path(wd.working_tree_dir) / json_name)
             commit_msg = testrun_branch_name
-            updating_testrun_str += "updating " if updated_testrun else ""
+            updating_testrun_str = "updating " if updated_testrun else ""
             commit_msg += ": {}index file for commit {}" \
                 .format(updating_testrun_str, testrun.bunsen_commit_id)
             wd.commit_all(commit_msg)
@@ -1373,14 +1381,15 @@ class Bunsen:
                 testrun.commit_tag()
             testrun_branch_name = testrun.bunsen_testruns_branch
             json_name = "{}-{}.json".format(testrun_project, testrun_year_month)
-            updated_index = _serialize_testrun_summary(testrun, \
-                Path(wd.working_tree_dir) / json_name)
+            updated_index = self._serialize_testrun_summary(testrun, \
+                testrun_project, Path(wd.working_tree_dir) / json_name)
             commit_msg = testrun_branch_name
-            updating_testrun_str += "updating " if updating_index else ""
+            updating_index_str = "updating " if updated_index else ""
             commit_msg += ": {}summary index for commit {}" \
                 .format(updating_index_str, testrun.bunsen_commit_id)
             # Don't make a commit if nothing was changed:
-            wd.commit_all(commit_msg, skip_empty=True)
+            # <TODOXXX>: wd.commit_all(commit_msg, skip_empty=True)
+            wd.commit_all(commit_msg)
 
         if push:
             # <TODO>: Doublecheck that we're only pushing what was modified....

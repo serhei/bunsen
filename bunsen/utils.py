@@ -124,8 +124,9 @@ def read_decode(data_stream):
     """
     data = data_stream.read()
     if isinstance(data, bytes):
-        return data.decode('utf-8') # raises UnicodeDecodeError
+        data = data.decode('utf-8') # raises UnicodeDecodeError
     assert(isinstance(data, str))
+    return data
 
 def readlines_decode(data_stream, must_decode=True):
     """Read and decode the content from a data_stream and split into lines.
