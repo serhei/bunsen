@@ -64,7 +64,7 @@ if __name__=='__main__':
                           .format(module_name))
 
     # TODOXXX check that the same wd is being checked out
-    wd = b.checkout_wd(None, # XXX branch does not matter
+    wd = b.checkout_wd('master', # XXX branch does not matter
                        checkout_name='bunsen_upload')
 
     commit_id = None
