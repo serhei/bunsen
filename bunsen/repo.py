@@ -425,6 +425,7 @@ class Bunsen:
             if wd_cookie == '':
                 wd_cookie = str(os.getpid())
             self.default_work_dir = self.default_work_dir + '-' + wd_cookie
+        # <TODOXXX: Add to docstring.>
 
         # (2) Parse global config file:
         _global_config_path = Path.home() / ".bunsenconfig"
@@ -1398,117 +1399,141 @@ class Bunsen:
     # TODO def _cleanup_testruns_branch - delete old commit history
     # TODO def gc_repo - cleanup deleted content from all branches; invalidates existing clones/workdirs
 
-    ########################################
-    # Methods for managing the Bunsen repo #
-    ########################################
+    #####################################################
+    # Methods for managing the Bunsen repo and workdirs #
+    #####################################################
 
     def _init_git_repo(self):
-        self.git_repo = git.Repo.init(self.git_repo_path, bare=True)
+        self.git_repo = git.Repo.init(str(self.git_repo_path), bare=True)
 
-        # create initial commit to allow branching
-        cloned_repo = self.checkout_wd('master', \
-                                       checkout_name="wd-bunsen-init") # XXX no cookie
-        initial_file = os.path.join(cloned_repo.working_tree_dir, \
-                                    '.bunsen_initial')
-        gitignore_file = os.path.join(cloned_repo.working_tree_dir, \
-                                      '.gitignore')
+        # Create initial commit to allow branch creation:
+        cloned_repo = self.checkout_wd('master', checkout_name="wd-init-repo")
+        initial_file = os.path.join(cloned_repo.working_tree_dir, '.bunsen_initial')
+        gitignore_file = os.path.join(cloned_repo.working_tree_dir, '.gitignore')
         open(initial_file, mode='w').close() # XXX empty file
         with open(gitignore_file, mode='w') as f: f.write('.bunsen_workdir\n')
         cloned_repo.index.add([initial_file, gitignore_file])
-        # TODOXXX: Set other configuration, such as username/email -- perhaps read Config for this?
-        cloned_repo.index.commit("bunsen_init: " + \
-                                 "initial commit to allow branching")
+        commit_msg = "bunsen init: initial commit to allow branch creation"
+        cloned_repo.index.commit(commit_msg)
         cloned_repo.remotes.origin.push()
+        cloned_repo.destroy(require_workdir=False)
 
-        # XXX Required for workdir to be deleted:
-        workdir_file = os.path.join(cloned_repo.working_tree_dir, \
-                                    '.bunsen_workdir')
-        with open(workdir_file, mode='w') as f:
-            f.write(str(os.getpid()))
-        cloned_repo.destroy()
 
     def init_repo(self):
-        '''
-        Create an empty Bunsen repo at self.base_dir.
-        '''
+        """Create an empty Bunsen repo at self.base_dir.
+
+        If a Bunsen repo already exists at that location, initialize
+        missing elements but don't delete anything.
+
+        Returns:
+            bool: True if an already existing Bunsen repo was found.
+        """
         found_existing = False
 
-        scripts_path = os.path.join(self.base_dir, "scripts")
-
-        # imitate what Git does rather closely
-        if not os.path.isdir(self.base_dir):
-            os.mkdir(self.base_dir)
+        # Imitate what 'git init' does:
+        if not self.base_dir.is_dir():
+            self.base_dir.mkdir()
         else:
             found_existing = True
-        if not os.path.isdir(self.git_repo_path):
+        if not self.git_repo_path.is_dir():
             self._init_git_repo()
         else:
-            # TODO Verify that git repo has correct structure.
+            # <TODO>: Validate that the git repo has correct structure e.g. branches, initial_commit?
             found_existing = True
-        if not os.path.isdir(self.cache_dir):
-            os.mkdir(self.cache_dir)
+        if not self.cache_dir.is_dir():
+            self.cache_dir.mkdir()
         else:
             found_existing = True
-        if not os.path.isfile(self._opts.config_path):
-            open(self._opts.config_path, mode="a").close() # XXX touch
-            # TODO Write any default config values here.
+        if not (self.base_dir / "config").is_file():
+            # <TODO> If self.config_path is different, copy config?
+            open(str(self.base_dir / "config"), mode='w').close() # XXX empty file
+            # <TODO> Fill in some default config values?
         else:
             found_existing = True
-        if not os.path.isdir(scripts_path):
-            os.mkdir(scripts_path)
+        _scripts_path = self.base_dir / "scripts"
+        if not _scripts_path.is_dir():
+            _scripts_path.mkdir()
         else:
             found_existing = True
 
         return found_existing
 
-    # XXX We could use a linked worktree instead of a git clone.
-    # But my prior experiments with direct commit to/from a repo
-    # without cloning suggest that could allow accidental corruption
-    # (e.g. HEAD file deleted, directory no longer recognized as a git repo).
-    def checkout_wd(self, branch_name=None, \
-                    checkout_name=None, checkout_dir=None,
-                    postfix=None):
+    # XXX We could use a linked worktree instead of doing a git clone.
+    # However, the cost of a git clone to the same filesystem is very cheap
+    # and my prior experiments suggest that an intense workload of
+    # automated commits to a bare repo without cloning can eventually result
+    # in minor corruption (e.g. HEAD file missing, directory no longer
+    # recognized as a git repo).
+    def checkout_wd(self, branch_name, checkout_name=None,
+                    checkout_path=None, postfix=None):
+        """Clone the Bunsen git repo into a working directory.
+
+        Args:
+            branch_name (str, optional): Name of branch to check out.
+                Defaults to the default branch set from the BUNSEN_BRANCH
+                environment variable. <TODO>: self.default_branch_name
+            checkout_name (str, optional): Name to use
+                for the working directory.
+                Defaults to branch_name, sanitized and prefixed with "wd-".
+            checkout_path (str or Path, optional): Directory
+                within which to create the working directory.
+                Defaults to the Bunsen repo top level directory.
+            postfix (str, optional): Additional postfix to append
+                to the name of the working directory.
+
+        Returns:
+            Workdir
+        """
         if branch_name is None and self.default_branch_name:
             branch_name = self.default_branch_name
         elif branch_name is None:
             raise BunsenError('no branch name specified for checkout (check BUNSEN_BRANCH environment variable)')
 
         if checkout_name is None and self.default_work_dir:
+            # <TODO>: default_work_dir should be a Path?
             checkout_name = os.path.basename(self.default_work_dir)
         elif checkout_name is None:
             # sanitize the branch name
-            checkout_name = "wd-"+branch_name.replace('/','-')
-        if checkout_dir is None and self.default_work_dir:
-            checkout_dir = os.path.dirname(self.default_work_dir)
-        elif checkout_dir is None:
-            checkout_dir = self.base_dir
+            checkout_name = "wd-" + branch_name.replace('/','-')
+
+        if checkout_path is None and self.default_work_dir:
+            checkout_path = os.path.dirname(self.default_work_dir)
+        elif checkout_path is None:
+            checkout_path = self.base_dir
 
         if postfix is not None:
-            checkout_name = checkout_name + '-' + postfix
+            checkout_name = checkout_name + "-" + postfix
 
-        wd_path = os.path.join(checkout_dir, checkout_name)
-
-        if os.path.isdir(wd_path):
+        wd_path = Path(checkout_path) / checkout_name
+        if wd_path.is_dir():
             # Handle re-checkout of an already existing wd.
             wd = Workdir(self, wd_path)
-
-            # TODOXXX Verify that wd is a Bunsen workdir, update PID file, etc.
+            # <TODOXXX>: Verify that wd is a Bunsen workdir, update PID file, etc.
         else:
             wd = Workdir(self, self.git_repo.clone(wd_path))
 
-            # Mark this as a workdir, for later certainty with destroy_wd:
-            wd_file = os.path.join(wd.working_tree_dir, '.bunsen_workdir')
-            with open(wd_file, 'w') as f:
-                f.write(str(os.getpid())) # TODOXXX Need to write the PPID in some cases!
+            # Mark the cloned repo as a workdir, for later certainty
+            # when calling destroy_wd and cleanup_wds:
+            wd_file = Path(wd.working_tree_dir) / ".bunsen_workdir"
+            with open(str(wd_file), 'w') as pidfile:
+                pidfile.write(str(os.getpid()))
+            # <TODO>: Should we write the PPID in a forked child script?
+
+        # Git config for the cloned repo:
+        with wd.config_writer() as cw:
+            if not cw.has_section('user'): cw.add_section('user')
+            cw.set('user', 'name', self._opts.git_user_name)
+            cw.set('user', 'email', self._opts.git_user_email)
 
         # XXX Special case for an empty repo with no branches to checkout:
+        if not wd.heads and \
+           branch_name != 'master' and branch_name is not None:
+            raise BunsenError("trying to checkout branch '{}' of empty repo" \
+                .format(branch_name))
         if not wd.heads:
-            assert branch_name == 'master'
             return wd
 
-        # Make sure the correct branch is checked out:
         wd.checkout_branch(branch_name)
-
         return wd
 
     # TODOXXX cleanup_wds -- destroy wd's without matching running PIDs.
@@ -1517,7 +1542,12 @@ class Bunsen:
     # background, independently of the bunsen command invocation.
     # For now, scan .bunsen/wd-* and check which PIDs are gone.
 
-    # Methods to find and run Bunsen scripts:
+    # TODO def clone_repo
+    # TODO def pull_repo; 'bunsen pull' should also pull log sources
+
+    #####################################################
+    # Methods for locating and running analysis scripts #
+    #####################################################
 
     def find_script(self, script_name, preferred_host=None):
         if len(script_name) > 0 and script_name[0] in ['.','/']:

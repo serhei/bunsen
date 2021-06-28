@@ -63,7 +63,7 @@ def bunsen_checkout_wd(b, branch_name=None, checkout_path=None):
         checkout_name = os.path.basename(checkout_path)
         checkout_dir = os.path.dirname(checkout_path)
     wd = b.checkout_wd(branch_name, \
-                       checkout_name=checkout_name, checkout_dir=checkout_dir)
+                       checkout_name=checkout_name, checkout_path=checkout_dir)
     # TODO Print one message if updating, another message if meant for human output (rather than a checkout call from a bash script).
     print(wd.working_tree_dir)
 
