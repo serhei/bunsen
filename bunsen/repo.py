@@ -634,8 +634,16 @@ class Bunsen:
         method will also need to see the command line arguments
         to determine things such as custom configuration locations.'''
 
+        if usage is not None:
+            self._opts.usage_str = usage
+        if info is not None:
+            self._opts.usage_str = info
+
         # Handle +script_name --help. XXX argv is assumed to be sys.argv
         if len(argv) > 1 and (argv[1] == '-h' or argv[1] == '--help'):
+            # <TODO>: Harmonize info and usage.
+            # <TODOXXX>: Pass required_args, optional_args.
+            # self._opts.print_help()
             self._opts._print_usage(info, args, usage,
                                     required_args, optional_args)
             exit(1)
@@ -1790,6 +1798,8 @@ class BunsenOptions:
 
     Attributes:
         script_name (str): Name of the analysis script or command.
+        usage_str (str): Explanatory string which will be part of the
+            usage message output by print_help().
         required_groups (set): Option groups required by this script.
             Used to generate a usage message in print_help().
         sources (map): Identifies the configuration source of each option.
@@ -1965,6 +1975,8 @@ class BunsenOptions:
             cls._negated_options['no'+internal_name] = internal_name
             cls._negated_options['no-'+internal_name] = internal_name
 
+    # <TODO>: add_legacy_options to wrap from_cmdline?
+
     def __init__(self, bunsen, script_name=None, required_groups=set()):
         """Initialize a BunsenOptions object representing a command.
 
@@ -1978,6 +1990,9 @@ class BunsenOptions:
         self.script_name = script_name
         self.required_groups = required_groups
         self.required_groups.update({'bunsen', 'output'})
+
+        # <TODO>: Add a parameter for this.
+        self.usage_str = None
 
         # Set defaults:
         self.sources = {}
@@ -2447,7 +2462,7 @@ class BunsenOptions:
         warn_print(usage, prefix="")
 
     # TODOXXX Docstring. For now, imitate prior print_usage.
-    def print_help(self):
+    def print_help(self, required_args=[], optional_args=[]):
         args = []
         # TODO: Need access to the script info message here. self._opts.info?
         # TODO: Sort arguments in the correct order.
@@ -2475,7 +2490,9 @@ class BunsenOptions:
             cookie = self.option_info(internal_name, 'help_cookie')
             description = self.option_info(internal_name, 'help_str')
             args.append((internal_name, default_val, cookie, description))
-        self._print_usage(None, args) # TODOXXX Get 'info' from Bunsen.from_cmdline().
+        self._print_usage(self.usage_str, args,
+                          required_args=required_args,
+                          optional_args=optional_args)
 
     # TODO fields and methods for a testruns/testlogs query
     # -- if the Git commands are any guide, queries can get very complex
