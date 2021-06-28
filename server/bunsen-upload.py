@@ -45,9 +45,7 @@ def to_module_name(commit_module):
     # Strip starting '+', replace '.' -> '/', '-' -> '_'.
     return commit_module
 
-b = Bunsen()
-if b.script_name is None or b.script_name == "<unknown>":
-    b.script_name = 'bunsen-upload'
+b = Bunsen(script_name='bunsen-upload')
 if __name__=='__main__':
     cgitb.enable() # TODO: configure logging
 

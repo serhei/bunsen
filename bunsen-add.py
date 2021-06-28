@@ -2,7 +2,7 @@
 info='''Commit a single testlog tarball.
 
 Test e.g. with
-$ tar xvzf - test.sum test.log | ./bunsen-add.py project=myproject commit_module=systemtap.commit_logs manifest=test.sum,test.log tar=-'''
+$ tar cvzf - test.sum test.log | ./bunsen-add.py project=myproject commit_module=systemtap.commit_logs manifest=test.sum,test.log tar=-'''
 # XXX Configure in $BUNSEN_ROOT/.bunsen/config:
 config_opts = [
     ('tar', None, '<tarball>',
@@ -45,9 +45,7 @@ def to_module_name(commit_module):
     # Strip starting '+', replace '.' -> '/', '-' -> '_'.
     return commit_module
 
-b = Bunsen()
-if b.script_name is None or b.script_name == "<unknown>":
-    b.script_name = 'bunsen-add'
+b = Bunsen(script_name='bunsen-add')
 if __name__=='__main__':
     opts = b.cmdline_args(sys.argv, info=info, args=config_opts,
                           required_args=['tar', 'manifest', 'commit_module'], use_config=True)
