@@ -54,9 +54,9 @@ if __name__=='__main__':
 
     # TODOXXX Also allow standard options for _commit_logs.commit_logs()!
     opts.manifest = opts.get_list('manifest')
-    opts.tag = opts.project # XXX alias for _commit_logs.commit_logs() TODOXXX???
+    opts.tag = opts.project # XXX alias for _commit_logs.commit_logs()
 
-    sys.path += b.default_pythonpath
+    sys.path += [str(path) for path in b.default_pythonpath]
     module_name = to_module_name(opts.commit_module)
     _commit_logs = importlib.import_module(module_name)
     if 'commit_logs' not in _commit_logs.__dict__:
