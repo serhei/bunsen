@@ -1549,92 +1549,188 @@ class Bunsen:
     # Methods for locating and running analysis scripts #
     #####################################################
 
-    def find_script(self, script_name, preferred_host=None):
-        if len(script_name) > 0 and script_name[0] in ['.','/']:
-            # Scripts are unambiguously specified by absolute or relative path:
-            return os.path.abspath(script_name)
+    # Used by find_script to choose preferred subdirectories:
+    _script_type_ranking = ['scripts-master', 'scripts-host',
+                            'scripts-guest', None]
 
-        # TODO Perform this search procedure in advance to find triggers?
-        scripts_found = []
-        search_dirs = self.scripts_search_path
-        all_search_dirs = []; all_search_dirs += search_dirs
-        while len(search_dirs) > 0:
+    # Search through parent directories of script_path:
+    def _get_script_type(self, script_path):
+        while script_path.parent != script_path:
+            if script_path.name in \
+               {'scripts-master', 'scripts-host', 'scripts-guest'}:
+                return script_path.name
+            script_path = script_path.parent
+        return None
+
+    def _get_script_rank(self, script_type):
+        try:
+            return self._script_type_ranking.index(script_type)
+        except ValueError:
+            # XXX assume None
+            return len(self._script_type_ranking) - 1
+
+    def find_script(self, script_name):
+        """Find an analysis script with the specified name or path.
+
+        Returns:
+            Path
+        """
+
+        # XXX Strip initial '+':
+        if script_name.startswith('+'):
+            script_name = script_name[1:]
+
+        # (0) The script could be specified via absolute or relative path:
+        if script_name.startswith('.') or script_name.startswith('/'):
+            script_path = Path(script_name).resolve()
+            if not script_path.is_file():
+                raise BunsenError("Could not find script '{}'" \
+                                  .format(script_name))
+            return script_path
+
+        # (1a) Otherwise, the script could be specified by name:
+        candidate_names = [script_name,
+                           script_name + '.sh',
+                           script_name + '.py']
+
+        # PR25090: Allow e.g. +commit-logs instead of +commit_logs:
+        script_name2 = script_name.replace('-','_')
+        candidate_names += [script_name2,
+                            script_name2 + '.sh',
+                            script_name2 + '.py']
+
+        # (1b) Collect candidate script directories:
+        candidate_dirs = []
+        parent_dirs = {str(self.base_dir), str(BUNSEN_SCRIPTS_DIR)}
+        curr_search_dirs = list(self.scripts_search_path)
+        while len(curr_search_dirs) > 0:
+            candidate_dir = curr_search_dirs.pop(0)
+
+            # XXX: Allow globs in scripts_search_path.
+            if isinstance(candidate_dir, str):
+                matching_dirs = list(map(Path,glob.glob(candidate_dir)))
+                # TODOXXX: Fix below.
+                curr_search_dirs = matching_dirs + curr_search_dirs
+                continue
+
+            if not Path(candidate_dir).is_dir():
+                continue
+
+            if str(candidate_dir) not in parent_dirs:
+                candidate_dirs.append(Path(candidate_dir))
+
+            # XXX Search recursively in directories
+            # named 'scripts' or starting with 'scripts-', e.g.
+            # 'scripts-internal/scripts-master/':
             next_search_dirs = []
-            for parent_dir in search_dirs:
-                for candidate_dir in os.listdir(parent_dir):
-                    candidate_path = os.path.join(parent_dir, candidate_dir)
-                    if not os.path.isdir(candidate_path):
-                        continue
+            candidate_subdirs = Path(candidate_dir).iterdir()
+            for candidate_subdir in candidate_subdirs:
+                if candidate_subdir.name != 'scripts' \
+                   and not candidate_subdir.name.startswith('scripts-'):
+                    continue
+                if not candidate_subdir.is_dir():
+                    continue
+                next_search_dirs.append(candidate_subdir)
+            curr_search_dirs = next_search_dirs + curr_search_dirs
 
-                    # TODO Prefer 'scripts-main' over others.
-                    if candidate_dir == 'scripts' \
-                       or candidate_dir.startswith('scripts-'):
-                        # XXX Search recursively e.g. in
-                        # .bunsen/scripts-internal/scripts-main
-                        next_search_dirs.append(candidate_path)
+        # (1c) Collect matching scripts in candidate directories:
+        scripts_found = []
+        all_search_dirs = []
+        for candidate_dir in candidate_dirs:
+            if not candidate_dir.is_dir():
+                continue
 
-                        # XXX Allow script_name to be a relative path
-                        # e.g. scripts-host/examples/hello-shell.sh
-                        # invoked as +examples/hello-shell.
-                        script_path = os.path.join(candidate_path, script_name)
-                        candidate_paths = [script_path,
-                                           script_path + '.sh',
-                                           script_path + '.py']
-                        # PR25090: Allow e.g. +commit-logs instead of +commit_logs:
-                        script_name2 = script_name.replace('-','_')
-                        script_path2 = os.path.join(candidate_path, script_name2)
-                        candidate_paths += [script_path2,
-                                            script_path2 + '.sh',
-                                            script_path2 + '.py']
-                        for candidate_path in candidate_paths:
-                            if os.path.isfile(candidate_path):
-                                scripts_found.append(candidate_path)
-            search_dirs = next_search_dirs
-            all_search_dirs += next_search_dirs
+            all_search_dirs.append(candidate_dir)
+
+            # XXX: Allow script_name to be a relative path.
+            # e.g. 'scripts-master/examples/hello_python.py'
+            # can be invoked as '+examples/hello-python':
+            for candidate_name in candidate_names:
+                candidate_path = candidate_dir / candidate_name
+
+                # XXX: May want to check for executable permissions.
+                # Then again, returning a non-executable file avoids
+                # confusing behaviour when the user tries to override
+                # a bundled analysis script but forgets to set permissions.
+                if candidate_path.is_file():
+                    scripts_found.append(candidate_path)
+
         if len(scripts_found) == 0:
-            raise BunsenError("Could not find script +{}\nSearch paths: {}" \
-                              .format(script_name, all_search_dirs))
+            search_paths = "\n- " + "\n- ".join(list(map(str,all_search_dirs)))
+            if search_paths.endswith("\n- "):
+                search_paths = search_paths[:-3]
+            raise BunsenError("Could not find analysis script '+{}'\n" \
+                              "Search paths:{}" \
+                              .format(script_name, search_paths))
 
-        # Prioritize among scripts_found:
+        # (2) Prioritize among scripts_found:
+        # - 'scripts-master' directories are preferred
+        # - TODO(rx): 'scripts-guest' and 'scripts-host' are reserved for
+        #   a hypothetical remote-execution feature.
         fallback_script_path = scripts_found[0]
-        preferred_script_path = None
+        preferred_script_path, preferred_script_type = None, None
         for script_path in scripts_found:
-            script_dir = basedirname(script_path)
+            script_type = self._get_script_type(script_path)
 
-            # These preferences activate when preferred_host is not None:
-            if script_dir == 'scripts-main' \
-               and preferred_host != 'localhost':
-                continue # XXX Script only suited for localhost.
-            # XXX 'scripts-host' should not trigger a preference --
-            # if a hostname is specified for a scripts-host/ script,
-            # it's probably because the user knows it's a VM host.
-            if script_dir == 'scripts-guest' \
-               and preferred_host == 'localhost':
-                # TODO We might be a lot more strict about this,
+            # TODO(rx): Here we'd also check the target host for this command.
+            if script_type == 'scripts-guest':
+                # TODO(rx): We may want to be a lot more strict about this,
                 # to the point of changing fallback_script_path.
-                # The scripts-guest/ scripts might be destructive
-                # operations that the user really doesn't want to
-                # run outside a scratch VM.
-                continue # XXX Script not suited for localhost.
+                # The guest scripts might be destructive operations
+                # meant to be executed inside a one-off test VM:
+                continue
 
-            # Otherwise, we prefer scripts earlier in the search path
-            # i.e. (1) user's custom scripts override bunsen default scripts
-            # and TODO (2) scripts-main/ overrides scripts-host/,scripts-guest/
+            # Otherwise we prefer:
+            # (1) user's custom scripts override bunsen default scripts
+            #     i.e. prefer scripts earlier in the search path
+            # (2) prefer scripts-master/ over scripts-host/ over scripts-guest/
             #
-            # Preference (1) lets the user cleanly customize a script
-            # by copying files from self.base-dir/scripts-whatever to
-            # .bunsen/scripts-whatever and editing them.
-            #
-            # Preference (2) lets a guest script
-            # e.g. scripts-guest/my-testsuite.sh be 'wrapped' by a
-            # host script which does additional prep on the main Bunsen server
-            # e.g. scripts-host/my-testsuite.py --with-patch=local-changes.patch
-            preferred_script_path = script_path
-            break
+            # - Preference (1) allows the user to customize a bundled
+            #   script by copying it to .bunsen/scripts-whatever and
+            #   editing it.
+            # - TODO(rx): Preference (2) allows a guest script
+            #   e.g. scripts-guest/my-testsuite.sh
+            #   to be wrapped by a script which does additional prep on the host
+            #   e.g. scripts-host/my-testsuite.py --with-patch=prNNNN.patch
+            script_rank = self._get_script_rank(script_type)
+            preferred_script_rank = self._get_script_rank(preferred_script_type)
+            if preferred_script_path is None \
+               or script_rank < preferred_script_rank:
+                preferred_script_path = script_path
+                preferred_script_type = script_type
 
-        return preferred_script_path if preferred_script_path \
-            else fallback_script_path
+        if preferred_script_path is None:
+            preferred_script_path = fallback_script_path
+        return preferred_script_path
 
+    def run_command(self, script_name=None, script_path=None):
+        """Run the command identified by script_name or located at script_path
+        with the arguments configured when this Bunsen object was
+        created. Must specify exactly one of {script_name,script_path}.
+        """
+        script_path = self.find_script(script_name)
+        script_env = self._opts.script_env()
+        extra_script_env = {'BUNSEN_DIR': self.base_dir,
+                            'BUNSEN_REPO': self.git_repo_path,
+                            'BUNSEN_CACHE': self.cache_dir}
+        script_env.update(extra_script_env)
+        script_args = self._opts.script_args()
+
+        # TODO(rx): Add job control, e.g. fork a long-running task in a tmux.
+        # TODO(rx): Remote execution functionality to launch script inside vm.
+        rc = subprocess.run([str(script_path)] + script_args, env=script_env)
+        # TODO: Check rc and handle any unexpected results?
+        # TODO: Make sure command results are cached where appropriate.
+
+    # TODO show_command - show cached results from a command (invoke from bunsen-cgi?)
+
+    # TODO additional Bunsen commands that may be handled by analysis scripts:
+    # - 'bunsen add': import tarball, log file, or set of log files
+    # - 'bunsen list' / 'bunsen ls': list testruns or log files
+    # - 'bunsen show': display testrun, log file, or set of log files
+    # - 'bunsen rebuild': regenerate repo to parse (all or subset) of testruns
+
+    # TODOXXX Deprecated. Currently used by 'bunsen run' and bunsen-cgi.py.
     def run_script(self, hostname, script_path, script_args,
                    wd_path=None, wd_branch_name=None, wd_cookie=None,
                    script_name=None):
@@ -2398,6 +2494,39 @@ class BunsenOptions:
         # TODOXXX Print delayed_config?
         print()
 
+    def script_env(self):
+        """Output environment variable options as a dict."""
+        env_values = {}
+        for key, internal_name in self.option_names('env'):
+            env_values[key] = str(self.__dict__[internal_name])
+        return env_values
+
+    def script_args(self):
+        """Output non-default options as a list of command line args.
+
+        Omits any options that can be specified via script variables.
+        """
+        env_keys = set()
+        arg_values = []
+        for key, internal_name in self.options_names('env'):
+            # Skip values that can be satisfied by script_env:
+            env_keys.add(internal_name)
+        for key, val in self.__dict__.items():
+            if key in _options_base_fields:
+                continue
+            if self.source[key] == 'default':
+                # XXX Assume Bunsen child process will have the same defaults.
+                continue
+            if key in env_keys:
+                continue
+            if isinstance(val, list):
+                # TODO: Escape commas in val.
+                val = ",".join(val)
+            # TODO: Handle other arg types as necessary.
+            arg_values.append("{}={}".format(key, str(val)))
+        arg_values += self.unknown_args
+        return arg_values
+
     # TODO script_env, script_args for script invocation
 
 # Options for bunsen:
@@ -2420,6 +2549,7 @@ BunsenOptions.add_option('use_bunsen_default_repo', group='bunsen',
 BunsenOptions.add_option('config_path', group='bunsen',
     cmdline='config', nonconfig=True, default=None,
     help_str="Path to config file; default '$(bunsen_dir)/config'.")
+# TODO: Add a config option to use a different repo than bunsen.git?
 
 # Options for {init,commit}:
 BunsenOptions.add_option('git_user_name', group={'init','commit'},

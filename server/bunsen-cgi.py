@@ -29,7 +29,7 @@ if 'pretty' not in args:
     # XXX override defaults
     args['pretty'] = 'html'
 if validate_cmd(script_name, args):
-    # TODO: integrate with bunsen_run and b.run_script:
+    # TODO: integrate with BunsenOptions and b.run_command:
     script_path = b.find_script(script_name)
     cmdline_args = []
     for k, v in args.items():

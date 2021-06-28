@@ -70,7 +70,9 @@ def bunsen_checkout_wd(b, branch_name=None, checkout_path=None):
 # Subcommand 'run'
 
 def bunsen_run(b, hostname, scriptname, invocation_args):
-    script_path = b.find_script(scriptname, preferred_host=hostname)
+    # <TODO>: Merge the following into Bunsen.run_command().
+    #script_path = b.find_script(scriptname, preferred_host=hostname)
+    script_path = b.find_script(scriptname) # XXX preferred_host no longer supported
     script_dirname = basedirname(script_path)
     if hostname is None:
         if script_dirname == "scripts-main":
