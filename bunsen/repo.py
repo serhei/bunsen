@@ -2071,7 +2071,30 @@ class BunsenOptions:
         self.sources[key] = source
         # <TODO>: Check for any _delayed_config sections that were activated?
 
-    def _add_config(self, config, section, is_global=False, is_project=False):
+    def add_config(self, section, config=None, is_global=False, is_project=False):
+        """Add configuration options from an additional config section.
+
+        Args:
+            section (str): Name of the config section to add.
+            config (ConfigParser): ConfigParser object representing
+               the config file to add options from. If None, will scan
+               previously seen config files.
+            is_global (bool): If True, the config file provided in the
+                config argument is a system-wide config
+                file. Prioritize the options lower than options from a
+                repo-specific config.
+            is_project (bool): If True, the name of the config section
+                identifies a project. The config section that will be
+                parsed is [project "<section>"].
+
+        """
+        if config is None:
+            # add sections from all active config files
+            for config, kind in self._delayed_config:
+                is_global = kind == 'global'
+                self.add_config(section, config,
+                                is_global=is_global, is_project=is_project)
+            return
         if is_project:
             section = 'project "{}"'.format(section)
         if section not in config:
@@ -2106,20 +2129,21 @@ class BunsenOptions:
             raise BunsenError("configuration file {} not found".format(config_path))
 
         # section [core], [<script_name>]
-        self._add_config(config, 'core', global_config)
+        self.add_config('core', config, global_config)
         if self.script_name is not None:
-            self._add_config(config, self.script_name, global_config)
+            self.add_config(self.script_name, config, global_config)
 
         # section [project "<project>"]
         # XXX Load only when the project is unambigous:
         projects = self.get_list('project')
         if projects is not None and len(projects) == 1:
-            self._add_config(config, projects[0], global_config, is_project=True)
+            self.add_config(projects[0], config, global_config, is_project=True)
 
-        # <TODOXXX> handle sections [bunsen-{add,push} {,"<project>"}]
+        # <TODOXXX> handle sections [bunsen-{add,push} {,"<project>"}] -> in bunsen-add, bunsen-upload.py implementations
 
-        # <TODOXXX> Save config object,
-        # in case <script_name> or <project> is specified later.
+        # Save config in case other sections are requested later.
+        self._delayed_config.append \
+            ((config, 'global' if global_config else 'local'))
 
     def parse_environment(self, env):
         """Parse a set of environment variables.
