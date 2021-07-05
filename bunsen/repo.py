@@ -1893,7 +1893,9 @@ class BunsenOptions:
             attr_or_flag_name (str): One of the attribute or flag
                 names specified above.
         """
-        assert internal_name in cls._options
+        #assert internal_name in cls._options
+        if internal_name not in cls._options:
+            return None
         return cls._option_info[internal_name, attr_or_flag_name]
 
     @classmethod
@@ -2072,6 +2074,11 @@ class BunsenOptions:
             # <TODO> Several alternatives to consider:
             # - if source is 'config', warn (naming the config file)?
             # - if source is 'cmdline', print usage unless unknown is permitted?
+            if source == 'global' or source == 'local':
+                # XXX while cmdline_args() is still used, option may not yet be configured
+                self.__dict__[key] = value
+                self.sources[key] = source
+                return
             if source == 'cmdline':
                 err_print("unknown option '{}={}'".format(key, value))
                 self.print_help()
