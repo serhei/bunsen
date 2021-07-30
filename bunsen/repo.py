@@ -903,7 +903,7 @@ class Bunsen:
             testrun_project, testrun_year_month, testrun_extra_label = \
                 extra_info.commit_tag()
             project = testrun_project
-            candidate_branches.append(testrun_summary.bunsen_testruns_branch)
+            candidate_branches.append(extra_info.bunsen_testruns_branch)
 
         # Option 3: get project,year_month from commit message header.
         if project is None:
