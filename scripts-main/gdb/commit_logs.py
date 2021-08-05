@@ -218,7 +218,6 @@ def commit_logs(b, wd, *args, **kwargs):
     gdb_sum = pick_testlog(testdir, tmpdir, 'gdb.sum') # XXX parser autodetects .xz
     gdb_log = pick_testlog(testdir, tmpdir, 'gdb.log') # XXX parser autodetects .xz
     testrun = parse_README(testrun, gdb_README)
-    testrun.arch = grok_architecture(testdir)
     testrun.osver = osver
     testrun = parse_dejagnu_sum(testrun, gdb_sum, all_cases=all_cases)
     testrun = annotate_dejagnu_log(testrun, gdb_log, all_cases, verbose=False)
