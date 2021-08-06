@@ -71,116 +71,126 @@ def get_outcome_subtest(line):
     if m is None: return None
     return m.group('outcome'), m.group('subtest')
 
+# Normalize the test named NAME. NAME_DICT is used to track these.
+#
+# This is unfortunately quite complex.
+
+def normalize_name(name_dict, name):
+
+    assert(name is not None)
+    assert(name != "")
+
+    # The buildbot does:
+    #
+    #  test_name = re.sub (r'(\s+)? \(.*\)$', r'', orig_name)
+    #
+    # But this is overly aggressive, causing thousands of duplicate
+    # names to be recorded.
+    #
+    # Instead, try to remove known constant statuses. Unfortunately, this is
+    # quite slow, but it is the most reliable way to avoid 10,000 duplicate
+    # names from invading the database.
+    test_name = re.sub(r' \((PRMS.*|timeout|eof|GDB internal error'
+                       r'|the program exited|the program is no longer running'
+                       r'|got interactive prompt|got breakpoint menu'
+                       r'|resync count exceeded|bad file format|file not found'
+                       r'|incomplete note section|unexpected output'
+                       r'|inferior_not_stopped|stopped at wrong place'
+                       r'|unknown output after running|dwarf version unhandled'
+                       r'|line numbers scrambled\?|out of virtual memory'
+                       r'|missing filename|missing module'
+                       r'|missing /usr/bin/prelink)\)', r'', name)
+
+    if test_name in name_dict:
+        # If the test is already present in the file list, then
+        # we include a unique identifier in the end of it, in the
+        # form or '<<N>>' (where N is a number >= 2).  This is
+        # useful because the GDB testsuite is full of non-unique
+        # test messages.
+        i = 2
+        while True:
+            nname = test_name + ' <<' + str (i) + '>>'
+            if nname not in name_dict:
+                break
+            i += 1
+        test_name = nname
+
+    name_dict[test_name] = test_name
+    return test_name
+
 def parse_dejagnu_sum(testrun, sumfile, all_cases=None,
                       consolidate_pass=False, verbose=True):
-#                      consolidate_pass=True, verbose=True):
     if testrun is None: return None
     f = openfile_or_xz(sumfile)
 
     last_exp = None
-    last_test_passed = False # at least one pass and no fails
-    last_test_failed = False # at least one fail
-    failed_subtests = [] # XXX Better known as 'unpassed'?
-    passed_subtests = []
-    failed_subtests_summary = 0
-    passed_subtests_summary = 0
+    counts = dict()
+    names = dict()
 
+    # The global test_outcome_map doesn't contain all of our
+    # outcomes. Add those now.
+    test_outcome_map['PATH'] = 'PATH'  # Tests with paths in their names
+
+    # Clear counts dictionary
+    counts = dict.fromkeys(test_outcome_map, 0)
+
+    # Iterate over lines in the sum file.
     for cur in Cursor(sumfile, path=os.path.basename(sumfile), input_stream=f):
         line = cur.line
 
-        # XXX need to handle several .sum formats
-        # buildbot format :: all lines are outcome lines, include the .exp
-        # regular format :: outcome lines separated by "Running <expname>.exp ..."
-        outcome, expname, subtest = None, None, None
+        # There's always an exception.  ERRORs are not output the same
+        # way as other test results.  They simply list a reason.
+        # FIXME: ERRORs typically span a range of lines
         info = get_expname_subtest(line)
-        if info is not None:
-            outcome, expname, subtest = info
-        elif (line.startswith("Running") and ".exp ..." in line):
-            outcome = None
-            expname = get_running_exp(line)
-        else:
-            info = get_outcome_subtest(line)
-            if info is not None:
-                outcome, subtest = info
+        if info is None:
+            if line.startswith('ERROR:'):
+                # In this case, the "subtest" is actually the reason
+                # for the failure. LAST_EXP is not necessarily strictly
+                # correct, but we would have to watch for additional
+                # messages (Running TESTFILE ...) to make this work properly.
+                # In practice, it's not typically a problem.
+                info = ('ERROR', last_exp, line[len('ERROR: '):])
+            elif line.endswith(".exp:\n"):
+                # An unnamed test. It happens.
+                line = line[:-1] + " " + "UNNAMED_TEST" + "\n"
+                info = get_expname_subtest(line)
+                if info is None:
+                    # We tried. Nothing else we can do.
+                    print("WARNING: unknown expname/subtest in outcome line --", line, file=sys.stderr)
+                    continue
+            else:
+                continue
 
-        # XXX these situations mark an .exp boundary:
-        finished_exp = False
-        if expname != last_exp and expname is not None and last_exp is not None:
-            finished_exp = True
-        elif "Summary ===" in line:
-            finished_exp = True
+        outcome, expname, subtest = info
 
-        if finished_exp:
-            running_cur.line_end = cur.line_end-1
-            if consolidate_pass and last_test_passed:
-                testrun.add_testcase(name=last_exp,
-                                     outcome='PASS',
-                                     origin_sum=running_cur)
-            elif last_test_passed:
-                # Report each passed subtest individually:
-                for passed_subtest, outcome, cursor in passed_subtests:
-                    testrun.add_testcase(name=last_exp,
-                                         outcome=outcome,
-                                         subtest=passed_subtest,
-                                         origin_sum=cursor)
-            # Report all failed and untested subtests:
-            for failed_subtest, outcome, cursor in failed_subtests:
-                testrun.add_testcase(name=last_exp,
-                                     outcome=outcome,
-                                     subtest=failed_subtest,
-                                     origin_sum=cursor)
-
-        if expname is not None and expname != last_exp:
-            last_exp = expname
-            running_cur = Cursor(start=cur)
-            last_test_passed = False
-            last_test_failed = False
-            failed_subtests = []
-            passed_subtests = []
-
-        if outcome is None:
+        # Warn and skip any outcome that is not in test_outcome_map!
+        # It will cause an exception later.
+        if outcome not in test_outcome_map:
+            print(f'WARNING: unexpected test outcome ({outcome}) in line -- {line}')
             continue
-        # XXX The line contains a test outcome.
-        synth_line = line
-        if all_cases is not None and expname is None:
-            # XXX force embed the expname into the line for later annotation code
-            synth_line = str(outcome) + ": " + last_exp + ": " + str(subtest)
-        all_cases.append(synth_line)
+        if last_exp != expname:
+            last_exp = expname
+            names.clear()
 
-        # TODO: Handle other dejagnu outcomes if they show up:
-        if line.startswith("FAIL: ") \
-           or line.startswith("KFAIL: ") \
-           or line.startswith("XFAIL: ") \
-           or line.startswith("ERROR: tcl error sourcing"):
-            last_test_failed = True
-            last_test_passed = False
-            failed_subtests.append((line,
-                                    check_mapping(line, test_outcome_map, start=True),
-                                    cur)) # XXX single line
-            failed_subtests_summary += 1
-        if line.startswith("UNTESTED: ") \
-           or line.startswith("UNSUPPORTED: ") \
-           or line.startswith("UNRESOLVED: "):
-            # don't update last_test_{passed,failed}
-            failed_subtests.append((line,
-                                    check_mapping(line, test_outcome_map, start=True),
-                                    cur))
-            # don't tally
-        if line.startswith("PASS: ") \
-           or line.startswith("XPASS: ") \
-           or line.startswith("IPASS: "):
-            if not last_test_failed: # no fails so far
-                last_test_passed = True
-            if not consolidate_pass:
-                passed_subtests.append((line,
-                                        check_mapping(line, test_outcome_map, start=True),
-                                        cur))
-            passed_subtests_summary += 1
+        # Normalize the name to account for duplicates.
+        subtest = normalize_name(names, subtest)
+
+        if all_cases is not None:
+            # ERRORs are not appended to outcome_lines!
+            if outcome != "ERROR":
+                all_cases.append(line)
+
+        if consolidate_pass:
+            pass # not implemented
+        else:
+            testrun.add_testcase(name=expname, outcome=outcome,
+                                 subtest=subtest, origin_sum=cur)
+            counts[outcome] += 1
     f.close()
 
-    testrun.pass_count = passed_subtests_summary
-    testrun.fail_count = failed_subtests_summary
-
+    testrun.pass_count = counts['PASS'] + counts['XPASS'] + counts['KPASS']
+    testrun.fail_count = counts['FAIL'] + counts['XFAIL'] + counts['KFAIL'] \
+        + counts['ERROR'] # UNTESTED, UNSUPPORTED, UNRESOLVED not tallied
     return testrun
 
 def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
@@ -218,7 +228,11 @@ def annotate_dejagnu_log(testrun, logfile, outcome_lines=[],
     # (1b) Build a map of outcome_lines:
     testcase_line_start = {} # .exp name -> index of first outcome_line with this name
     for j in range(len(outcome_lines)):
-        outcome, expname, subtest = get_expname_subtest(outcome_lines[j])
+        info = get_expname_subtest(outcome_lines[j])
+        if info is None:
+            print("WARNING: unknown expname/subtest in outcome line --", outcome_lines[j], file=sys.stderr)
+            continue
+        outcome, expname, subtest = info
         if expname not in testcase_line_start:
             testcase_line_start[expname] = j
 
