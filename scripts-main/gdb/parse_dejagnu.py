@@ -158,6 +158,9 @@ def parse_dejagnu_sum(testrun, sumfile, all_cases=None,
                     # We tried. Nothing else we can do.
                     print("WARNING: unknown expname/subtest in outcome line --", line, file=sys.stderr)
                     continue
+            elif line.startswith("Running target "):
+                testrun.target_board = line[len("Running target "):].strip()
+                continue
             else:
                 continue
 
