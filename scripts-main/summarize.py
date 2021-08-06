@@ -30,6 +30,8 @@ outcome_labels = {
     'UNTESTED' : 'untested testcases',
     'UNRESOLVED' : 'unresolved testcases',
     'UNSUPPORTED' : 'unsupported tests',
+    'PATH' : "paths in test names",
+    'DUPLICATE' : "duplicate test names",
     'ERROR' : 'errors',
     'WARNING' : 'warnings'
 }
@@ -72,6 +74,12 @@ if __name__ == '__main__':
         # us the same output order as DejaGNU itself.
         for l in outcome_labels:
             if c[l] != 0:
-                print('# of %-26s %d' % (outcome_labels[l], c[l]))
+                print('# of %-26s %d' % (outcome_labels[l], c[l]), "*" if l == 'DUPLICATE' else "")
+
+        # Output the footnote explaining that reported DUPLICATE numbers are different than
+        # what GDB reports.
+        if c['DUPLICATE'] != 0:
+            print("\n* This number is the total number of tests with duplicate names, not")
+            print("  the number of unique duplicate names seen.")
     else:
         print(f'found no tests matching \"{opts.tests}\"')
