@@ -109,9 +109,11 @@ standard_distro_map = {
 }
 
 # TODO Handle other exotic DejaGNU outcome codes if they come up.
-test_outcome_map = {'PASS':'PASS', 'XPASS':'XPASS', 'IPASS':'IPASS',
+test_outcome_map = {'PASS':'PASS', 'XPASS':'XPASS', 'KPASS':'KPASS',
+                    #'IPASS':'IPASS', # XXX not sure this is used anywhere
                     'FAIL':'FAIL', 'KFAIL':'KFAIL', 'XFAIL':'XFAIL',
-                    'ERROR: tcl error sourcing':'ERROR',
+                    'ERROR':'ERROR', # usually 'ERROR: tcl error sourcing'
+                    'DUPLICATE':'DUPLICATE', # used by gdb testsuite
                     'UNTESTED':'UNTESTED', 'UNSUPPORTED':'UNSUPPORTED',
                     'UNRESOLVED':'UNRESOLVED'}
 
