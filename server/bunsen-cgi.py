@@ -19,7 +19,8 @@ def validate_cmd(script_name, args):
     # TODO: also validate args
     return True
 
-b = Bunsen()
+# TODOXXX Use Bunsen.from_cgi_query()
+b = Bunsen(base_dir="../.bunsen") # TODO: Need to correctly find bunsen.base_dir
 form = cgi.FieldStorage()
 script_name, args = form['cmd'].value if 'cmd' in form else 'list_commits', {}
 for field in form.keys():

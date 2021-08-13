@@ -2091,6 +2091,8 @@ class BunsenOptions:
                 value = True
             elif value in {'False','false','no'}:
                 value = False
+            elif value == 'html' and key == 'pretty':
+                value = 'html' # XXX special-case for option pretty=yes|no|html
             elif not isinstance(value, bool):
                 warn_print("unknown boolean option '{}={}'".format(key, value))
                 return # keep the default value
