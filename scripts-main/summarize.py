@@ -4,12 +4,14 @@
 # of the desired test run. Optionally also takes a comma-separated
 # list of glob expressions to limit results.
 
-info = "summarize.py <bunsen_commit> [tests]"
+info = "summarize.py <bunsen_commit> [tests=tests] [verbose=True/False]"
 cmdline_args = [
     ('commit', None, '<bunsen_commit>',
      "commit to fetch results for"),
     ('tests', None, '<test_globs>',
-     "comma-separated list of glob expressions of tests to summarize")
+     "comma-separated list of glob expressions of tests to summarize"),
+    ('verbose', False, '<verbose>',
+     'output verbose test results')
 ]
 
 import sys
@@ -58,6 +60,13 @@ if __name__ == '__main__':
 
         # Collate results for outcomes
         c = Counter(t['outcome'] for t in found_tests)
+
+        if opts.verbose:
+            for t in found_tests:
+                print(f'{t.outcome}: {t.name}: {t.subtest}')
+            print()
+            print(f'\t\t=== {project} Summary ===')
+            print()
 
         # We could simply loop over the keys of the Counter, but that would not necessarily give
         # us the same output order as DejaGNU itself.
