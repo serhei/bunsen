@@ -78,14 +78,14 @@ results:
 *Alternative 2:* (If you want to try building a large repository yourself.)
 For this example, we'll use `wget` to download some test results from the [old
 GDB buildbot](https://gdb-buildbot.osci.io) I saved at
-http://163.172.178.105/results/ and use them to build a repository. (Below,
+http://51.15.49.203/results/ and use them to build a repository. (Below,
 we'll learn how to send test results directly to Bunsen from a machine running
 the GDB testsuite.)
 
 Start by downloading the test results:
 
     mkdir test-results && pushd test-results
-    time wget -r --no-parent -nH --cut-dirs=2 -A '*.tbz' http://163.172.178.105/results/
+    time wget -r --no-parent -nH --cut-dirs=2 -A '*.tbz' http://51.15.49.203/results/
     tar xvjf Fedora-i686.tbz
     tar xvjf Fedora-x86_64-m64.tbz
     tar xvjf Fedora-x86_64-native-extended-gdbserver-m64.tbz
@@ -184,7 +184,7 @@ This will output a grid of results only for the testcases whose name contains
 the string 'non-ldr'.
 
 For a more complete example of `+grid_view` output see [these examples from the
-SystemTap project](http://163.172.178.105/bunsen-examples/).
+SystemTap project](http://51.15.49.203/bunsen-examples/).
 
 ## Set up the Web Server to accept test results
 
