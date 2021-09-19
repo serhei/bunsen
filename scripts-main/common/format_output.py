@@ -176,7 +176,10 @@ def html_field_summary(testrun, fields=None, separator=" ", suppress_keys=False)
     return field_summary(testrun, fields, separator, sanitize=True, suppress_keys=suppress_keys, decorate=True)
 
 def select_class(cat, val):
-    if cat == 'outcome':
+    # XXX HACK 'outcome' didn't quite give what we want
+    if (cat == 'baseline' or cat == 'latest') and val == 'FAIL':
+        return 'f'
+    if cat == 'outcome' or cat == 'baseline' or cat == 'latest':
         # TODO: needs refinement for different outcomes
         if len(val) < 1:
             return 'n'
@@ -185,6 +188,8 @@ def select_class(cat, val):
         elif val.endswith('FAIL') \
              and not val.startswith('FAIL') \
              and not val[1:].startswith('FAIL'):
+            return 'f'
+        elif val.endswith('FLAKE'):
             return 'f'
         else:
             return 'n'
