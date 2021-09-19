@@ -325,7 +325,8 @@ class Bunsen:
             analysis script invocation.
     """
 
-    def __init__(self, base_dir=None, args=None, script_name=None,
+    def __init__(self, base_dir=None, args=None,
+                 script_name=None, info=None,
                  options=None, old_default_options=None,
                  required_args=[], optional_args=[],
                  repo=None, alternate_cookie=None):
@@ -356,6 +357,7 @@ class Bunsen:
             script_name (str, optional): Name of command or analysis script
                 that will be invoked on this repo. Used to initialize internal
                 BunsenOptions.
+            info (str, optional): Help string for the command or analysis script.
             options (BunsenOptions, optional): BunsenOptions object that
                 represents options for the command or analysis that will be
                 invoked on this repo.
@@ -394,9 +396,11 @@ class Bunsen:
             self._opts = options
             self._opts._bunsen = self
 
-        # (0b) Set script_name:
+        # (0b) Set script_name, info:
         if script_name is not None:
-                self._opts.script_name = script_name
+            self._opts.script_name = script_name
+        if info is not None:
+            self._opts.usage_str = info
         if self._opts.script_name is None and 'BUNSEN_SCRIPT_NAME' in os.environ:
             self._opts.script_name = os.environ['BUNSEN_SCRIPT_NAME']
         initializing = ( self._opts.script_name == 'init' )
@@ -439,9 +443,7 @@ class Bunsen:
         # (3) Parse command line arguments:
         if args is not None:
             # TODO: Better option to configure allow_unknown here, e.g. self._opts.script_name == 'run'
-            self._opts.parse_cmdline(args,
-                                     required_args,
-                                     optional_args,
+            self._opts.parse_cmdline(args, required_args, optional_args,
                                      allow_unknown=(self._opts.script_name is None))
 
         # (4) Identify Bunsen repo location:
@@ -670,15 +672,17 @@ class Bunsen:
         return opts
 
     @classmethod
-    def from_cmdline(cls, args=None, required_args=[], optional_args=[],
-                     script_name=None):
+    def from_cmdline(cls, args=None, info=None, required_args=[],
+                     optional_args=[], script_name=None):
         """Initialize objects representing a Bunsen repo and command invocation.
 
         This method takes a set of command line arguments.
 
         Args:
-            args (list of str): command line options for the command
-                or analysis script being invoked.
+            args (list of str): Command line options for the command
+                or analysis script being invoked. If None, sys.argv
+                will be used.
+            info (str, optional): Help string for the command or analysis script.
             required_args (list of str, optional): List of required
                 command line arguments, which can be specified as positional
                 arguments.
@@ -691,10 +695,12 @@ class Bunsen:
         Returns:
             Bunsen, BunsenOptions
         """
-        b = Bunsen(args=args,
+        if args is None:
+            args = sys.argv
+        b = Bunsen(args=args, info=info,
                    required_args=required_args, optional_args=optional_args,
                    script_name=script_name)
-        b._opts._show_results() # TODOXXX for debugging purposes
+        # b._opts._show_results() # XXX for debugging purposes
         return b, b._opts
 
     @classmethod
@@ -1104,7 +1110,7 @@ class Bunsen:
         """Remove all staged Testlog and Testrun objects."""
         self._staging_testlogs = []
         self._staging_testruns = []
-    
+
     # Save a full representation of the testrun into path.
     # Overwrites any existing testrun summary file at that path.
     # Return True if an existing summary was overwritten.
@@ -1786,10 +1792,15 @@ class Bunsen:
 _options_base_fields = {
     '_bunsen',
     'script_name',
-    'required_groups',
+    'usage_str',
+    'expected_groups',
     'sources',
     '_delayed_config',
     '_unknown_args',
+    '_required_args',
+    '_positional_args',
+    '_cmdline_required_args',
+    '_cmdline_optional_args',
 }
 
 cmdline_arg_regex = re.compile(r"(?P<prefix>--)?(?:(?P<keyword>[0-9A-Za-z_-]+)=)?(?P<arg>.*)")
@@ -1809,7 +1820,7 @@ class BunsenOptions:
         script_name (str): Name of the analysis script or command.
         usage_str (str): Explanatory string which will be part of the
             usage message output by print_help().
-        required_groups (set): Option groups required by this script.
+        expected_groups (set): Option groups that will be used by this script.
             Used to generate a usage message in print_help().
         sources (map): Identifies the configuration source of each option.
     """
@@ -1988,19 +1999,21 @@ class BunsenOptions:
 
     # <TODO>: add_legacy_options to wrap from_cmdline?
 
-    def __init__(self, bunsen, script_name=None, required_groups=set()):
+    def __init__(self, bunsen, script_name=None, usage_str=None, expected_groups=set()):
         """Initialize a BunsenOptions object representing a command.
 
         Args:
             bunsen (Bunsen): Bunsen repo this command will run against.
             script_name (str, optional): Name of command or analysis script.
-            required_groups (set, optional): Options groups that will be
+            usage_str (str, optional): Help string for the command or analysis script.
+            expected_groups (set, optional): Options groups that will be
               used by this command or analysis script.
         """
         self._bunsen = bunsen
         self.script_name = script_name
-        self.required_groups = required_groups
-        self.required_groups.update({'bunsen', 'output'})
+        self.usage_str = usage_str
+        self.expected_groups = expected_groups
+        self.expected_groups.update({'bunsen', 'output'})
 
         # <TODO>: Add a parameter for this.
         self.usage_str = None
@@ -2022,6 +2035,8 @@ class BunsenOptions:
         # Handling required and optional positional args:
         self._positional_args = []
         self._required_args = [] # XXX set by parse_cmdline, check by check_required
+        self._cmdline_required_args = [] # XXX set by parse_cmdline, used by print_help
+        self._cmdline_optional_args = [] # XXX set by parse_cmdline, used by print_help
 
     source_priorities = ['args', 'cgi', 'env', 'local', 'global', 'default']
     """Possible sources of options in order of decreasing priority.
@@ -2330,6 +2345,8 @@ class BunsenOptions:
         Returns:
             self
         """
+        self._cmdline_required_args = required_args
+        self._cmdline_optional_args = optional_args
 
         # Handle sys.argv[0]:
         if len(args) > 0 and is_sys_argv:
@@ -2435,13 +2452,15 @@ class BunsenOptions:
         for t in args:
             # TODO: Later args could override earlier args with same name.
             name, default_val, cookie, description = t
-            arginfo_map[name] = t
-            if name not in required_args and name not in optional_args:
+            internal_name = self.option_name(name, 'cmdline')
+            if internal_name is None: internal_name = name # XXX
+            arginfo_map[internal_name] = t
+            if internal_name not in required_args and internal_name not in optional_args:
                 other_arginfo.append(t)
-        for name in required_args:
-            required_arginfo.append(arginfo_map[name])
-        for name in optional_args:
-            optional_arginfo.append(arginfo_map[name])
+        for internal_name in required_args:
+            required_arginfo.append(arginfo_map[internal_name])
+        for internal_name in optional_args:
+            optional_arginfo.append(arginfo_map[internal_name])
         all_args = required_arginfo + optional_arginfo + other_arginfo
         for t in all_args:
             name, default_val, cookie, description = t
@@ -2455,9 +2474,11 @@ class BunsenOptions:
                 cookie = "<num>"
 
             basic_arg_desc = "{}={}".format(name, cookie)
-            if name in required_args:
+            internal_name = self.option_name(name, 'cmdline')
+            if internal_name is None: internal_name = name
+            if internal_name in required_args:
                 arg_desc = "[{}=]{}".format(name, cookie)
-            elif name in optional_args:
+            elif internal_name in optional_args:
                 arg_desc = "[[{}=]{}]".format(name, cookie)
             else:
                 arg_desc = "[{}={}]".format(name, cookie)
@@ -2479,8 +2500,9 @@ class BunsenOptions:
         usage += arg_info
         warn_print(usage, prefix="")
 
+    # TODO Should sort command line args further by group.
     # TODOXXX Docstring. For now, imitate prior print_usage.
-    def print_help(self, required_args=[], optional_args=[]):
+    def print_help(self):
         args = []
         # TODO: Need access to the script info message here. self._opts.info?
         # TODO: Sort arguments in the correct order.
@@ -2509,8 +2531,8 @@ class BunsenOptions:
             description = self.option_info(internal_name, 'help_str')
             args.append((internal_name, default_val, cookie, description))
         self._print_usage(self.usage_str, args,
-                          required_args=required_args,
-                          optional_args=optional_args)
+                          required_args=self._cmdline_required_args,
+                          optional_args=self._cmdline_optional_args)
 
     # TODO fields and methods for a testruns/testlogs query
     # -- if the Git commands are any guide, queries can get very complex
@@ -2542,7 +2564,7 @@ class BunsenOptions:
         """For debugging: print the contents of this BunsenOptions object."""
         print("OBTAINED OPTIONS")
         print ("script_name = {}".format(self.script_name))
-        print ("required_groups = {}".format(self.required_groups))
+        print ("expected_groups = {}".format(self.expected_groups))
         # TODO: Filter by active options groups?
         for key, val in self.__dict__.items():
             if key in _options_base_fields:
