@@ -215,6 +215,7 @@ class HTMLTable:
 
         self.header = set()
         self.header_href = {}
+        self.header_tooltip = {}
         self.order = [] # order of (subset of) fields in header
 
         self.rows = []
@@ -296,6 +297,8 @@ class HTMLTable:
                 s += "<a href=\"{}\">".format(self.header_href[field]) + str(field) + "</a>"
             else:
                 s += str(field)
+            if field in self.header_tooltip:
+                s += "<span class=\"tooltip\">{}</span>".format(self.header_tooltip[field])
             s += "</th>"
         s += "</tr>"
         print(s)
@@ -391,6 +394,8 @@ td.empty { background-color: lightgray; color: lightgray; }
 /* td.clicky { background-color: beige; } */
 td.clicky:hover { background-color: azure; }
 th.h > a { text-decoration: none; color: darkslategray; }
+th.h > .tooltip { visibility: hidden; background-color: beige; writing-mode:horizontal-tb; font-size:small; color: #000; text-align: left; padding: 5px 5px; border-radius: 6px; position: absolute; z-index: 1; }
+th.h:hover .tooltip { visibility: visible; }
 tr.clicky:hover > td { background-color: beige; }
 .detail { white-space: nowrap; text-align: left; display: none; }
 tr.detail { font-size: medium; }
