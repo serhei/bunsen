@@ -2,28 +2,29 @@
 info="""Display testcase results within a specified version range.
 Based on a script by Martin Cermak."""
 from bunsen import Bunsen, BunsenOptions
-BunsenOptions.add_option('source_repo', group='source_repo',
-                         cmdline='source-repo', default=None,
-                         help_str="Use project commit history from Git repo <path>",
-                         help_cookie="<path>")
-BunsenOptions.add_option('branch', group='source_repo', default=None,
-                         help_str="Use project commit history from <branch> in source_repo",
-                         help_cookie="<branch>")
-BunsenOptions.add_option('project', group='filtering', default=None,
-                         help_str="Restrict the analysis to testruns in <projects>",
-                         help_cookie="<projects>")
-BunsenOptions.add_option('key', group='filtering', default=None,
-                         help_str="Restrict the analysis to testcases containing <glob>",
-                         help_cookie="<glob>")
-BunsenOptions.add_option('baseline', group='commit_range', default=None,
-                         help_str="First commit for which to display testcase results",
-                         help_cookie="<refspec>")
-BunsenOptions.add_option('latest', group='commit_range', default=None,
-                         help_str="Last commit for which to display testcase results",
-                         help_cookie="<refspec>")
-BunsenOptions.add_option('show_subtests', group='display',
-                         cmdline='show-subtests', boolean=True, default=False,
-                         help_str="Show subtest details (increases output size significantly)")
+if __name__=='__main__': # XXX need a graceful solution for option conflicts
+    BunsenOptions.add_option('source_repo', group='source_repo',
+                             cmdline='source-repo', default=None,
+                             help_str="Use project commit history from Git repo <path>",
+                             help_cookie="<path>")
+    BunsenOptions.add_option('branch', group='source_repo', default=None,
+                             help_str="Use project commit history from <branch> in source_repo",
+                             help_cookie="<branch>")
+    BunsenOptions.add_option('project', group='filtering', default=None,
+                             help_str="Restrict the analysis to testruns in <projects>",
+                             help_cookie="<projects>")
+    BunsenOptions.add_option('key', group='filtering', default=None,
+                             help_str="Restrict the analysis to testcases containing <glob>",
+                             help_cookie="<glob>")
+    BunsenOptions.add_option('baseline', group='commit_range', default=None,
+                             help_str="First commit for which to display testcase results",
+                             help_cookie="<refspec>")
+    BunsenOptions.add_option('latest', group='commit_range', default=None,
+                             help_str="Last commit for which to display testcase results",
+                             help_cookie="<refspec>")
+    BunsenOptions.add_option('show_subtests', group='display',
+                             cmdline='show-subtests', boolean=True, default=False,
+                             help_str="Show subtest details (increases output size significantly)")
 # XXX No option 'pretty' or 'output_format' -- for now, always output HTML.
 
 import git
@@ -100,19 +101,21 @@ class Timecube:
     # unchanged_max_fails = {} # testcase_name -> max # of fails seen
     # unchanged_n_configs = {} # testcase_name -> # of configurations seen
 
-    def __init__(self, bunsen, opts):
+    def __init__(self, bunsen, opts, repo):
         self._bunsen = bunsen
         self._opts = opts
+        self._repo = repo
 
         # Collect all testruns between the specified commits:
-        testruns_map, hexsha_lens = index_source_commits(b, projects)
+        projects = opts.get_list('project', default=self._bunsen.projects)
+        testruns_map, hexsha_lens = index_source_commits(self._bunsen, projects)
         self.commit_range = [] # list of (commit, testruns)
         self.commit_indices = {} # hexsha -> index in commit_range (for finding distance between commits)
         self.all_testruns = [] # list of testruns
         self.n_branch_commits = 0 # XXX total commits in branch, >len(self.commit_range)
         started_range = False
         finished_range = False
-        for commit, testruns in iter_history(b, repo, testruns_map, hexsha_lens,
+        for commit, testruns in iter_history(self._bunsen, self._repo, testruns_map, hexsha_lens,
                                              forward=True, branch=opts.branch,
                                              include_empty_commits=True):
             self.n_branch_commits += 1
@@ -181,7 +184,7 @@ class Timecube:
         if sk not in self.configurations:
             self.configurations[sk] = summary
 
-        testrun = b.full_testrun(testrun) # XXX should remove this & have Testrun load on-demand
+        testrun = self._bunsen.full_testrun(testrun) # XXX should remove this & have Testrun load on-demand
         tc_names = set() # XXX testcase names for this testrun only
         for testcase in testrun.testcases:
             if self._opts.key is not None and \
@@ -330,7 +333,7 @@ if __name__=='__main__':
     repo = git.Repo(opts.source_repo) 
 
     # (1a) Use Timecube class to collect test results for commits in the specified range
-    cube = Timecube(b, opts)
+    cube = Timecube(b, opts, repo)
 
     # (1b) Find summary fields present in all testruns
     header_fields, summary_fields = index_summary_fields(cube.all_testruns)
@@ -345,7 +348,7 @@ if __name__=='__main__':
 
     # (2) Show a grid of test results for every testcase in the specified commit range
     progress = tqdm.tqdm(iterable=None, desc='Rendering grid',
-                         total=len(cube.testcase_names), leave=True, unit='testcases')
+                         total=len(cube.testcase_names), leave=True, unit='testcase')
     n_testcases_shown = 0
     for testcase_name in cube.iter_testcases():
         # XXX skip unchanged testcases without making a section
