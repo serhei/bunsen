@@ -35,7 +35,7 @@ from diff_runs import append_map, fail_outcomes, untested_outcomes
 from diff_commits import index_summary_fields, get_summary, get_summary_key, get_tc_key
 from common.format_output import get_formatter
 
-# TODOXXX use in other scripts
+# TODOXXX use in other scripts; move to show_testcases.py
 def refspec_matches(repo, refspec, hexsha_prefix):
     return repo.commit(refspec).hexsha.startswith(hexsha_prefix)
 
@@ -62,7 +62,6 @@ if __name__=='__main__':
 
     tags = opts.get_list('project', default=b.tags)
     repo = Repo(opts.source_repo)
-
 
     # (1a) find all testruns between the specified commits
     testruns_map, hexsha_lens = index_source_commits(b, tags)
