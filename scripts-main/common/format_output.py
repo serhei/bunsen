@@ -375,6 +375,11 @@ class HTMLFormatter:
         self.global_div_counter = 1 # XXX id's for details view
 
         self._header()
+        self.finished = False
+
+    def __del__(self):
+        if not self.finished:
+            self.finish()
 
     def _header(self):
         print("<html><head>")
@@ -482,6 +487,7 @@ function details(s) {
         if self.table.is_open:
             self.table.close()
         self._footer()
+        self.finished = True
 
     # HTML-only methods:
 
