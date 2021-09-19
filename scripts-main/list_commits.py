@@ -123,7 +123,12 @@ def iter_testruns(b, repo, testruns_map=None, hexsha_lens=None,
 def iter_history(b, repo, testruns_map=None, hexsha_lens=None,
                  forward=False, include_empty_commits=False,
                  include_early_history=False,
-                 branch='master'):
+                 branch=None):
+    # XXX detect default branch
+    for default_cand in {'master','main','trunk'}:
+        if branch is None and default_cand in repo.heads:
+            branch = default_cand
+            break
     for commit in repo.iter_commits(branch, reverse=forward) if include_early_history \
         else iter_tested_commits(b, repo, testruns_map=testruns_map, hexsha_lens=hexsha_lens,
                                  forward=forward, branch=branch):
