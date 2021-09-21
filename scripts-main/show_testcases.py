@@ -190,6 +190,7 @@ class Timecube:
             if self._opts.key is not None and \
                not fnmatchcase(testcase.name, '*'+opts.key+'*'): # XXX change glob to 'contains' in other scripts
                 continue
+            tc_names.add(testcase.name)
 
             # populate self.testcase_names, self.testcase_configurations
             if testcase.name not in self.testcase_names:
@@ -317,8 +318,8 @@ class Timecube:
 
     def grid_dist(self, gk_baseline, gk_latest):
         """Returns distance in number of commits between grid cells gk_baseline and gk_latest."""
-        baseline = self.commits_grid[gk_baseline]
-        latest = self.commits_grid[gk_latest]
+        baseline = self.commits_grid[gk_baseline].hexsha
+        latest = self.commits_grid[gk_latest].hexsha
         return self.commit_dist(baseline,latest)
 
 if __name__=='__main__':
@@ -330,7 +331,7 @@ if __name__=='__main__':
     out = get_formatter(b, opts)
 
     projects = opts.get_list('project', default=b.projects)
-    repo = git.Repo(opts.source_repo) 
+    repo = git.Repo(opts.source_repo)
 
     # (1a) Use Timecube class to collect test results for commits in the specified range
     cube = Timecube(b, opts, repo)
