@@ -103,7 +103,7 @@ def git_toplevel():
     Obtains the path reported by 'git rev-parse --show_toplevel'."""
     rc = subprocess.run(["git", "rev-parse", "--show-toplevel"],
                         capture_output=True)
-    return str(rc.stdout.strip())
+    return rc.stdout.strip().decode('utf-8') # raises UnicodeDecodeError
 
 def sanitize_path(target_path, base_path):
     """Clean up target_path and ensure it is inside base_path

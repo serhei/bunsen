@@ -75,7 +75,7 @@ class Workdir(git.Repo):
             # may need to use subprocess instead of git.Repo
             # as GitPython only offers GIT_PYTHON_TRACE for all commands>
             self.git.push('origin', refspec) # <TODO: self.remotes.origin.push?>
-        except exception as e:
+        except Exception as e:
             err_print(e, prefix="")
             err_print("Could not push branches {}!".format(branch_names),
                 prefix="bunsen.Workdir ERROR:")
@@ -565,7 +565,7 @@ class Bunsen:
 
         base_dirs = []
         base_dirs.append(Path()) # current working directory
-        base_dirs.append(git_toplevel()) # top level of current git repo
+        base_dirs.append(Path(git_toplevel())) # top level of current git repo
         # <TODO> top level of Bunsen source checkout -- if not installed?
 
         dir_names = ['.bunsen', 'bunsen-data']
@@ -1098,8 +1098,8 @@ class Bunsen:
             path = source.path.name
         elif path is None and isinstance(source, tarfile.ExFileObject):
             pass # XXX no info available
-        else: # str or Path-like object
-            path = PurePath(source).name
+        elif path is None: # str or Path-like object
+            path = PurePath(source).name # XXX store at top level
         testlog = Testlog.from_source(source, path)
         self._staging_testlogs.append(testlog)
 
