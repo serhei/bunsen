@@ -351,6 +351,7 @@ if __name__=='__main__':
     progress = tqdm.tqdm(iterable=None, desc='Rendering grid',
                          total=len(cube.testcase_names), leave=True, unit='testcase')
     n_testcases_shown = 0
+    n_headings_shown = 0
     for testcase_name in cube.iter_testcases():
         # XXX skip unchanged testcases without making a section
         if testcase_name in cube.untested_testcases or testcase_name in cube.unchanged_testcases:
@@ -358,7 +359,9 @@ if __name__=='__main__':
             pass
 
         out.section()
-        out.message(testcase_name)
+        n_headings_shown += 1
+        out.message(f"{n_headings_shown}. {testcase_name}")
+        out.message("<a name=\"n_headings_shown\" />") # TODO HTML ONLY; unreliable
 
         # XXX skip unchanged testcases while still including the section
         # XXX comment out 'continue' to verify results
