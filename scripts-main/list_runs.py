@@ -38,6 +38,7 @@ if __name__=='__main__':
     key_function = None if opts.sort is None \
         else chronological_order(b, upstream_repo, reverse=reverse)
 
+    testrun_count = {}
     if len(tags) == 0:
         out.message("no projects")
     for tag in tags:
@@ -63,4 +64,11 @@ if __name__=='__main__':
         if opts.restrict < 0 or n_testruns < opts.restrict:
             out.message("total {} testruns".format(n_testruns),
                         "for project", tag)
+            testrun_count[tag] = n_testruns
+
+    if len(tags) >= 1 and opts.restrict < 0:
+        out.section()
+        for tag, n_testruns in testrun_count.items():
+            out.message("project {} has {} testruns".format(tag, n_testruns))
+
     out.finish()
