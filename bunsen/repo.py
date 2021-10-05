@@ -1047,11 +1047,12 @@ class Bunsen:
 
     # Provides a way for separate Testlogs referencing the same log file
     # to avoid redundant reads of that log file:
+    # TODO: Doublecheck argument ordering.
     def _testlog_readlines(self, commit_id, path):
         if (commit_id, path) in self._testlog_lines:
             return self._testlog_lines[(commit_id, path)]
         commit = self.git_repo.commit(commit_id)
-        blob = commit.tree[path]
+        blob = commit.tree[str(path)]
         lines = readlines_decode(blob.data_stream, must_decode=False)
         # XXX to localize errors, decode utf-8 later in Testlog.line()
         self._testlog_lines[(commit_id, path)] = lines
@@ -2654,6 +2655,7 @@ BunsenOptions.add_option('scripts_search_path', group={'run'},
 
 # Options for output:
 # TODOXXX output_format=json,html,console,log
+# TODOXXX -o output_dest.html, hint message "Output written to <path>"
 
 # Options for ???:
 # TODOXXX name of bunsen branch to check out?

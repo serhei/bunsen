@@ -449,12 +449,12 @@ class Testlog:
         return self.blob.data_stream
 
     def _data_stream_readlines(self):
-        if not self.external:
-            # Use centralized caching to avoid reading _lines multiple times
-            # in separate Testlog objects created by separate Cursor objects.
-            return self._bunsen._testlog_readlines(self.commit_id, self.path)
-
         try:
+            if not self.external:
+                # Use centralized caching to avoid reading _lines multiple times
+                # in separate Testlog objects created by separate Cursor objects.
+                return self._bunsen._testlog_readlines(self.commit_id, self.path)
+
             return readlines_decode(self._input_stream, must_decode=False)
             # XXX prefer to decode utf-8 later in line()
         except UnicodeDecodeError:
