@@ -523,7 +523,12 @@ function details(s) {
             # TODOXXX this is pretty slow when listing all commits :/ control with opts.list_logs instead of list_logs option?
             # TODO: add a method like b.testlog_names(testrun)?
             details += "<p>"; first = True
-            commit = self._bunsen.git_repo.commit(testrun.bunsen_commit_id)
+            try:
+                commit = self._bunsen.git_repo.commit(testrun.bunsen_commit_id)
+            except ValueError:
+                details += "ERROR: commit {} not found in git repo".format(testrun.bunsen_commit_id)
+                details += "</p>"
+                return details
             for blob in commit.tree.blobs:
                 if blob.name == '.gitignore': continue
                 if not first: details += "<br>"
