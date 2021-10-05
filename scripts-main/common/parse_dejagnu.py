@@ -603,7 +603,8 @@ def parse_dejagnu_log(testrun, logfile, logfile_name=None,
 
 # TODOXXX move to systemtap/parse_dejagnu.py
 # lots of information to extract SystemTap metadata lines:
-host_is_regex = re.compile(r"Host: Linux (?P<origin_host>\S+) (?P<kernel_version>\S+) \S+ \S+ (?P<timestamp>\S+ \S+ +\S+ \S+ \S+ \S+)?")
+host_is_regex = re.compile(r"Linux (?P<origin_host>\S+) (?P<kernel_version>\S+)")
+# TODOXXX host_is_regex = re.compile(r"Linux (?P<origin_host>\S+) (?P<kernel_version>\S+)( \S+ \S+ (?P<timestamp>\S+ \S+ +\S+ \S+ \S+ \S+)?)?") # XXX allow ignoring trailing text
 commit_release_regex = re.compile(r"commit release\S+-g(?P<source_commit>[0-9a-fA-F]+)")
 
 # TODOXXX move to systemtap/parse_dejagnu.py
