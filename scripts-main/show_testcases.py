@@ -358,10 +358,11 @@ if __name__=='__main__':
             # continue
             pass
 
-        out.section()
         n_headings_shown += 1
-        out.message(f"{n_headings_shown}. {testcase_name}")
-        out.message("<a name=\"n_headings_shown\" />") # TODO HTML ONLY; unreliable
+        out.section()
+        out.message(f"<a id=\"{n_headings_shown}\">", raw=True) # XXX HTML ONLY; a name?
+        out.message(f"<h3>{n_headings_shown}. {testcase_name}</h3>", raw=True) # XXX HTML ONLY
+        out.message(f"</a>", raw=True) # XXX HTML ONLY
 
         # XXX skip unchanged testcases while still including the section
         # XXX comment out 'continue' to verify results
