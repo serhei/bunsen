@@ -14,7 +14,8 @@ import urllib.parse
 
 uninteresting_fields = {'year_month',
                         'bunsen_testruns_branch',
-                        'bunsen_testlogs_branch'}
+                        'bunsen_testlogs_branch',
+                        '_cursor_commit_ids'}
 
 def suppress_fields(testrun, suppress=set()):
     testrun = dict(testrun)
