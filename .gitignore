@@ -6,6 +6,7 @@ private-*
 wd-*
 *~
 .idea
+.python-version
 
 # example projects
 /binutils-gdb
