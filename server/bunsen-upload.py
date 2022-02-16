@@ -12,6 +12,9 @@ config_opts = [
     ('manifest', None, # e.g. ['sysinfo','systemtap.dmesg*', 'systemtap.sum*', 'systemtap.log*'],
      '<globs>',
      "List of globs specifying logfile paths to accept. All other paths from the tarball are ignored."),
+    ('allowed_fields', None, # e.g. ['package_nvr'],
+     '<fields>',
+     "List of additional fields that can be accepted via command line."),
 ]
 
 import cgi
@@ -57,6 +60,7 @@ if __name__=='__main__':
 
     # TODOXXX Also allow standard options for _commit_logs.commit_logs()!
     opts.manifest = opts.get_list('manifest')
+    opts.allowed_fields = opts.get_list('allowed_fields') # TODOXXX no wildcard?
     opts.tag = opts.project # XXX alias for _commit_logs.commit_logs() TODOXXX???
 
     sys.path += [str(path) for path in b.default_pythonpath]
@@ -81,6 +85,9 @@ if __name__=='__main__':
         # TODOXXX this should be set before calling cmdline_args()
         opts.project = form['project'].value
         opts.tag = opts.project # TODOXXX alias for _commit_logs.commit_logs()
+    for field_name in opts.allowed_fields:
+        if field_name in form:
+            opts.set_option(field_name, form[field_name].value, 'args', allow_unknown=True)
     if 'tar' in form and form['tar'].file is not None:
         tar = tarfile.open(fileobj=form['tar'].file)
         # TODO: change outfile to go somewhere other than 'breakage.log'

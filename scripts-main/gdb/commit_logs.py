@@ -178,6 +178,8 @@ def commit_logs(b, wd, *args, **kwargs):
     tarfile = kwargs['tarfile'] if 'tarfile' in kwargs else None
     tarballname = kwargs['tarballname'] if 'tarballname' in kwargs else None
     osver = kwargs['osver'] if 'osver' in kwargs else None
+    allowed_fields = opts.allowed_fields if opts is not None and \
+        hasattr(opts, 'allowed_fields') else []
 
     # for error reporting:
     testdir = kwargs['testdir'] if 'testdir' in kwargs else None
@@ -221,6 +223,9 @@ def commit_logs(b, wd, *args, **kwargs):
     testrun.osver = osver
     testrun = parse_dejagnu_sum(testrun, gdb_sum, all_cases=all_cases)
     testrun = annotate_dejagnu_log(testrun, gdb_log, all_cases, verbose=False)
+    for field_name in allowed_fields:
+        if hasattr(opts,fieldname): # <TODO> opts should support dict operations, here and elsewhere
+            testrun[field_name] = getattr(opts, field_name)
 
     if testrun is None:
         b.reset_all()

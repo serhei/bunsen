@@ -14,6 +14,9 @@ config_opts = [
     ('manifest', None, # e.g. ['sysinfo','systemtap.dmesg*', 'systemtap.sum*', 'systemtap.log*'],
      '<globs>',
      "List of globs specifying logfile paths to accept. All other paths from the tarball are ignored."),
+    ('allowed_fields', None, # e.g. ['package_nvr'],
+     '<fields>',
+     "List of additional fields that can be accepted via command line."),
 ]
 
 import sys
@@ -48,12 +51,19 @@ def to_module_name(commit_module):
 b = Bunsen(script_name='bunsen-add')
 if __name__=='__main__':
     opts = b.cmdline_args(sys.argv, info=info, args=config_opts,
-                          required_args=['tar', 'manifest', 'commit_module'], use_config=True)
+                          required_args=['tar', 'manifest', 'commit_module'],
+                          check_required=False, # XXX required args can come from allow_unknown
+                          allow_unknown=True) # XXX allow_unknown for allowed_fields
     opts.add_config("bunsen-upload") # TODO: Also handle [bunsen-upload "<tag>"]
+    opts.check_required()
+    if opts.should_print_help:
+        opts.print_help()
+        exit()
     opts.service_id = 'bunsen-upload'
 
     # TODOXXX Also allow standard options for _commit_logs.commit_logs()!
     opts.manifest = opts.get_list('manifest')
+    opts.allowed_fields = opts.get_list('allowed_fields')
     opts.tag = opts.project # XXX alias for _commit_logs.commit_logs()
 
     sys.path += [str(path) for path in b.default_pythonpath]
@@ -68,6 +78,10 @@ if __name__=='__main__':
                        checkout_name='bunsen_upload')
 
     commit_id = None
+    # XXX this is a no-op; allowed_fields should still be set for the commit_logs module
+    #for field_name in opts.allowed_fields:
+    #    if field_name in form:
+    #        opts[field_name] = opts[field_name].value
     if opts.tar == '-':
         f = io.BytesIO(sys.stdin.buffer.read())
         tar = tarfile.open(fileobj=f)
