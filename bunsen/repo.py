@@ -620,7 +620,8 @@ class Bunsen:
     # and move to the BunsenOptions.add_option() scheme.
     def cmdline_args(self, argv, usage=None, info=None, args=None,
                      required_args=[], optional_args=[],
-                     defaults={}, use_config=True):
+                     defaults={}, use_config=True, check_required=True,
+                     allow_unknown=False):
         '''Used by analysis scripts to pass command line options.
 
         Supports two formats:
@@ -664,8 +665,9 @@ class Bunsen:
                 args.append((name, default_val, None, None))
 
         opts = self.opts(args if args is not None else defaults)
-        opts.parse_cmdline(argv, required_args, optional_args)
-        opts.check_required()
+        opts.parse_cmdline(argv, required_args, optional_args, allow_unknown=allow_unknown)
+        if check_required:
+            opts.check_required()
         if self._opts.should_print_help:
             self._opts.print_help()
             exit()
@@ -2070,14 +2072,16 @@ class BunsenOptions:
     # code which directly assigns fields will correctly lead to
     # assigned values treated as being from a lowest-priority
     # (unknown) source.
-    def set_option(self, key, value, source):
+    def set_option(self, key, value, source, allow_unknown=False):
         """Set an option if it wasn't set from any higher-priority source.
 
         Args:
             key (str): Internal name of the option.
             value (str): New value for the option.
             source (str): The configuration source of the new value.
-                Should be an element of BunsenOptions.source_priorities."""
+                Should be an element of BunsenOptions.source_priorities.
+            allow_unknown (bool): Allow setting an option that has
+                not been defined. Default False."""
         # <TODO> Warn about duplicate options added from the same source?
         if key in _options_base_fields:
             warn_print("attempt to set reserved BunsenOptions field '{}'" \
@@ -2087,19 +2091,21 @@ class BunsenOptions:
            and not BunsenOptions.source_overrides(source, self.sources[key]):
             return # XXX A value exists with higher priority.
         if key not in self._options:
-            # <TODO> Several alternatives to consider:
-            # - if source is 'config', warn (naming the config file)?
-            # - if source is 'cmdline', print usage unless unknown is permitted?
             if source == 'global' or source == 'local':
                 # XXX while cmdline_args() is still used, option may not yet be configured
                 self.__dict__[key] = value
                 self.sources[key] = source
                 return
-            if source == 'cmdline':
+            if source == 'args' and not allow_unknown:
                 err_print("unknown option '{}={}'".format(key, value))
                 self.print_help()
                 exit(1)
-            warn_print("unknown option '{}={}'".format(key, value))
+            if not allow_unknown:
+                # <TODO> name the config file where this option originated from
+                warn_print("unknown option '{}={}', skipping".format(key, value))
+                return
+            self.__dict__[key] = value
+            self.sources[key] = source
             return
         if self.option_info(key, 'boolean_flag') or \
            isinstance(self.option_info(key, 'default_value'), bool):
@@ -2265,6 +2271,7 @@ class BunsenOptions:
         elif m.group('keyword') is not None:
             # handle '--keyword=arg', 'keyword=arg'
             flag = m.group('keyword')
+            val = m.group('arg')
             # PR25090: Allow e.g. +source-repo= instead of +source_repo=
             flag = flag.replace('-','_')
             if self.option_name(flag, 'cmdline') is not None:
@@ -2274,7 +2281,12 @@ class BunsenOptions:
                 is_negating = True
             elif flag in self._options:
                 internal_name = flag
-            val = m.group('arg')
+            elif allow_unknown:
+                # XXX Set the option, for scripts like bunsen-add
+                # that take arbitrary options to set testrun metadata fields.
+                self.set_option(flag, val, 'args', allow_unknown=True)
+                self._unknown_args.append(arg)
+                return use_next
             if is_negating: val = self._negate_arg(val) # TODOXXX also negates str
         elif m.group('prefix') is not None:
             # handle '--keyword', '--keyword arg'
@@ -2289,6 +2301,8 @@ class BunsenOptions:
             elif flag in self._options:
                 internal_name = flag
             elif allow_unknown:
+                # XXX Don't set option if it was given in GNU format,
+                # we don't know if it takes an arg or not.
                 self._unknown_args.append(arg)
                 return use_next
             else:
