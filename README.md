@@ -29,11 +29,14 @@ https://people.redhat.com/~smakarov/2021-lpc-talk/
     $ pip3 install --user tqdm # see https://github.com/tqdm/tqdm
     $ pip3 install --user GitPython # see https://github.com/gitpython-developers/GitPython
     $ pip3 install --user python-dateutil # see https://github.com/dateutil/dateutil/
-    $ pip3 install --user pathlib # see https://docs.python.org/3/library/pathlib.html
 
 Or, more simply:
 
     $ pip3 install --user -r requirements.txt
+
+Python3 versions older than 3.4 may also require:
+
+    $ pip3 install --user pathlib # see https://docs.python.org/3/library/pathlib.html
 
 Example setup for the `server/bunsen-cgi.py` dashboard and `server/bunsen-upload.py` upload scripts with `lighttpd`:
 

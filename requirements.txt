@@ -1,4 +1,3 @@
 tqdm
 GitPython
 python-dateutil
-pathlib
