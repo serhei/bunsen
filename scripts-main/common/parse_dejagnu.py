@@ -106,6 +106,8 @@ standard_distro_map = {
     r'Fedora release (\d+) \([^R].*\)':lambda m: "fedora-{}".format(m.group(1)),
     r'Fedora release (\d+) \(Rawhide\)':lambda m: "fedora-{}-rawhide".format(m.group(1)),
     r'Ubuntu (\d\d\.\d\d)\.?\d*\w* LTS':lambda m: "ubuntu-{}".format(m.group(1).replace('.','-')),
+    r'Red Hat Enterprise Linux Server release (\d+)(?:\.\d+)? \(.*\)':lambda m: "rhel-{}".format(m.group(1)),
+    r'Red Hat Enterprise Linux Server release (\d+)(?:\.\d+)? Beta \(.*\)':lambda m: "rhel-{}-beta".format(m.group(1)),
 }
 
 # TODO Handle other exotic DejaGNU outcome codes if they come up.

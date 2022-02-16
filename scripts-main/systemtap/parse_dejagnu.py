@@ -88,11 +88,15 @@ def parse_dejagnu_log(testrun, logfile, logfile_name=None, all_cases=None,
                 if "rpm " in snapshot_version:
                     t1 = snapshot_version.find("rpm ") + len("rpm ")
                     snapshot_version = snapshot_version[t1:]
+                if snapshot_version.endswith('\n'):
+                    snapshot_version = snapshot_version[:-1]
         if line.startswith("Systemtap translator/driver (version"):
                 translator_driver_version = line
                 if "rpm " in translator_driver_version:
                     t1 = translator_driver_version.find("rpm ") + len("rpm ")
-                    translator_driver_version = translator_driver_version[t1:] # TODO: [t1:-1]?
+                    translator_driver_version = translator_driver_version[t1:]
+                if translator_driver_version.endswith('\n'):
+                    translator_driver_version = translator_driver_version[:-1]
         if line.startswith("UNAME_MACHINE"):
                 uname_machine_raw = line
         if line.startswith("Distro: "):
@@ -199,13 +203,16 @@ def parse_dejagnu_log(testrun, logfile, logfile_name=None, all_cases=None,
                                       uname_machine_map)
 
     # XXX skip testrun.logfile_path = logfile_path
-    testrun.arch = uname_machine
+    if testrun.arch is None and uname_machine is not None: # XXX could set before parsing
+        testrun.arch = uname_machine
     testrun.version = translator_driver_version if snapshot_version is None \
         else snapshot_version
     # XXX skip testrun.logfile_hash = get_hash_4_log(testrun)
     testrun.pass_count = passed_subtests_summary
     testrun.fail_count = failed_subtests_summary
 
+    if 'osver' in testrun: # XXX could set before parsing
+        default_osver = testrun.osver
     testrun.osver = None
     if testrun.osver is None:
         testrun.osver = check_regex_mapping(testrun.version,
@@ -216,6 +223,8 @@ def parse_dejagnu_log(testrun, logfile, logfile_name=None, all_cases=None,
     if testrun.osver is None:
         testrun.osver = check_regex_mapping(distro_is,
                                             standard_distro_map)
+    if testrun.osver is None:
+        testrun.osver = default_osver
     if testrun.osver is None:
         print("WARNING: ignoring unknown distro_is", distro_is, file=sys.stderr)
 
