@@ -69,8 +69,8 @@ def find_testruns(b, source_hexsha, msg='Finding testruns'):
     return testruns
 
 def _find_summary_fields(testrun, summary_fields, summary_vals):
-    excluded = {'pass_count', 'fail_count', 'year_month', 'testcases', '_cursor_commit_ids'}
-               # 'source_commit', 'version'} # XXX implied by choice of commit?
+    excluded = {'pass_count', 'fail_count', 'year_month', 'testcases', '_cursor_commit_ids',
+                'source_commit', 'version', 'package_nvr'} # XXX implied by choice of version?
     found_fields = set()
     for field in testrun:
         if field in excluded or field.startswith('bunsen_'):

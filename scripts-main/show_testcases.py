@@ -29,7 +29,7 @@ if __name__=='__main__': # XXX need a graceful solution for option conflicts
 
 import git
 from bunsen.utils import warn_print
-from list_commits import index_source_commits, iter_history
+from list_versions import index_testrun_versions, iter_history
 from diff_runs import append_map, fail_outcomes, untested_outcomes
 from diff_commits import index_summary_fields, get_summary, get_summary_key, get_tc_key
 
@@ -108,27 +108,30 @@ class Timecube:
 
         # Collect all testruns between the specified commits:
         projects = opts.get_list('project', default=self._bunsen.projects)
-        testruns_map, hexsha_lens = index_source_commits(self._bunsen, projects)
-        self.commit_range = [] # list of (commit, testruns)
+        tvix = index_testrun_versions(self._bunsen, projects)
+        self.commit_range = [] # list of (version_id, commit or None, testruns)
         self.commit_indices = {} # hexsha -> index in commit_range (for finding distance between commits)
         self.all_testruns = [] # list of testruns
         self.n_branch_commits = 0 # XXX total commits in branch, >len(self.commit_range)
         started_range = False
         finished_range = False
-        for commit, testruns in iter_history(self._bunsen, self._repo, testruns_map, hexsha_lens,
-                                             forward=True, branch=opts.branch,
-                                             include_empty_commits=True):
+        for version_id, commit, testruns in iter_history(self._bunsen, self._repo, tvix,
+                                                         forward=True, branch=opts.branch,
+                                                         include_empty_versions=True):
             self.n_branch_commits += 1
             if finished_range:
                 continue
-            if not started_range and refspec_matches(repo, opts.baseline, commit.hexsha):
+            # TODO: For now, package_nvr items are always included regardless of commit_range.
+            if commit is not None and \
+               not started_range and refspec_matches(repo, opts.baseline, commit.hexsha):
                 started_range = True
-            if not started_range:
+            if commit is not None and not started_range:
                 continue
-            self.commit_indices[commit.hexsha] = len(self.commit_range)
-            self.commit_range.append((commit, testruns))
+            self.commit_indices[version_id] = len(self.commit_range)
+            self.commit_range.append((version_id, commit, testruns))
             self.all_testruns += testruns
-            if refspec_matches(repo, opts.latest, commit.hexsha):
+            if commit is not None and \
+               refspec_matches(repo, opts.latest, commit.hexsha):
                 finished_range = True
         if not started_range:
             warn_print(f"could not find baseline refspec {opts.baseline}")
@@ -176,7 +179,7 @@ class Timecube:
         if gk not in self.outcomes_grid:
             self.outcomes_grid[gk] = 'PASS'
 
-    def _scan_testrun(self, commit, testrun, summary_fields):
+    def _scan_testrun(self, version_id, commit, testrun, summary_fields):
         summary = get_summary(testrun, summary_fields)
         sk = get_summary_key(summary)
 
@@ -200,7 +203,7 @@ class Timecube:
             self.testcase_configurations[testcase.name].add(sk)
 
             # populate self.outcomes_grid, self.subtests_grid1, self.subtests_grid
-            gk = self.grid_key(testcase.name, sk, commit.hexsha)
+            gk = self.grid_key(testcase.name, sk, version_id)
             tk = get_tc_key(testcase) # XXX should exclude baseline_outcome
             self._merge_outcome(gk, testcase.outcome) # populates outcomes_grid
             if gk not in self.subtests_grid1:
@@ -216,7 +219,7 @@ class Timecube:
 
         # populate self.prev_tested, self.next_tested, self.commits_grid
         for testcase_name in tc_names:
-            gk = self.grid_key(testcase_name, sk, commit.hexsha)
+            gk = self.grid_key(testcase_name, sk, version_id)
             self.commits_grid[gk] = commit
 
             gk_slice = f"{testcase_name}+{sk}" # grid_key minus version
@@ -232,11 +235,11 @@ class Timecube:
         Yields (commit, testruns) in chronological order while the scan is ongoing."""
         header_fields, summary_fields = index_summary_fields(self.all_testruns) # XXX redundant with calling script
         self._last_tested = {} # testcase_name+summary_key -> grid_key with a previous result for this testcase
-        for commit, testruns in self.commit_range:
+        for version_id, commit, testruns in self.commit_range:
             if not testruns:
-                self.untested_commits.add(commit.hexsha)
+                self.untested_commits.add(version_id)
             for testrun in testruns:
-                self._scan_testrun(commit, testrun, summary_fields)
+                self._scan_testrun(version_id, commit, testrun, summary_fields)
             yield commit, testruns
 
         # populate self.untested_testcases, self.unchanged_{testcases,max_fails,n_configs}
@@ -248,8 +251,8 @@ class Timecube:
             failed_configs = set()
             for sk in self.testcase_configurations[testcase_name]:
                 gk_slice = f"{testcase_name}+{sk}" # grid_key minux version
-                for commit, _testruns in self.commit_range:
-                    gk = self.grid_key(testcase_name, sk, commit.hexsha)
+                for version_id, commit, _testruns in self.commit_range:
+                    gk = self.grid_key(testcase_name, sk, version_id)
                     if gk not in self.outcomes_grid:
                         continue
                     is_untested = False
@@ -273,14 +276,14 @@ class Timecube:
         self.testcase_names = list(self.testcase_names)
         self.testcase_names.sort()
 
-    def iter_commits(self, reverse=False):
-        """Yields (commit, testruns) in chronological order."""
+    def iter_versions(self, reverse=False):
+        """Yields (version_id, commit or None, testruns) in chronological order."""
         if reverse:
-            for commit, testruns in reversed(self.commit_range):
-                yield commit, testruns
+            for version_id, commit, testruns in reversed(self.commit_range):
+                yield version_id, commit, testruns
         else:
             for commit, testruns in self.commit_range:
-                yield commit, testruns
+                yield version_id, commit, testruns
 
     def iter_testcases(self):
         """Yields testcase_name for all testcases."""
@@ -382,23 +385,32 @@ if __name__=='__main__':
             # XXX HTML table should default to showing columns in order added
             # XXX for glanceability, show first and last commits on the left
             field_order = ['last','first'] + list(header_fields)
-            for commit, _testruns in cube.iter_commits(reverse=True):
-                hexsha = commit.hexsha[:7]
-                field_order.append(hexsha)
-                if opts.gitweb_url is not None:
+            for version_id, commit, _testruns in cube.iter_versions(reverse=True):
+                if commit is not None:
+                    hexsha = commit.hexsha[:7]
+                    field_order.append(hexsha)
+                else:
+                    field_order.append(version_id) # package_nvr
+                if commit is not None and opts.gitweb_url is not None:
                     commitdiff_url = opts.gitweb_url + ";a=commitdiff;h={}" \
                         .format(commit.hexsha)
                     out.table.header_href[hexsha] = commitdiff_url # XXX HACK
-                out.table.header_tooltip[hexsha] = out.sanitize(hexsha+' '+commit.summary) # XXX HACK
+                if commit is not None:
+                    out.table.header_tooltip[hexsha] = out.sanitize(hexsha+' '+commit.summary) # XXX HACK
 
             out.table_row(summary, order=field_order)
             first_val = "?" # <- will be the value in 'first' column
             first_tooltip = None
             last_val = "?" # <- will be the value in 'last' column
             last_tooltip = None
-            for commit, _testruns in cube.iter_commits(reverse=True):
-                gk = cube.grid_key(testcase_name, sk, commit.hexsha)
-                hexsha = commit.hexsha[:7]
+            for version_id, commit, _testruns in cube.iter_versions(reverse=True):
+                gk = cube.grid_key(testcase_name, sk, version_id)
+                if commit is not None:
+                    hexsha = commit.hexsha[:7]
+                    summary = commit.summary
+                else:
+                    hexsha = version_id # package_nvr
+                    summary = "release"
 
                 subtest_counts = cube.subtest_counts(gk)
                 details = None
@@ -417,13 +429,13 @@ if __name__=='__main__':
                     out.table_cell(hexsha, '?') # XXX will be blanked out by the stylesheet
                 elif cube.outcomes_grid[gk] == 'PASS':
                     out.table_cell(hexsha, "+")
-                    first_val, first_tooltip = "+", hexsha+" "+commit.summary
-                    if last_val == "?": last_val, last_tooltip = "+", hexsha+" "+commit.summary
+                    first_val, first_tooltip = "+", hexsha+" "+summary
+                    if last_val == "?": last_val, last_tooltip = "+", hexsha+" "+summary
                 elif cube.outcomes_grid[gk] == 'FAIL':
                     out.table_cell(hexsha, f"-{len(subtest_counts)}", details=details) # XXX mark number of fails
                     #out.table_cell(hexsha, "-")
-                    first_val, first_tooltip = "-", hexsha+" "+commit.summary
-                    if last_val == "?": last_val, last_tooltip = "-", hexsha+" "+commit.summary
+                    first_val, first_tooltip = "-", hexsha+" "+summary
+                    if last_val == "?": last_val, last_tooltip = "-", hexsha+" "+summary
                 else:
                     warn_print(f"BUG: unsure what to do with outcomes_grid[\"{gk}\"]")
                     out.table_cell(hexsha, 'BUG')
@@ -440,4 +452,4 @@ if __name__=='__main__':
     out.section()
     out.message(f"showing {n_testcases_shown} testcases out of {len(cube.testcase_names)} total")
     branch_name = "main branch" if opts.branch is None else "branch " + opts.branch
-    out.message(f"showing {len(cube.commit_range)} commits out of {cube.n_branch_commits} total for {branch_name}")
+    out.message(f"showing {len(cube.commit_range)} versions out of {cube.n_branch_commits} total for {branch_name}")
