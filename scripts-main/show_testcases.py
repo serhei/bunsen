@@ -32,6 +32,7 @@ from bunsen.utils import warn_print
 from list_versions import index_testrun_versions, iter_history
 from diff_runs import append_map, fail_outcomes, untested_outcomes
 from diff_commits import index_summary_fields, get_summary, get_summary_key, get_tc_key
+from fnmatch import fnmatchcase
 
 from common.format_output import get_formatter
 import tqdm
