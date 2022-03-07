@@ -9,6 +9,7 @@ and work with the Bunsen data model.
 """
 
 from .model import Index, Testlog, Cursor, Testcase, Testrun
-from .repo import Workdir, Bunsen, BunsenOptions
+from .repo import Workdir, Bunsen # TODO Bunsen -> Repo, Bunsen
+from .config import BunsenOptions # TODO BunsenOptions -> Config
 from .utils import BunsenError
 from .version import __version__
