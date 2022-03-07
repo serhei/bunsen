@@ -21,6 +21,7 @@ import git
 import git.exc
 
 from bunsen.model import *
+from bunsen.index import *
 from bunsen.config import *
 from bunsen.utils import *
 

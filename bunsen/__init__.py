@@ -8,7 +8,8 @@ This module provides the core classes used to access a Bunsen repo
 and work with the Bunsen data model.
 """
 
-from .model import Index, Testlog, Cursor, Testcase, Testrun
+from .model import Testlog, Cursor, Testcase, Testrun
+from .index import Index
 from .repo import Workdir, Bunsen # TODO Bunsen -> Repo, Bunsen
 from .config import BunsenOptions # TODO BunsenOptions -> Config
 from .utils import BunsenError
