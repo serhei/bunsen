@@ -1403,8 +1403,8 @@ class Bunsen:
         if push:
             # <TODO>: Doublecheck that we're only pushing what was modified....
             testlogs_wd.push_all()
-            if wd_testruns is not testlogs_wd: wd_testruns.push_all()
-            if wd_index is not testlogs_wd: wd_index.push_all()
+            if testruns_wd is not testlogs_wd: testruns_wd.push_all()
+            if index_wd is not testlogs_wd: index_wd.push_all()
 
         if temporary_wd is not None:
             temporary_wd.destroy()
