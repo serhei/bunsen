@@ -140,15 +140,22 @@ def readlines_decode(data_stream, must_decode=True):
             method may return a list of byte strings instead. This is useful
             for recovery from UnicodeDecodeError since a malformed line
             can be skipped without discarding the entirety of the file.
+            If True, malformed lines will be skipped, replaced with the symbol
+            '<MALFORMED>'.
     """
     if hasattr(data_stream,'readlines') and \
         callable(getattr(data_stream,'readlines')):
         # Prefer readlines() since decoding arrors can be localized:
         lines = data_stream.readlines()
     else:
-        return read_decode(data_stream).split('\n')
+        lines = data_stream.read().split(b'\n')
+        #return read_decode(data_stream).split('\n')
     if must_decode:
         for i in range(len(lines)):
             if isinstance(lines[i], bytes):
-                lines[i] = lines[i].decode('utf-8') # raises UnicodeDecodeError
+                try:
+                    lines[i] = lines[i].decode('utf-8') # raises UnicodeDecodeError
+                except UnicodeDecodeError:
+                    lines[i] = '<MALFORMED>'
+                    continue
     return lines
