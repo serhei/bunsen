@@ -1015,12 +1015,13 @@ class Bunsen:
     # <TODO: Testrun class should have a summary testrun
     # load 'testcases' on demand, when the field is accessed.
     # Then the above pattern is not necessary.>
-    def full_testrun(self, testrun_or_commit_id, project=None, summary=False):
+    def full_testrun(self, testrun_or_commit_id, project=None, summary=False,
+            raise_error=True):
         """Given a summary Testrun, retrieve the corresponding full Testrun.
 
         (This method is an alias of testrun(), provided for readability.)
         """
-        return self.testrun(testrun_or_commit_id, project, summary)
+        return self.testrun(testrun_or_commit_id, project, summary, raise_error=raise_error)
 
     def testlog(self, testlog_path, commit_id=None,
                 input_stream=None):
