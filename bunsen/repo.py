@@ -833,7 +833,7 @@ class Bunsen:
         return Index(self, project, key_function=key_function, reverse=reverse)
 
     def testrun(self, testrun_or_commit_id, project=None,
-                summary=False, raise_error=True):
+                summary=False, inexact=False, raise_error=True):
         """Retrieve a Testrun from the repo.
 
         <TODO: More complex queries should be supported by BunsenOptions.>
@@ -847,6 +847,8 @@ class Bunsen:
                 and the same bunsen_commit_id has several associated testruns
                 in different projects. Will override any project value
                 specified by testrun_or_commit_id.
+            inexact (bool, optional): Accept a commit ID that's a prefix
+                of the full bunsen_commit_id of the testrun.
             summary (bool, optional): If True, strip the 'testcases' field
                 from the Testrun and return a summary Testrun only.
                 <TODO: Testrun() should strip other fields if other fields
@@ -938,9 +940,15 @@ class Bunsen:
             # search through all branch names prefixed by default_branch_name.
             if extra_label is None:
                 for branch in self.git_repo.branches:
-                    if branch_name != default_branch_name \
+                    if branch.name != default_branch_name \
                         and branch.name.startswith(default_branch_name):
-                        possible_branch_names.append(branch_name)
+                        candidate_branches.append(branch.name)
+
+        # Fallback: project was specified explicitly, year_month is unknown.
+        if len(candidate_branches) == 0:
+            for branch in self.git_repo.branches:
+                if branch.name.startswith('{}/testruns-'.format(project)):
+                    candidate_branches.append(branch.name)
 
         # need {bunsen_commit_id, project, candidate_branches matching project}
         blob = None
@@ -954,6 +962,14 @@ class Bunsen:
                 blob = commit.tree[json_path]
                 break
             except KeyError:
+                # Fallback: try json files matching prefix.
+                if inexact:
+                    for item in commit.tree.traverse():
+                        if item.type == 'blob' and \
+                           str(item.path).startswith('{}-{}'.format(project, bunsen_commit_id)) and \
+                           str(item.path).endswith('.json'):
+                            blob = item
+                            break
                 continue
         if blob is None:
             if raise_error:
