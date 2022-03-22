@@ -30,7 +30,10 @@ def bunsen_init(b):
 
 # TODO Subcommand 'show'
 
-# TODO Subcommand 'delete'
+# Subcommand 'rm'
+
+def bunsen_rm(b, project, bunsen_commit_id):
+    b.rm_testrun(project, bunsen_commit_id)
 
 # TODO Subcommand 'rebuild'
 
@@ -194,6 +197,13 @@ def sub_run(parser, args):
         invocation_args = invocation[1:]
         bunsen_run(b, hostname, scriptname, invocation_args)
 
+def sub_rm(parser, args):
+    if args.project is None or args.bunsen_commit_id is None:
+        sub_help(parser, args)
+        return
+    b = Bunsen(repo=args.repo, script_name='rm')
+    bunsen_rm(b, args.project, args.bunsen_commit_id)
+
 def sub_gorilla(parser, args):
     bunsen_gorilla()
 
@@ -240,6 +250,14 @@ if __name__=="__main__":
     parser_run.add_argument('args', nargs=argparse.REMAINDER, \
         metavar='<args>', help='+name and arguments for analysis script')
     parser_run.set_defaults(func=sub_run)
+
+    parser_rm = subparsers.add_parser('rm', \
+        help='delete a testrun from the index')
+    parser_rm.add_argument('project', nargs='?', default=None, \
+        metavar='<project>', help='name of project')
+    parser_rm.add_argument('bunsen_commit_id', nargs='?', default=None, \
+        metavar='<bunsen_commit_id>', help='id of testrun in project')
+    parser_rm.set_defaults(func=sub_rm)
 
     # XXX This was a sanity test for tqdm that got way out of hand.
     # parser_gorilla = subparsers.add_parser('gorilla', \

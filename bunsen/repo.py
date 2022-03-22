@@ -1143,8 +1143,10 @@ class Bunsen:
     # Insert a summary of the testrun into an indexfile at index_path.
     # Overwrites any existing testrun summary with the same bunsen_commit_id
     # within the file, while leaving other testrun summaries intact.
-    # Return True if an existing summary was overwritten.
-    def _serialize_testrun_summary(self, testrun, project, index_path):
+    # If remove_testrun is true, will delete the testrun from the indexfile.
+    # Return True if an existing summary was overwritten or removed.
+    def _serialize_testrun_summary(self, testrun, project, index_path,
+                                   remove_testrun=False):
         updated_testrun, need_update_index = False, False
         update_path = str(index_path) + "_UPDATING"
         updated_testruns = []
@@ -1159,7 +1161,10 @@ class Bunsen:
             for json_str in index_iter:
                 other_run = Testrun(self, from_json=json_str, summary=True)
                 next_run_str = json_str
-                if other_run.bunsen_commit_id == testrun.bunsen_commit_id and found_matching:
+                if other_run.bunsen_commit_id == testrun.bunsen_commit_id and remove_testrun:
+                    need_update_index = True
+                    continue # don't include in the updated index
+                elif other_run.bunsen_commit_id == testrun.bunsen_commit_id and found_matching:
                     warn_print("duplicate/multiple testrun summaries" \
                         "found in {} (bunsen_commit_id={})" \
                         .format(Path(index_path).name,
@@ -1177,9 +1182,9 @@ class Bunsen:
                 warn_print("unexpected error when opening {}: {}" \
                     .format(index_path, err))
                 raise BunsenError("giving up to avoid losing data")
-                return # <TODOXXX>: Should append rather than overwrite, just to be safe.
+                return False # <TODOXXX>: Should append rather than overwrite, just to be safe.
 
-        if not found_matching:
+        if not found_matching and not remove_testrun:
             next_run_str = testrun.to_json(summary=True)
             updated_testruns.append(next_run_str)
             need_update_index = True
@@ -1435,8 +1440,65 @@ class Bunsen:
     # Methods for removing testlogs and testruns #
     ##############################################
 
-    # TODO def delete_testrun - remove a testrun from all indices
-    # TODO def delete_commit - remove all testruns for a testlogs commit
+    def _remove_testrun_summary(self, testrun, project, index_path):
+        return self._serialize_testrun_summary(testrun, project, index_path, remove_testrun=True)
+
+    def rm_testrun(self, project, bunsen_commit_id, wd=None, push=True,
+                   index_wd=None):
+        # Find the testrun:
+        # <TODO> Specifying project should be optional, but we'll require it for the time being.
+        testrun = self.testrun(bunsen_commit_id, project, \
+            summary=True, inexact=True, raise_error=True)
+        testrun_branch_name = testrun.bunsen_testruns_branch
+        testrun_project, testrun_year_month, testrun_extra_label = \
+            testrun.commit_tag()
+
+        # Obtain a working directory:
+        temporary_wd = None
+        if wd is None:
+            wd = self.checkout_wd('index')
+            temporary_wd = wd
+            assert push # must push if wd is temporary
+        testruns_wd = wd
+        if index_wd is None:
+            index_wd = wd
+
+        # Create git commit for testruns branch:
+        wd = testruns_wd
+        wd.checkout_branch(testrun_branch_name, skip_redundant_checkout=True)
+        json_name = "{}-{}.json".format(testrun_project, testrun.bunsen_commit_id)
+        try:
+            wd.index.remove(json_name, working_tree=True)
+            commit_msg = testrun_branch_name
+            commit_msg += ": deleting index file for commit {}" \
+                .format(testrun.bunsen_commit_id)
+            wd.commit_all(commit_msg)
+        except git.exc.GitCommandError:
+            warn_print("no index file found for commit {} in project '{}'" \
+                       .format(testrun.bunsen_commit_id, testrun_project))
+            pass # nothing to delete
+
+        # Create git commit for index branch:
+        wd = index_wd
+        wd.checkout_branch('index', skip_redundant_checkout=True)
+        json_name = "{}-{}.json".format(testrun_project, testrun_year_month)
+        updated_index = self._remove_testrun_summary(testrun, \
+            testrun_project, Path(wd.working_tree_dir) / json_name)
+        commit_msg = testrun_branch_name
+        commit_msg += ": removing summary index for commit {}" \
+            .format(testrun.bunsen_commit_id)
+        wd.commit_all(commit_msg)
+
+        if push:
+            # <TODO>: Doublecheck that we're only pushing modified branches....
+            testruns_wd.push_all()
+            if index_wd is not testruns_wd: index_wd.push_all()
+
+        if temporary_wd is not None:
+            temporary_wd.destroy()
+        return True # successfully found and removed from index
+
+    # TODO def rm_commit - remove all testruns for a testlogs commit
     # <- <TODO: need to be sure this interacts properly with deduplication>
     # TODO def _cleanup_testlogs_branch - delete orphaned testlog commits
     # TODO def _cleanup_testruns_branch - delete old commit history
