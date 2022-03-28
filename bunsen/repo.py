@@ -200,7 +200,7 @@ class Workdir(git.Repo):
     # <TODO: Add option skip_empty=False>.
     # skip_empty (bool, optional): Don't attempt to create the
     #     commit if it would be empty, but instead return None.
-    def commit_all(self, commit_msg, allow_duplicates=False):
+    def commit_all(self, commit_msg, allow_duplicates=True):
         """Commit almost all files in the working directory.
 
         Excludes only the .bunsen_workdir lockfile.
