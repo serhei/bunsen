@@ -71,14 +71,14 @@ if __name__=='__main__':
         raise BunsenError("Module '{}' does not provide commit_logs() function" \
                           .format(module_name))
 
-    # TODOXXX check that the same wd is being checked out
-    wd = b.checkout_wd('master', # XXX branch does not matter
-                       checkout_name='bunsen_upload')
-
     form = cgi.FieldStorage()
 
     print("Content-Type: text/plain")
     print("")
+
+    # TODOXXX check that the same wd is being checked out
+    wd = b.checkout_wd('master', # XXX branch does not matter
+                       checkout_name='bunsen_upload')
 
     commit_id = None
     if 'project' in form:
