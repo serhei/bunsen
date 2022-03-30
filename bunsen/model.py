@@ -1433,6 +1433,10 @@ class Testrun(dict):
 
     def __getattr__(self, field):
         # XXX Called if attribute is not found -- look in JSON dict.
+        if field == 'project' and 'project' not in self.__dict__:
+            # <TODO>: Probably need to rematerialize on de-serialization.
+            # <TODO>: Change callsites of get_project_name()?
+            return self.get_project_name()
         return self[field]
 
     def __setattr__(self, field, value):
