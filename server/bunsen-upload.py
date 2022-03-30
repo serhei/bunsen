@@ -95,7 +95,12 @@ if __name__=='__main__':
         log_tarfile(tar)
         # TODOXXX suppress the 'Could not push branch' messages
         # probably by not pushing unmodified branches?
+        tarballname = None
+        if 'tarballname' in form:
+            tarballname = form['tarballname'].value
+            print("GOT tarballname", tarballname)
         commit_id = _commit_logs.commit_logs(b, wd, tar, tarfile=tar,
+                                             tarballname=tarballname,
                                              opts=opts, push=True)
     tar.close()
 
