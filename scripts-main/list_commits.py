@@ -58,7 +58,7 @@ def get_source_commit(testrun):
 def index_source_commits(b, tags):
     '''Collect the source git commit history for a tag or tags.
     Returns (testruns_map, hexsha_lens,) where
-    - testruns_map maps hexsha(truncated) -> list of commit object.
+    - testruns_map maps hexsha(truncated) OR package_nvr -> list of commit object.
     - hexsha_lens lists possible lengths of hexsha keys in testruns_map.
     See find_testruns() to understand how lookups are done.'''
     testruns_map = {}
@@ -66,9 +66,12 @@ def index_source_commits(b, tags):
     for tag in b.tags:
         for testrun in b.testruns(tag):
             hexsha = get_source_commit(testrun)
-            if hexsha is None:
-                print("WARNING: could not find a source commit for testrun:\n{}" \
+            if hexsha is None and 'package_nvr' not in testrun:
+                print("WARNING: could not find a source commit or package_nvr for testrun:\n{}" \
                       .format(testrun.to_json(summary=True)), file=sys.stderr)
+                continue
+            if hexsha is None:
+                append_map(testruns_map, testrun.package_nvr, testrun)
                 continue
             hexsha_lens.add(len(hexsha)) # add for subsequent lookup
             append_map(testruns_map, hexsha, testrun)
