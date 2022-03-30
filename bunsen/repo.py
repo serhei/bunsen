@@ -1336,6 +1336,9 @@ class Bunsen:
             temporary_wd = wd
             assert push # must push if wd is temporary
         testlogs_wd = wd
+        refspec_testlogs = []
+        refspec_testruns = []
+        refspec_index = []
         if testruns_wd is None:
             testruns_wd = wd
         if index_wd is None:
@@ -1367,6 +1370,8 @@ class Bunsen:
             testlogs_commit_id = wd.commit_all(commit_msg,
                 # reuse existing log files if possible:
                 allow_duplicates=allow_duplicates)
+            if testlogs_branch_name not in refspec_testlogs:
+                refspec_testlogs.append(testlogs_branch_name)
         assert testlogs_commit_id is not None # must specify existing commit if no testlogs were staged
         if testlogs_branch_name is None:
             testlogs_branch_name = primary_testrun.bunsen_testlogs_branch
@@ -1403,6 +1408,8 @@ class Bunsen:
             commit_msg += ": {}index file for commit {}" \
                 .format(updating_testrun_str, testrun.bunsen_commit_id)
             wd.commit_all(commit_msg)
+            if testruns_branch_name not in refspec_testruns:
+                refspec_testruns.append(testruns_branch_name)
 
         # Create git commit for index branch:
         wd = index_wd
@@ -1421,12 +1428,16 @@ class Bunsen:
             # Don't make a commit if nothing was changed:
             # <TODOXXX>: wd.commit_all(commit_msg, skip_empty=True)
             wd.commit_all(commit_msg)
+            if 'index' not in refspec_index:
+                refspec_index.append('index')
+
+        if testruns_wd is testlogs_wd: refspec_testlogs += refspec_testruns
+        if index_wd is testlogs_wd: refspec_testlogs += refspec_index
 
         if push:
-            # <TODO>: Doublecheck that we're only pushing modified branches....
-            testlogs_wd.push_all()
-            if testruns_wd is not testlogs_wd: testruns_wd.push_all()
-            if index_wd is not testlogs_wd: index_wd.push_all()
+            testlogs_wd.push_all(refspec_testlogs)
+            if testruns_wd is not testlogs_wd: testruns_wd.push_all(refspec_testruns)
+            if index_wd is not testlogs_wd: index_wd.push_all(refspec_index)
 
         if temporary_wd is not None:
             temporary_wd.destroy()
@@ -1460,6 +1471,8 @@ class Bunsen:
             temporary_wd = wd
             assert push # must push if wd is temporary
         testruns_wd = wd
+        refspec_testruns = []
+        refspec_index = []
         if index_wd is None:
             index_wd = wd
 
@@ -1473,6 +1486,7 @@ class Bunsen:
             commit_msg += ": deleting index file for commit {}" \
                 .format(testrun.bunsen_commit_id)
             wd.commit_all(commit_msg)
+            refspec_testruns.append(testrun_branch_name)
         except git.exc.GitCommandError:
             warn_print("no index file found for commit {} in project '{}'" \
                        .format(testrun.bunsen_commit_id, testrun_project))
@@ -1488,11 +1502,13 @@ class Bunsen:
         commit_msg += ": removing summary index for commit {}" \
             .format(testrun.bunsen_commit_id)
         wd.commit_all(commit_msg)
+        refspec_index.append('index')
+
+        if index_wd is testruns_wd: refspec_testruns += refspec_index
 
         if push:
-            # <TODO>: Doublecheck that we're only pushing modified branches....
-            testruns_wd.push_all()
-            if index_wd is not testruns_wd: index_wd.push_all()
+            testruns_wd.push_all(refspec_testruns)
+            if index_wd is not testruns_wd: index_wd.push_all(refspec_index)
 
         if temporary_wd is not None:
             temporary_wd.destroy()
