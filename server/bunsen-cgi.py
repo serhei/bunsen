@@ -5,6 +5,7 @@ import cgitb
 cgitb.enable() # TODO: configure logging
 
 import sys
+import time
 from bunsen import Bunsen
 
 fail_reason = None
@@ -36,7 +37,8 @@ if validate_cmd(script_name, args):
     for k, v in args.items():
         cmdline_args.append('{}={}'.format(k,v))
     # TODOXXX fix out-of-order WARNING
-    print("bunsen-cgi running:\n*", script_path, " ".join(cmdline_args), file=sys.stderr)
+    cmdline = " ".join(cmdline_args)
+    print("{} bunsen-cgi running:\n*".format(time.asctime()), script_name, cmdline, file=sys.stderr)
     b.run_script('localhost', script_path, cmdline_args)
     print(file=sys.stderr)
 else:

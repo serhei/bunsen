@@ -23,6 +23,7 @@ import cgitb
 import sys
 import importlib
 import tarfile
+import time
 
 from bunsen import Bunsen
 
@@ -31,7 +32,7 @@ def log_tarfile(tar, outfile=None):
         outfile = sys.stderr
     # TODO: Also log: what's in the manifest, what's rejected,
     # target project, result of adding the testlogs to the Bunsen repo....
-    print("{} received a payload:".format(opts.service_id),
+    print("{} {} received a payload:".format(time.asctime(), opts.service_id),
           file=outfile)
     for tarinfo in tar:
         kind = "unknown"
