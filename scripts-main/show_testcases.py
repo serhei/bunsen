@@ -188,7 +188,8 @@ class Timecube:
         if sk not in self.configurations:
             self.configurations[sk] = summary
 
-        testrun = self._bunsen.full_testrun(testrun) # XXX should remove this & have Testrun load on-demand
+        testrun = self._bunsen.full_testrun(testrun, raise_error=False) # XXX should remove this & have Testrun load on-demand
+        if testrun is None: return None
         tc_names = set() # XXX testcase names for this testrun only
         for testcase in testrun.testcases:
             if self._opts.key is not None and \
