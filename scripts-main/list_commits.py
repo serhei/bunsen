@@ -216,6 +216,8 @@ if __name__=='__main__':
         # not relevant because we never tested that far back in time
         # with the buildbots.
         for testrun in testruns:
+            if testrun.project not in tags:
+                continue
             out.show_testrun(testrun, header_fields=header_fields,
                              show_all_details=opts.verbose)
             n_testruns += 1

@@ -69,7 +69,7 @@ class TestrunVerIndex:
 
     def find_commit(self, full_hexsha):
         for k in self.hexsha_lens:
-            hexsha = testrun_ver.source_commit[:k]
+            hexsha = full_hexsha[:k]
             if hexsha in self.testruns_map:
                 return self.testruns_map[hexsha]
         return None
@@ -147,7 +147,7 @@ def iter_tested_commits(b, repo, testrun_version_index=None,
             continue
         if not forward and commit.hexsha == last_pre_testing:
             break
-        yield (commit.hexsha, commit, testruns)
+        yield commit
 
 # TODO def iter_tested_versions(b, repo, testrun_version_index=None, projects=None, forward=False, branch='master'/'main'/'trunk')?
 
@@ -204,7 +204,7 @@ def iter_history(b, repo, testrun_version_index,
         testruns = testrun_version_index.find_commit(commit.hexsha)
         if testruns is None:
             if include_empty_versions:
-                yield commit, []
+                yield commit.hexsha, commit, []
             continue
         yield commit.hexsha, commit, testruns
 
@@ -300,6 +300,8 @@ if __name__=='__main__':
         # not relevant because we never tested that far back in time
         # with the buildbots.
         for testrun in testruns:
+            #if testrun.project not in projects:
+            #    continue
             out.show_testrun(testrun, header_fields=header_fields,
                              show_all_details=opts.verbose)
             n_testruns += 1
