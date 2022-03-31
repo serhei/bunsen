@@ -16,18 +16,34 @@ if __name__=='__main__': # XXX need a graceful solution for option conflicts
     BunsenOptions.add_option('key', group='filtering', default=None,
                              help_str="Restrict the analysis to testcases containing <glob>",
                              help_cookie="<glob>")
+    # XXX Note on behaviour: If earliest..latest are refspecs, show a range of git commits.
+    # If earliest..latest are package_nvrs, show a range of package_nvr versions.
     BunsenOptions.add_option('baseline', group='commit_range', default=None,
-                             help_str="First commit for which to display testcase results",
-                             help_cookie="<refspec>")
+                             help_str="Baseline versions (or globs or version ranges A..B) against which to compare testcase results",
+                             help_cookie="<refspecs_or_versions_or_ranges>")
+    BunsenOptions.add_option('earliest', group='commit_range', default=None,
+                             help_str="Earliest commit or version for which to display testcase results (defaults to baseline if baseline is provided unambiguously)",
+                             help_cookie="<refspec_or_version>")
     BunsenOptions.add_option('latest', group='commit_range', default=None,
-                             help_str="Last commit for which to display testcase results",
-                             help_cookie="<refspec>")
+                             help_str="Latest commit or version for which to display testcase results",
+                             help_cookie="<refspec_or_version>")
+    BunsenOptions.add_option('versions', group='commit_range', default=None,
+                             help_str="List of additional versions, globs, or version ranges A..B for which to display testcase results (in addition to, or instead of earliest..latest)",
+                             help_cookie="<refspecs_or_versions_or_ranges>")
+    BunsenOptions.add_option('version_field', group='commit_range', default='package_nvr',
+                             help_str="Fields to use for specifying range of versions (e.g. package_nvr, package_ver, kernel_ver, ...)")
+    # TODO: Control relative sorting of commits and versions,
+    # e.g. <commits after tag release-N>,
+    # <downstream-package-version-N>, <tag release-N>. Probably
+    # something to leave until after the redesign or kluge
+    # specifically for SystemTap.
     BunsenOptions.add_option('show_subtests', group='display',
                              cmdline='show-subtests', boolean=True, default=False,
                              help_str="Show subtest details (increases output size significantly)")
 # XXX No option 'pretty' or 'output_format' -- for now, always output HTML.
 
 import git
+import git.exc
 from bunsen.utils import warn_print
 from list_versions import index_testrun_versions, iter_history
 from diff_runs import append_map, fail_outcomes, untested_outcomes
@@ -38,7 +54,34 @@ from common.format_output import get_formatter
 import tqdm
 
 def refspec_matches(repo, refspec, hexsha_prefix):
-    return repo.commit(refspec).hexsha.startswith(hexsha_prefix)
+    if refspec.startswith(hexsha_prefix):
+        return True
+    if hexsha_prefix.startswith(refspec):
+        return True
+    try:
+        return repo.commit(refspec).hexsha.startswith(hexsha_prefix)
+    except git.exc.BadName:
+        return False # no refspec
+
+def _find_matching_key(repo, vkeys, vid):
+    for vkey in vkeys:
+        if refspec_matches(repo, vkey, vid): # refspec match
+            return vkey
+        if fnmatchcase(vid, vkey): # glob match
+            return vkey
+    return None
+
+# Used by Timecube _scan_gather_versions:
+def _open_range(repo, vid, range_starts, range_ends):
+    range_start = _find_matching_key(repo, range_starts, vid)
+    if range_start is not None:
+        range_ends.add(range_starts[range_start])
+
+# Used by Timecube _scan_gather_versions:
+def _close_range(repo, vid, range_ends):
+    range_end = _find_matching_key(repo, range_ends, vid)
+    if range_end is not None:
+        range_ends.remove(range_end)
 
 # Used by Timecube class to reference original testrun of each testcase:
 class TestcaseRef:
@@ -108,36 +151,27 @@ class Timecube:
         self._repo = repo
 
         # Collect all testruns between the specified commits:
-        projects = opts.get_list('project', default=self._bunsen.projects)
-        tvix = index_testrun_versions(self._bunsen, projects)
-        self.commit_range = [] # list of (version_id, commit or None, testruns)
+        self.commit_range = [] # list of (version_id, commit_or_None, testruns)
         self.commit_indices = {} # hexsha -> index in commit_range (for finding distance between commits)
-        self.all_testruns = [] # list of testruns
+        self.all_testruns = [] # list of testruns, in no particular order
+        self.baseline_versions = [] # list of version_id to use for baseline comparison
+
+        # XXX opts.earliest is assumed already populated from opts.baseline if necessary
+        # Collect commit ranges within baseline, earliest..latest, versions:
+        self._range_start = {} # maps earliest -> latest or list of latest
+        self._baseline_range_start = {} # maps earliest -> latest or list of latest
+        self._single_versions = set() # set of glob
+        self._baseline_single_versions = set() # set of glob
+        for item in opts.baseline:
+            self._add_version_item(item, baseline=True)
+        for item in opts.versions:
+            self._add_version_item(item)
+        if opts.earliest is not None and opts.latest is not None:
+            self._add_version_item(opts.earliest, opts.latest)
+
         self.n_branch_commits = 0 # XXX total commits in branch, >len(self.commit_range)
-        started_range = False
-        finished_range = False
-        for version_id, commit, testruns in iter_history(self._bunsen, self._repo, tvix,
-                                                         forward=True, branch=opts.branch,
-                                                         include_empty_versions=True):
-            self.n_branch_commits += 1
-            if finished_range:
-                continue
-            # TODO: For now, package_nvr items are always included regardless of commit_range.
-            if commit is not None and \
-               not started_range and refspec_matches(repo, opts.baseline, commit.hexsha):
-                started_range = True
-            if commit is not None and not started_range:
-                continue
-            self.commit_indices[version_id] = len(self.commit_range)
-            self.commit_range.append((version_id, commit, testruns))
-            self.all_testruns += testruns
-            if commit is not None and \
-               refspec_matches(repo, opts.latest, commit.hexsha):
-                finished_range = True
-        if not started_range:
-            warn_print(f"could not find baseline refspec {opts.baseline}")
-        if not finished_range:
-            warn_print(f"could not find latest refspec {opts.latest}")
+        self._scan_gather_versions()
+        # TODO warn if collected range of versions is empty or some refspecs were not found
 
         # To be populated by scan_commits()/iter_scan_commits():
         self.testcase_names = set() # set(str) or list(str) in alphabetical order
@@ -162,6 +196,62 @@ class Timecube:
         self.unchanged_testcases = set() # set of testcase_names with no changes in # fails seen
         self.unchanged_max_fails = {} # testcase_name -> max # of fails seen
         self.unchanged_n_configs = {} # testcase_name -> # of configurations seen
+
+    # Mark glob or range of versions for _scan_gather_versions()
+    def _add_version_item(self, item1, item2=None, baseline=False):
+        # TODO change to handle multiple items:
+        # if item2 is not None and baseline:
+        #     append_map(self._baseline_range_start, item1, item2)
+        if item2 is not None and baseline:
+            self._baseline_range_start[item1] = item2
+            return
+        if item2 is not None:
+            self._range_start[item1] = item2
+        if '..' in item1: # range A..B
+            items = item1.split('..')
+            self._add_version_item(items[0], items[-1])
+            return
+        if baseline:
+            self._baseline_single_versions.add(item1)
+            return
+        self._single_versions.add(item1)
+
+    # XXX Call in forward chronological order of versions:
+    def _add_version(self, version_id, commit, testruns, baseline=False):
+        self.commit_indices[version_id] = len(self.commit_range)
+        self.commit_range.append((version_id, commit, testruns))
+        self.all_testruns += testruns
+        if baseline:
+            self.baseline_versions.append(version_id)
+
+    # XXX Call once after building self._{baseline_,}range_start, self._{baseline_,}single_versions
+    def _scan_gather_versions(self):
+        # TODO: remove projects, tvix from caller?
+        projects = opts.get_list('project', default=self._bunsen.projects)
+        tvix = index_testrun_versions(self._bunsen, projects) # TODO check package_nvr
+        repo = self._repo
+        # XXX self.n_branch_commits assumed to be 0
+        active_range_ends = set()
+        baseline_range_ends = set()
+        #print("DEBUG requests", self._range_start, self._single_versions, file=sys.stderr)
+        for version_id, commit, testruns in iter_history(self._bunsen, repo, tvix,
+                                                         forward=True, branch=opts.branch,
+                                                         include_empty_versions=True):
+            #print("DEBUG checking", version_id, commit, len(testruns), file=sys.stderr)
+            vid = version_id
+            if commit is not None:
+                vid = commit.hexsha
+            self.n_branch_commits += 1
+            _open_range(repo, vid, self._range_start, active_range_ends)
+            _open_range(repo, vid, self._baseline_range_start, baseline_range_ends)
+            single_version = _find_matching_key(repo, self._single_versions, vid)
+            baseline_single_version = _find_matching_key(repo, self._baseline_single_versions, vid)
+            if len(active_range_ends) > 0 or len(baseline_range_ends) > 0 \
+               or single_version is not None or baseline_single_version is not None:
+                is_baseline = len(baseline_range_ends) > 0 or baseline_single_version
+                self._add_version(version_id, commit, testruns, is_baseline)
+            _close_range(repo, vid, active_range_ends)
+            _close_range(repo, vid, baseline_range_ends)
 
     def grid_key(self, testcase_name, summary_key, hexsha):
         """Returns the string ID of the specified (testcase, configuration, commit) grid cell."""
@@ -284,7 +374,7 @@ class Timecube:
             for version_id, commit, testruns in reversed(self.commit_range):
                 yield version_id, commit, testruns
         else:
-            for commit, testruns in self.commit_range:
+            for version_id, commit, testruns in self.commit_range:
                 yield version_id, commit, testruns
 
     def iter_testcases(self):
@@ -327,16 +417,39 @@ class Timecube:
         latest = self.commits_grid[gk_latest].hexsha
         return self.commit_dist(baseline,latest)
 
+    # TODO docstring
+    def has_regression(self, testcase_name, sk):
+        first_outcome = None
+        last_outcome = None
+        for version_id, commit, _testruns in self.iter_versions(reverse=True):
+            gk = self.grid_key(testcase_name, sk, version_id)
+            if gk in self.outcomes_grid:
+                last_outcome = self.outcomes_grid[gk]
+                break
+        for version_id, commit, _testruns in self.iter_versions():
+            gk = self.grid_key(testcase_name, sk, version_id)
+            if gk in self.outcomes_grid:
+                first_outcome = self.outcomes_grid[gk]
+                break
+        return first_outcome == "PASS" and last_outcome == "FAIL"
+
 if __name__=='__main__':
     b, opts = Bunsen.from_cmdline(info=info,
-                                  required_args=['baseline','latest'],
-                                  optional_args=['source_repo'])
+                                  #required_args=['baseline','latest'],
+                                  optional_args=['baseline','latest','source_repo'])
 
     opts.pretty = 'html' # XXX for now, always output HTML
     out = get_formatter(b, opts)
 
     projects = opts.get_list('project', default=b.projects)
     repo = git.Repo(opts.source_repo)
+    opts.baseline = opts.get_list('baseline', default=[])
+    opts.versions = opts.get_list('versions', default=[])
+    if opts.earliest is None and opts.baseline is not None and len(opts.baseline) == 1:
+        opts.earliest = opts.baseline[0]
+    if opts.latest is not None and opts.earliest is None:
+        # TODO: Alternately, default to earliest=1st-version, latest=last-version, print a warning.
+        raise BunsenError("No commit range, latest is specified but {baseline|earliest} is not, or baseline is ambiguous.")
 
     # (1a) Use Timecube class to collect test results for commits in the specified range
     cube = Timecube(b, opts, repo)
@@ -380,7 +493,8 @@ if __name__=='__main__':
                 # XXX HTML only
                 msg += "<br/>" + f"(failures occur in up to {cube.unchanged_max_fails[testcase_name]} subtests on up to {cube.unchanged_n_configs[testcase_name]} configurations)"
             out.message(msg)
-            continue
+            # XXX probably more helpful to see this on downstream data
+            #continue
 
         for sk in cube.iter_configurations(testcase_name):
             summary = cube.configurations[sk]
@@ -403,6 +517,7 @@ if __name__=='__main__':
             out.table_row(summary, order=field_order)
             first_val = "?" # <- will be the value in 'first' column
             first_tooltip = None
+            # TODO display baselines instead of (first,last)
             last_val = "?" # <- will be the value in 'last' column
             last_tooltip = None
             for version_id, commit, _testruns in cube.iter_versions(reverse=True):
