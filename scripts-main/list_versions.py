@@ -130,12 +130,9 @@ def iter_tested_commits(b, repo, testrun_version_index=None,
         branch = pick_default_branch(repo)
 
     last_pre_testing = None
-    found_tested_commit = False
     for commit in repo.iter_commits(branch, reverse=True):
-        for k in testrun_version_index.hexsha_lens:
-            if commit.hexsha[:k] in testrun_version_index.testruns_map:
-                found_tested_commit = True
-        if found_tested_commit:
+        c = testrun_version_index.find_commit(commit.hexsha)
+        if c is not None:
             break
         last_pre_testing = commit.hexsha
     found_start_of_testing = last_pre_testing is None

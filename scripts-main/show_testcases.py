@@ -10,6 +10,10 @@ if __name__=='__main__': # XXX need a graceful solution for option conflicts
     BunsenOptions.add_option('branch', group='source_repo', default=None,
                              help_str="Use project commit history from <branch> in source_repo",
                              help_cookie="<branch>")
+    BunsenOptions.add_option('gitweb_url', group='source_repo',
+                             cmdline='gitweb-url', default=None,
+                             help_str="Link to gitweb at <url>",
+                             help_cookie="<url>")
     BunsenOptions.add_option('project', group='filtering', default=None,
                              help_str="Restrict the analysis to testruns in <projects>",
                              help_cookie="<projects>")
@@ -42,6 +46,7 @@ if __name__=='__main__': # XXX need a graceful solution for option conflicts
                              help_str="Show subtest details (increases output size significantly)")
 # XXX No option 'pretty' or 'output_format' -- for now, always output HTML.
 
+import sys
 import git
 import git.exc
 from bunsen.utils import warn_print
@@ -236,7 +241,8 @@ class Timecube:
         #print("DEBUG requests", self._range_start, self._single_versions, file=sys.stderr)
         for version_id, commit, testruns in iter_history(self._bunsen, repo, tvix,
                                                          forward=True, branch=opts.branch,
-                                                         include_empty_versions=True):
+                                                         include_empty_versions=True,
+                                                         include_downstream_versions=True):
             #print("DEBUG checking", version_id, commit, len(testruns), file=sys.stderr)
             vid = version_id
             if commit is not None:
@@ -442,6 +448,7 @@ if __name__=='__main__':
     out = get_formatter(b, opts)
 
     projects = opts.get_list('project', default=b.projects)
+    assert opts.source_repo is not None # XXX git.Repo(None) defaults to cwd, which is not what we want
     repo = git.Repo(opts.source_repo)
     opts.baseline = opts.get_list('baseline', default=[])
     opts.versions = opts.get_list('versions', default=[])
