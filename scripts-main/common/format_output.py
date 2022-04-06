@@ -347,7 +347,7 @@ class HTMLTable:
                 else:
                     pass # TODOXXX need some padding for an empty cell
                 if field in _this_row_details:
-                    s += "<div id={0} class=detail>".format(cell_id)
+                    s += "<div id=d{0} class=detail>".format(cell_id)
                     s += str(_this_row_details[field])
                     s += "</div>"
                 s += "</td>"
@@ -416,7 +416,7 @@ div.detail { font-size: small; }
 # TODO: Slightly more tasteful colours than default for the links?
         print("""<script type='text/javascript'>
 function s(i) {
-  elt = document.getElementById(i);
+  elt = document.getElementById('d'+i);
   disp = elt.tagName.toLowerCase() == 'tr' ? 'table-row' : 'block';
   elt.style.display = elt.style.display == disp ? 'none' : disp;
 }

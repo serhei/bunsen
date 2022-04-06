@@ -485,7 +485,7 @@ if __name__=='__main__':
 
         n_headings_shown += 1
         out.section()
-        out.message(f"<a id=\"{n_headings_shown}\">", raw=True) # XXX HTML ONLY; a name?
+        out.message(f"<a id=test\"{n_headings_shown}\">", raw=True) # XXX HTML ONLY; a name?
         out.message(f"<h3>{n_headings_shown}. {testcase_name}</h3>", raw=True) # XXX HTML ONLY
         out.message(f"</a>", raw=True) # XXX HTML ONLY
 
