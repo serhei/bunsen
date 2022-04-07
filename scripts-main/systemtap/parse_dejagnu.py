@@ -202,8 +202,11 @@ def parse_dejagnu_log(testrun, logfile, logfile_name=None, all_cases=None,
         uname_machine = check_mapping(logfile_path,
                                       uname_machine_map)
 
+
     # XXX skip testrun.logfile_path = logfile_path
-    if testrun.arch is None and uname_machine is not None: # XXX could set before parsing
+    if 'arch' not in testrun: # XXX could set before parsing
+        testrun.arch = None
+    if testrun.arch is None and uname_machine is not None:
         testrun.arch = uname_machine
     testrun.version = translator_driver_version if snapshot_version is None \
         else snapshot_version
