@@ -354,7 +354,7 @@ class HTMLTable:
             s += "</tr>"
 
             if '_ROW' in _this_row_details:
-                s += "<tr id={0} class=detail>".format(row_id)
+                s += "<tr id=d{0} class=detail>".format(row_id)
                 s += "<td colspan={}>".format(len(header))
                 s += _this_row_details['_ROW']
                 s += "</td>"
