@@ -232,7 +232,7 @@ class Timecube:
     # XXX Call once after building self._{baseline_,}range_start, self._{baseline_,}single_versions
     def _scan_gather_versions(self):
         # TODO: remove projects, tvix from caller?
-        projects = opts.get_list('project', default=self._bunsen.projects)
+        projects = self._opts.get_list('project', default=self._bunsen.projects)
         tvix = index_testrun_versions(self._bunsen, projects) # TODO check package_nvr
         repo = self._repo
         # XXX self.n_branch_commits assumed to be 0
@@ -240,7 +240,7 @@ class Timecube:
         baseline_range_ends = set()
         #print("DEBUG requests", self._range_start, self._single_versions, file=sys.stderr)
         for version_id, commit, testruns in iter_history(self._bunsen, repo, tvix,
-                                                         forward=True, branch=opts.branch,
+                                                         forward=True, branch=self._opts.branch,
                                                          include_empty_versions=True,
                                                          include_downstream_versions=True):
             #print("DEBUG checking", version_id, commit, len(testruns), file=sys.stderr)
@@ -293,7 +293,7 @@ class Timecube:
         tc_names = set() # XXX testcase names for this testrun only
         for testcase in testrun.testcases:
             if self._opts.key is not None and \
-               not fnmatchcase(testcase.name, '*'+opts.key+'*'): # XXX change glob to 'contains' in other scripts
+               not fnmatchcase(testcase.name, '*'+self._opts.key+'*'): # XXX change glob to 'contains' in other scripts
                 continue
             tc_names.add(testcase.name)
 
