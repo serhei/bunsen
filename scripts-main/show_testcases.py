@@ -22,19 +22,19 @@ if __name__=='__main__': # XXX need a graceful solution for option conflicts
                              help_cookie="<glob>")
     # XXX Note on behaviour: If earliest..latest are refspecs, show a range of git commits.
     # If earliest..latest are package_nvrs, show a range of package_nvr versions.
-    BunsenOptions.add_option('baseline', group='commit_range', default=None,
+    BunsenOptions.add_option('baseline', group='version_range', default=None,
                              help_str="Baseline versions (or globs or version ranges A..B) against which to compare testcase results",
                              help_cookie="<refspecs_or_versions_or_ranges>")
-    BunsenOptions.add_option('earliest', group='commit_range', default=None,
+    BunsenOptions.add_option('earliest', group='version_range', default=None,
                              help_str="Earliest commit or version for which to display testcase results (defaults to baseline if baseline is provided unambiguously)",
                              help_cookie="<refspec_or_version>")
-    BunsenOptions.add_option('latest', group='commit_range', default=None,
+    BunsenOptions.add_option('latest', group='version_range', default=None,
                              help_str="Latest commit or version for which to display testcase results",
                              help_cookie="<refspec_or_version>")
-    BunsenOptions.add_option('versions', group='commit_range', default=None,
+    BunsenOptions.add_option('versions', group='version_range', default=None,
                              help_str="List of additional versions, globs, or version ranges A..B for which to display testcase results (in addition to, or instead of earliest..latest)",
                              help_cookie="<refspecs_or_versions_or_ranges>")
-    BunsenOptions.add_option('version_field', group='commit_range', default='package_nvr',
+    BunsenOptions.add_option('version_field', group='version_range', default='package_nvr',
                              help_str="Fields to use for specifying range of versions (e.g. package_nvr, package_ver, kernel_ver, ...)")
     # TODO: Control relative sorting of commits and versions,
     # e.g. <commits after tag release-N>,
@@ -108,12 +108,12 @@ class TestcaseRef:
 #     def scan_versions(self):
 #         """Populate the grid."""
 #     def iter_scan_versions(self):
-#         """Populate the grid while yielding (version_id, commit, testruns)."""
+#         """Populate the grid while yielding (version_id, commit_or_None, testruns)."""
 #     def iter_commits(self):
 #         """Yield (commit, testruns) in chronological order."""
 #     def iter_testcases(self):
 #         """Yield testcase names."""
-#     def commit_dist(self, v1, v2):
+#     def version_dist(self, v1, v2):
 #         """Returns distance in # of commits between v1 and v2."""
 
 class Timecube:
@@ -121,10 +121,10 @@ class Timecube:
     # XXX: needs docstrings explaining the following fields and all methods
     #
     # XXX populated by __init__()
-    # commit_range = [] # list of (version_id, commit, testruns); TODO change to version_range
-    # commit_indices = {} # hexsha -> index in commit_range (for finding distance between commits)
+    # version_range = [] # list of (version_id, commit_or_None, testruns)
+    # version_indices = {} # hexsha -> index in version_range (for finding distance between commits)
     # all_testruns = [] # list of testruns
-    # n_branch_commits = 0 # total commits in branch, >len(self.commit_range) if using commits only
+    # n_branch_commits = 0 # total commits in branch, >len(self.version_range) if using commits only
     #
     # XXX everything below populated by scan_versions()/iter_scan_versions()
     # testcase_names = set() # set(str) or list(str) in alphabetical order
@@ -142,7 +142,7 @@ class Timecube:
     # XXX tables for differential scan of 'adjacent' results (skipping empty grid cells)
     # prev_tested = {} # grid_key -> grid_key for previous test results for this configuration
     # next_tested = {} # grid_key -> grid_key for next test results for this configuration
-    # commits_grid = {} # grid_key -> commit (for finding distance between grid keys)
+    # versions_grid = {} # grid_key -> version_id, commit_or_None (for finding distance between grid keys)
     #
     # untested_commits = set() # hexshas of commits with no testruns
     # untested_testcases = set() # set of testcase_names with no test results
@@ -156,8 +156,8 @@ class Timecube:
         self._repo = repo
 
         # Collect all testruns between the specified commits:
-        self.commit_range = [] # list of (version_id, commit_or_None, testruns)
-        self.commit_indices = {} # hexsha -> index in commit_range (for finding distance between commits)
+        self.version_range = [] # list of (version_id, commit_or_None, testruns)
+        self.version_indices = {} # hexsha -> index in version_range (for finding distance between commits)
         self.all_testruns = [] # list of testruns, in no particular order
         self.baseline_versions = [] # list of version_id to use for baseline comparison
 
@@ -174,7 +174,7 @@ class Timecube:
         if opts.earliest is not None and opts.latest is not None:
             self._add_version_item(opts.earliest, opts.latest)
 
-        self.n_branch_commits = 0 # XXX total commits in branch, >len(self.commit_range)
+        self.n_branch_commits = 0 # XXX total commits in branch, >len(self.version_range)
         self._scan_gather_versions()
         # TODO warn if collected range of versions is empty or some refspecs were not found
 
@@ -194,7 +194,7 @@ class Timecube:
         # XXX tables for differential scan of 'adjacent' results (skipping empty grid cells)
         self.prev_tested = {} # grid_key -> grid_key for previous test results for this configuration
         self.next_tested = {} # grid_key -> grid_key for next test results for this configuration
-        self.commits_grid = {} # grid_key -> commit (for finding distance between grid keys)
+        self.versions_grid = {} # grid_key -> version_id, commit_or_None (for finding distance between grid keys)
 
         self.untested_commits = set() # hexshas of commits with no testruns
         self.untested_testcases = set() # set of testcase_names with no test results
@@ -223,8 +223,8 @@ class Timecube:
 
     # XXX Call in forward chronological order of versions:
     def _add_version(self, version_id, commit, testruns, baseline=False):
-        self.commit_indices[version_id] = len(self.commit_range)
-        self.commit_range.append((version_id, commit, testruns))
+        self.version_indices[version_id] = len(self.version_range)
+        self.version_range.append((version_id, commit, testruns))
         self.all_testruns += testruns
         if baseline:
             self.baseline_versions.append(version_id)
@@ -319,10 +319,10 @@ class Timecube:
             append_map(self.subtests_grid, gk, tc_ref)
             # XXX need to check against gdb repo with separate pass-subtest storage
 
-        # populate self.prev_tested, self.next_tested, self.commits_grid
+        # populate self.prev_tested, self.next_tested, self.versions_grid
         for testcase_name in tc_names:
             gk = self.grid_key(testcase_name, sk, version_id)
-            self.commits_grid[gk] = commit
+            self.versions_grid[gk] = version_id, commit
 
             rowk = self.row_key(testcase_name, sk) # grid_key minus version
             if rowk in self._last_tested:
@@ -337,7 +337,7 @@ class Timecube:
         Yields (version_id, commit, testruns) in chronological order while the scan is ongoing."""
         header_fields, summary_fields = index_summary_fields(self.all_testruns) # XXX redundant with calling script
         self._last_tested = {} # testcase_name+summary_key -> grid_key with a previous result for this testcase
-        for version_id, commit, testruns in self.commit_range:
+        for version_id, commit, testruns in self.version_range:
             if not testruns:
                 self.untested_commits.add(version_id)
             for testrun in testruns:
@@ -353,7 +353,7 @@ class Timecube:
             failed_configs = set()
             for sk in self.testcase_configurations[testcase_name]:
                 rowk = self.row_key(testcase_name, sk) # grid_key minus version
-                for version_id, commit, _testruns in self.commit_range:
+                for version_id, commit, _testruns in self.version_range:
                     gk = self.grid_key(testcase_name, sk, version_id)
                     if gk not in self.outcomes_grid:
                         continue
@@ -381,10 +381,10 @@ class Timecube:
     def iter_versions(self, reverse=False):
         """Yields (version_id, commit or None, testruns) in chronological order."""
         if reverse:
-            for version_id, commit, testruns in reversed(self.commit_range):
+            for version_id, commit, testruns in reversed(self.version_range):
                 yield version_id, commit, testruns
         else:
-            for version_id, commit, testruns in self.commit_range:
+            for version_id, commit, testruns in self.version_range:
                 yield version_id, commit, testruns
 
     def iter_testcases(self):
@@ -417,15 +417,21 @@ class Timecube:
                 counts[testcase.subtest] += 1
         return counts
 
-    def commit_dist(self, baseline, latest):
-         """Returns distance in number of commits between baseline and latest."""
-         return self.commit_indices[latest] - self.commit_indices[baseline]
+    def version_dist(self, baseline, latest):
+         """Returns distance in number of versions between baseline and latest."""
+         if baseline is None:
+             return self.version_indices[latest] + 1 # XXX distance from start
+         return self.version_indices[latest] - self.version_indices[baseline]
 
     def grid_dist(self, gk_baseline, gk_latest):
         """Returns distance in number of commits between grid cells gk_baseline and gk_latest."""
-        baseline = self.commits_grid[gk_baseline].hexsha
-        latest = self.commits_grid[gk_latest].hexsha
-        return self.commit_dist(baseline,latest)
+        baseline = self.version_for_gk(gk_baseline)
+        latest = self.version_for_gk(gk_latest)
+        return self.version_dist(baseline,latest)
+
+    def version_for_gk(self, gk):
+        if gk not in self.versions_grid: return None
+        return self.versions_grid[gk][0]
 
     # TODO docstring
     def has_regression(self, testcase_name, sk):
@@ -479,13 +485,13 @@ if __name__=='__main__':
     # XXX summary_fields will also include source_commit, version
     # which are not used in get_summary. header_fields excludes these.
 
-    # (1c) Scan the Timecube to collect the testcases for all commits in the range
-    progress = tqdm.tqdm(iterable=None, desc='Scanning commits',
-                         total=len(cube.commit_range), leave=True, unit='commit')
+    # (1c) Scan the Timecube to collect the testcases for all versions in the range
+    progress = tqdm.tqdm(iterable=None, desc='Scanning versions',
+                         total=len(cube.version_range), leave=True, unit='versions')
     for version_id, commit, testruns in cube.iter_scan_versions():
         progress.update(n=1)
 
-    # (2) Show a grid of test results for every testcase in the specified commit range
+    # (2) Show a grid of test results for every testcase in the specified version range
     progress = tqdm.tqdm(iterable=None, desc='Rendering grid',
                          total=len(cube.testcase_names), leave=True, unit='testcase')
     n_testcases_shown = 0
@@ -589,4 +595,4 @@ if __name__=='__main__':
     out.section()
     out.message(f"showing {n_testcases_shown} testcases out of {len(cube.testcase_names)} total")
     branch_name = "main branch" if opts.branch is None else "branch " + opts.branch
-    out.message(f"showing {len(cube.commit_range)} versions out of {cube.n_branch_commits} total for {branch_name}")
+    out.message(f"showing {len(cube.version_range)} versions out of {cube.n_branch_commits} total for {branch_name}")
