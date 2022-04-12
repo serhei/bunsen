@@ -178,9 +178,9 @@ def html_field_summary(testrun, fields=None, separator=" ", suppress_keys=False)
 
 def select_class(cat, val):
     # XXX HACK 'outcome' didn't quite give what we want
-    if (cat == 'baseline' or cat == 'latest') and val == 'FAIL':
+    if (cat == 'baseline' or cat == 'latest' or cat == 'pre' or cat == 'post') and val == 'FAIL':
         return 'f'
-    if cat == 'outcome' or cat == 'baseline' or cat == 'latest':
+    if cat == 'outcome' or cat == 'baseline' or cat == 'latest' or cat == 'pre' or cat == 'post':
         # TODO: needs refinement for different outcomes
         if len(val) < 1:
             return 'n'
