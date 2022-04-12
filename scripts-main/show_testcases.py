@@ -324,12 +324,12 @@ class Timecube:
             gk = self.grid_key(testcase_name, sk, version_id)
             self.commits_grid[gk] = commit
 
-            gk_slice = self.row_key(testcase_name, sk) # grid_key minus version
-            if gk_slice in self._last_tested:
-                prev_gk = self._last_tested[gk_slice]
+            rowk = self.row_key(testcase_name, sk) # grid_key minus version
+            if rowk in self._last_tested:
+                prev_gk = self._last_tested[rowk]
                 self.prev_tested[gk] = prev_gk
                 self.next_tested[prev_gk] = gk
-            self._last_tested[gk_slice] = gk # XXX only once per testcase_name!
+            self._last_tested[rowk] = gk # XXX only once per testcase_name!
 
     def iter_scan_versions(self):
         """Scan the detailed testcase data for all commits in the range and use it to populate the grid.
@@ -352,7 +352,7 @@ class Timecube:
             is_unchanged, is_untested = True, True
             failed_configs = set()
             for sk in self.testcase_configurations[testcase_name]:
-                gk_slice = self.row_key(testcase_name, sk) # grid_key minus version
+                rowk = self.row_key(testcase_name, sk) # grid_key minus version
                 for version_id, commit, _testruns in self.commit_range:
                     gk = self.grid_key(testcase_name, sk, version_id)
                     if gk not in self.outcomes_grid:
@@ -365,9 +365,9 @@ class Timecube:
                            n_fails > self.unchanged_max_fails[testcase_name]:
                             self.unchanged_max_fails[testcase_name] = n_fails
                         failed_configs.add(sk)
-                    if gk_slice not in testcase_state:
-                        testcase_state[gk_slice] = n_fails
-                    elif testcase_state[gk_slice] != n_fails:
+                    if rowk not in testcase_state:
+                        testcase_state[rowk] = n_fails
+                    elif testcase_state[rowk] != n_fails:
                         is_unchanged = False
             if is_unchanged:
                 self.unchanged_testcases.add(testcase_name)
