@@ -105,10 +105,10 @@ class TestcaseRef:
 #         self.next_tested = {} # grid_key -> grid_key for next tested version 
 #     def grid_key(self, testcase, configuration, commit):
 #         """Returns string ID of the specified grid cell."""
-#     def scan_commits(self):
+#     def scan_versions(self):
 #         """Populate the grid."""
-#     def iter_scan_commits(self):
-#         """Populate the grid while yielding (commit, testruns)."""
+#     def iter_scan_versions(self):
+#         """Populate the grid while yielding (version_id, commit, testruns)."""
 #     def iter_commits(self):
 #         """Yield (commit, testruns) in chronological order."""
 #     def iter_testcases(self):
@@ -121,12 +121,12 @@ class Timecube:
     # XXX: needs docstrings explaining the following fields and all methods
     #
     # XXX populated by __init__()
-    # commit_range = [] # list of (commit, testruns)
+    # commit_range = [] # list of (version_id, commit, testruns); TODO change to version_range
     # commit_indices = {} # hexsha -> index in commit_range (for finding distance between commits)
     # all_testruns = [] # list of testruns
-    # n_branch_commits = 0 # total commits in branch, >len(self.commit_range)
+    # n_branch_commits = 0 # total commits in branch, >len(self.commit_range) if using commits only
     #
-    # XXX everything below populated by scan_commits()/iter_scan_commits()
+    # XXX everything below populated by scan_versions()/iter_scan_versions()
     # testcase_names = set() # set(str) or list(str) in alphabetical order
     #
     # summary_key :: string ID of a configuration, computed by get_summary_key()
@@ -178,7 +178,7 @@ class Timecube:
         self._scan_gather_versions()
         # TODO warn if collected range of versions is empty or some refspecs were not found
 
-        # To be populated by scan_commits()/iter_scan_commits():
+        # To be populated by scan_versions()/iter_scan_versions():
         self.testcase_names = set() # set(str) or list(str) in alphabetical order
 
         # summary_key :: string ID of a configuration, computed by get_summary_key()
@@ -259,13 +259,17 @@ class Timecube:
             _close_range(repo, vid, active_range_ends)
             _close_range(repo, vid, baseline_range_ends)
 
+    def row_key(self, testcase_name, summary_key):
+        """Returns a string ID of the specified (testcase, configuration) grid row."""
+        return(f'{testcase_name}+{summary_key}')
+
     def grid_key(self, testcase_name, summary_key, hexsha):
         """Returns the string ID of the specified (testcase, configuration, commit) grid cell."""
         return(f'{testcase_name}+{summary_key}+{hexsha}')
 
-    def scan_commits(self):
+    def scan_versions(self):
         """Scan the detailed testcase data for all commits in the range and use it to populate the grid."""
-        for _commit, _testruns in self.iter_scan_commits():
+        for _version_id, _commit, _testruns in self.iter_scan_versions():
             pass
 
     def _merge_outcome(self, gk, outcome):
@@ -320,17 +324,17 @@ class Timecube:
             gk = self.grid_key(testcase_name, sk, version_id)
             self.commits_grid[gk] = commit
 
-            gk_slice = f"{testcase_name}+{sk}" # grid_key minus version
+            gk_slice = self.row_key(testcase_name, sk) # grid_key minus version
             if gk_slice in self._last_tested:
                 prev_gk = self._last_tested[gk_slice]
                 self.prev_tested[gk] = prev_gk
                 self.next_tested[prev_gk] = gk
             self._last_tested[gk_slice] = gk # XXX only once per testcase_name!
 
-    def iter_scan_commits(self):
+    def iter_scan_versions(self):
         """Scan the detailed testcase data for all commits in the range and use it to populate the grid.
 
-        Yields (commit, testruns) in chronological order while the scan is ongoing."""
+        Yields (version_id, commit, testruns) in chronological order while the scan is ongoing."""
         header_fields, summary_fields = index_summary_fields(self.all_testruns) # XXX redundant with calling script
         self._last_tested = {} # testcase_name+summary_key -> grid_key with a previous result for this testcase
         for version_id, commit, testruns in self.commit_range:
@@ -338,7 +342,7 @@ class Timecube:
                 self.untested_commits.add(version_id)
             for testrun in testruns:
                 self._scan_testrun(version_id, commit, testrun, summary_fields)
-            yield commit, testruns
+            yield version_id, commit, testruns
 
         # populate self.untested_testcases, self.unchanged_{testcases,max_fails,n_configs}
         testcase_state = {} # grid_key minus version -> # of fails expected
@@ -348,7 +352,7 @@ class Timecube:
             is_unchanged, is_untested = True, True
             failed_configs = set()
             for sk in self.testcase_configurations[testcase_name]:
-                gk_slice = f"{testcase_name}+{sk}" # grid_key minux version
+                gk_slice = self.row_key(testcase_name, sk) # grid_key minus version
                 for version_id, commit, _testruns in self.commit_range:
                     gk = self.grid_key(testcase_name, sk, version_id)
                     if gk not in self.outcomes_grid:
@@ -439,6 +443,21 @@ class Timecube:
                 break
         return first_outcome == "PASS" and last_outcome == "FAIL"
 
+    @classmethod
+    def check_version_range(cls, opts):
+        """Normalize version range selection options in opts.
+
+        These are options 'baseline', 'earliest', 'latest', 'versions'
+        whose values define the version range of a TimeCube.
+        """
+        opts.baseline = opts.get_list('baseline', default=[])
+        opts.versions = opts.get_list('versions', default=[])
+        if opts.earliest is None and opts.baseline is not None and len(opts.baseline) == 1:
+            opts.earliest = opts.baseline[0]
+        if opts.latest is not None and opts.earliest is None:
+            # TODO: Alternately, default to earliest=1st-version, latest=last-version, print a warning.
+            raise BunsenError("No commit range, latest is specified but {baseline|earliest} is not, or baseline is ambiguous.")
+
 if __name__=='__main__':
     b, opts = Bunsen.from_cmdline(info=info,
                                   #required_args=['baseline','latest'],
@@ -450,13 +469,7 @@ if __name__=='__main__':
     projects = opts.get_list('project', default=b.projects)
     assert opts.source_repo is not None # XXX git.Repo(None) defaults to cwd, which is not what we want
     repo = git.Repo(opts.source_repo)
-    opts.baseline = opts.get_list('baseline', default=[])
-    opts.versions = opts.get_list('versions', default=[])
-    if opts.earliest is None and opts.baseline is not None and len(opts.baseline) == 1:
-        opts.earliest = opts.baseline[0]
-    if opts.latest is not None and opts.earliest is None:
-        # TODO: Alternately, default to earliest=1st-version, latest=last-version, print a warning.
-        raise BunsenError("No commit range, latest is specified but {baseline|earliest} is not, or baseline is ambiguous.")
+    Timecube.check_version_range(opts)
 
     # (1a) Use Timecube class to collect test results for commits in the specified range
     cube = Timecube(b, opts, repo)
@@ -469,7 +482,7 @@ if __name__=='__main__':
     # (1c) Scan the Timecube to collect the testcases for all commits in the range
     progress = tqdm.tqdm(iterable=None, desc='Scanning commits',
                          total=len(cube.commit_range), leave=True, unit='commit')
-    for commit, testruns in cube.iter_scan_commits():
+    for version_id, commit, testruns in cube.iter_scan_versions():
         progress.update(n=1)
 
     # (2) Show a grid of test results for every testcase in the specified commit range
