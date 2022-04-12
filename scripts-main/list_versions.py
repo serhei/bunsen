@@ -238,6 +238,41 @@ def iter_adjacent_commits(b, repo, testrun_version_index=None,
                 yield (commit2, testruns2, commit, testruns)
         commit, testruns = commit2, testruns2
 
+# TODO merge with list_versions, list_commits, etc.
+def format_version_header(out, opts, version_id, testruns, commit=None, as_table_row=False):
+    info = dict()
+    if commit is not None:
+        #info['commit_id'] = commit.hexsha[:7]+'...' # for compact=True
+        info['commit_id'] = out.sanitize(commit.hexsha)
+        info['summary'] = out.sanitize(commit.summary)
+    else:
+        info['version'] = out.sanitize(version_id)
+    if commit is not None and opts.pretty == 'html' and opts.gitweb_url is not None:
+        commit_url = opts.gitweb_url + ";a=commit;h={}" \
+                         .format(commit.hexsha)
+        commitdiff_url = opts.gitweb_url + ";a=commitdiff;h={}" \
+                             .format(commit.hexsha)
+        gitweb_info = "<a href=\"{}\">commit</a>, ".format(commit_url) + \
+            "<a href=\"{}\">commitdiff</a>".format(commitdiff_url)
+        info['gitweb_info'] = gitweb_info
+
+    # compact output (HTML only) -- one line per version
+    # TODOXXX Create a version of this for PrettyPrinter
+    if as_table_row:
+        if 'commit_id' not in info:
+            pass # TODO merge commit_id and version
+        out.table_row(info, order=['commit_id','summary'], merge_header=True)
+        return # XXX caller can add out.testrun_cell()s
+
+    # regular output -- one section per version
+    out.section(minor=True)
+    # TODO: implement out.sanitize() in other scripts, default to sanitize=True
+    out.message(compact=False, sanitize=False, **info)
+    # XXX: Note commit.summary was observed to get weird near the
+    # start of SystemTap history many years ago. Maybe a bug, but
+    # not relevant because we never tested that far back in time
+    # with the buildbots.
+
 b = bunsen.Bunsen()
 if __name__=='__main__':
     opts = b.cmdline_args(sys.argv, info=info, args=cmdline_args,
@@ -261,41 +296,15 @@ if __name__=='__main__':
             break
 
         # TODOXXX Improve commit_header formatting boilerplate here, and in +when_failed, +find_regressions, +overview -- create some common code?
-        info = dict()
-        if commit is not None:
-            #info['commit_id'] = commit.hexsha[:7]+'...' # for compact=True
-            info['commit_id'] = out.sanitize(commit.hexsha)
-            info['summary'] = out.sanitize(commit.summary)
-        else:
-            info['version'] = out.sanitize(version_id)
-        if commit is not None and opts.pretty == 'html' and opts.gitweb_url is not None:
-            commit_url = opts.gitweb_url + ";a=commit;h={}" \
-                             .format(commit.hexsha)
-            commitdiff_url = opts.gitweb_url + ";a=commitdiff;h={}" \
-                                 .format(commit.hexsha)
-            gitweb_info = "<a href=\"{}\">commit</a>, ".format(commit_url) + \
-                "<a href=\"{}\">commitdiff</a>".format(commitdiff_url)
-            info['gitweb_info'] = gitweb_info
-
-        # compact output (HTML only) -- one line per commit
-        # TODOXXX Create a version of this for PrettyPrinter
-        if opts.compact and opts.pretty == 'html':
-            out.table_row(info, order=['commit_id','summary'], merge_header=True)
+        as_table_row = opts.compact and opts.pretty == 'html'
+        format_version_header(out, opts, version_id, commit, as_table_row=as_table_row)
+        if as_table_row:
             for testrun in testruns:
                 config = html_field_summary(testrun, header_fields, separator="<br/>")
                 out.testrun_cell(config, testrun)
                 n_testruns += 1
             n_commits += 1
             continue
-
-        # regular output -- one line per testrun, one section per commit
-        out.section(minor=True)
-        # TODO: implement out.sanitize() in other scripts, default to sanitize=True
-        out.message(compact=False, sanitize=False, **info)
-        # XXX: Note commit.summary was observed to get weird near the
-        # start of SystemTap history many years ago. Maybe a bug, but
-        # not relevant because we never tested that far back in time
-        # with the buildbots.
         for testrun in testruns:
             #if testrun.project not in projects:
             #    continue
